@@ -1,0 +1,202 @@
+# frozen_string_literal: true
+
+require_relative "builder"
+require_relative "sfc"
+
+module Grainet
+  module CLI
+    # Inspect a Grainet project for the common ways a fresh `grainet new`
+    # fails before the user sees the page boot. Catches missing wasm
+    # runtime, dangling `<grainet-widget>` references, unparseable
+    # `.gnt`, and similar setup problems.
+    #
+    # `run` returns 0 when every check passes (or only warns); 1 when
+    # any check produced an :error result. Output is plain-text and
+    # mirrors the layout of `rails about` / `bundle doctor` /
+    # `npx ... doctor` — one line per check, prefix marks the level.
+    class Doctor
+      Result = Struct.new(:level, :message, keyword_init: true)
+
+      # Where the wasm runtime is expected to live, relative to public_dir.
+      RUNTIME_WASM = "vendor/mruby-js-grainet-full.wasm"
+      RUNTIME_JS_ADAPTER = "vendor/mruby-wasm-js/index.js"
+
+      def initialize(config, out: $stdout)
+        @config = config
+        @out = out
+      end
+
+      # Returns exit status (0 if no errors).
+      def run
+        results = run_checks
+        emit(results)
+        results.any? { |r| r.level == :error } ? 1 : 0
+      end
+
+      private
+
+      # Each check returns a single Result. Order is roughly "structure
+      # → content → external assets" so the report reads top-down from
+      # project layout outward.
+      def run_checks
+        [
+          check_pages_dir,
+          check_widgets_dir,
+          *check_widgets_parse,
+          *check_widget_references,
+          check_unused_widgets,
+          check_public_dir,
+          check_runtime_wasm,
+          check_js_adapter,
+        ]
+      end
+
+      def check_pages_dir
+        if File.directory?(@config.pages_dir)
+          ok("pages/ directory found at #{relative(@config.pages_dir)}")
+        else
+          error("pages/ directory missing: #{relative(@config.pages_dir)}")
+        end
+      end
+
+      def check_widgets_dir
+        if File.directory?(@config.widgets_dir)
+          ok("widgets/ directory found at #{relative(@config.widgets_dir)}")
+        else
+          warn("widgets/ directory missing: #{relative(@config.widgets_dir)} (OK if you have no components yet)")
+        end
+      end
+
+      # Each .gnt file gets its own Result so a parse failure pinpoints
+      # the offending file (rather than aborting the whole report).
+      def check_widgets_parse
+        gnt_paths.map do |path|
+          SFC.parse_file(path)
+          ok("widget parses: #{relative(path)}")
+        rescue SFC::ParseError => e
+          error("widget parse error: #{relative(path)}: #{e.message}")
+        end
+      end
+
+      def check_widget_references
+        return [] unless File.directory?(@config.pages_dir)
+
+        component_names = gnt_paths.map { |p| File.basename(p, ".gnt") }.to_set
+        results = []
+        page_paths.each do |page_path|
+          html = File.read(page_path)
+          html.scan(Builder::WIDGET_PLACEHOLDER) do |dq, sq|
+            name = dq || sq
+            unless component_names.include?(name)
+              results << error(
+                "page #{relative(page_path)} references <grainet-widget name=#{name.inspect}>, " \
+                "but no widgets/#{name}.gnt exists"
+              )
+            end
+          end
+        end
+        results.empty? ? [ok("all <grainet-widget> references resolve")] : results
+      end
+
+      def check_unused_widgets
+        return ok("no widgets to check for usage") if gnt_paths.empty?
+
+        component_names = gnt_paths.map { |p| File.basename(p, ".gnt") }.to_set
+        referenced = page_paths.flat_map do |page_path|
+          File.read(page_path).scan(Builder::WIDGET_PLACEHOLDER).map { |dq, sq| dq || sq }
+        end.uniq.to_set
+
+        unused = component_names - referenced
+        if unused.empty?
+          ok("all widgets are referenced from at least one page")
+        else
+          warn("unused widgets: #{unused.to_a.sort.join(', ')}")
+        end
+      end
+
+      def check_public_dir
+        if File.directory?(@config.public_dir)
+          ok("public/ directory found at #{relative(@config.public_dir)}")
+        else
+          warn("public/ directory missing: #{relative(@config.public_dir)} (required for the wasm runtime)")
+        end
+      end
+
+      def check_runtime_wasm
+        path = File.join(@config.public_dir, RUNTIME_WASM)
+        if File.file?(path)
+          ok("mruby-wasm runtime present: #{relative(path)} (#{format_size(File.size(path))})")
+        else
+          error("mruby-wasm runtime missing: expected at #{relative(path)}")
+        end
+      end
+
+      def check_js_adapter
+        path = File.join(@config.public_dir, RUNTIME_JS_ADAPTER)
+        if File.file?(path)
+          ok("JS adapter present: #{relative(path)}")
+        else
+          error("JS adapter missing: expected at #{relative(path)}")
+        end
+      end
+
+      def gnt_paths
+        return [] unless File.directory?(@config.widgets_dir)
+
+        @gnt_paths ||= Dir.glob(File.join(@config.widgets_dir, "**", "*.gnt"))
+      end
+
+      def page_paths
+        return [] unless File.directory?(@config.pages_dir)
+
+        @page_paths ||= Dir.glob(File.join(@config.pages_dir, "**", "*.html"))
+      end
+
+      def relative(path)
+        Pathname.new(path).relative_path_from(Pathname.new(@config.root)).to_s
+      rescue ArgumentError
+        path
+      end
+
+      def format_size(bytes)
+        return "#{bytes} B" if bytes < 1024
+        return "#{(bytes / 1024.0).round(1)} KB" if bytes < 1024 * 1024
+
+        "#{(bytes / (1024.0 * 1024.0)).round(1)} MB"
+      end
+
+      def ok(msg)
+        Result.new(level: :ok, message: msg)
+      end
+
+      def warn(msg)
+        Result.new(level: :warn, message: msg)
+      end
+
+      def error(msg)
+        Result.new(level: :error, message: msg)
+      end
+
+      def emit(results)
+        results.each { |r| @out.puts "  #{prefix(r.level)} #{r.message}" }
+        @out.puts
+        @out.puts summary(results)
+      end
+
+      def prefix(level)
+        case level
+        when :ok then "[OK]   "
+        when :warn then "[WARN] "
+        when :error then "[FAIL] "
+        end
+      end
+
+      def summary(results)
+        ok_count = results.count { |r| r.level == :ok }
+        warn_count = results.count { |r| r.level == :warn }
+        error_count = results.count { |r| r.level == :error }
+        "#{ok_count} ok, #{warn_count} warning(s), #{error_count} error(s)"
+      end
+    end
+  end
+end

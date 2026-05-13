@@ -1,0 +1,179 @@
+# frozen_string_literal: true
+
+require "fileutils"
+require "pathname"
+require_relative "sfc"
+
+module Grainet
+  module CLI
+    # Reads `.gnt` components and `.html` pages, then emits static HTML.
+    #
+    # Page authors mark component insertion points with
+    #   <grainet-widget name="counter"></grainet-widget>
+    # which is replaced by the component's default-template markup.
+    # Named sub-templates and Ruby class scripts from all components used
+    # on the page are injected once each before `</body>`.
+    #
+    # Component file naming: `widgets/<data-widget-name>.gnt`. The file's
+    # basename is taken verbatim as the component name, so
+    # `admin--user-card.gnt` matches `<grainet-widget name="admin--user-card">`
+    # and (via the runtime autoregister) the `Admin::UserCard` class.
+    class Builder
+      class Error < StandardError; end
+
+      # Accepted forms (all match the same component name in capture 1):
+      #
+      #   <grainet-widget name="counter"></grainet-widget>
+      #   <grainet-widget name='counter'></grainet-widget>
+      #   <grainet-widget name="counter" />
+      #   <grainet-widget name="counter"/>
+      #
+      # Additional attributes beyond `name` are intentionally NOT supported:
+      # the placeholder is replaced wholesale at build time, so any extra
+      # attribute would silently disappear rather than reach the widget.
+      WIDGET_PLACEHOLDER = %r{
+        <grainet-widget
+        \s+name=(?:"([^"]+)"|'([^']+)')
+        \s*
+        (?:/>|>\s*</grainet-widget>)
+      }x
+
+      # Filenames that must not land in the build output even when they
+      # exist under `public/`. Add to this list as new conventions are
+      # encountered (e.g. `.DS_Store`, `Thumbs.db`).
+      EXCLUDED_BASENAMES = %w[.gitkeep].freeze
+
+      LIVE_RELOAD_SCRIPT = <<~HTML.freeze
+        <script>
+          // grainet dev: live reload via SSE
+          new EventSource("/__grainet/livereload").addEventListener("message", () => location.reload());
+        </script>
+      HTML
+
+      def initialize(widgets_dir:, pages_dir:, output_dir:, public_dir: nil, live_reload: false)
+        @widgets_dir = widgets_dir
+        @pages_dir = pages_dir
+        @output_dir = output_dir
+        # public_dir is optional. When nil or absent on disk, the
+        # mirroring step is skipped — projects that don't need static
+        # passthrough (no vendor bundle, no images) work fine without
+        # creating the directory.
+        @public_dir = public_dir
+        @live_reload = live_reload
+      end
+
+      def build
+        components = load_components
+        pages = Dir.glob(File.join(@pages_dir, "**", "*.html"))
+        raise Error, "No pages found under #{@pages_dir.inspect}" if pages.empty?
+
+        public_files = mirror_public_files
+
+        pages.each do |page_path|
+          build_page(page_path, components)
+        end
+
+        { pages: pages.length, components: components.length, public_files: public_files }
+      end
+
+      private
+
+      # Mirror `public/**/*` → `output_dir/`. Preserves the relative
+      # directory structure (e.g. `public/vendor/x.js` →
+      # `output_dir/vendor/x.js`). Returns the number of files copied.
+      #
+      # `.gitkeep` is filtered so an empty placeholder file doesn't
+      # land in the build output. Other dot-prefixed files (e.g.
+      # `.well-known/`) are copied so users can publish standard web
+      # conventions.
+      def mirror_public_files
+        return 0 unless @public_dir && File.directory?(@public_dir)
+
+        copied = 0
+        Dir.glob(File.join(@public_dir, "**", "*"), File::FNM_DOTMATCH).each do |source|
+          # File.file? already filters out the `.` / `..` directory
+          # entries that FNM_DOTMATCH surfaces, so no extra guard needed.
+          next unless File.file?(source)
+          next if EXCLUDED_BASENAMES.include?(File.basename(source))
+
+          rel = Pathname.new(source).relative_path_from(Pathname.new(@public_dir)).to_s
+          target = File.join(@output_dir, rel)
+          FileUtils.mkdir_p(File.dirname(target))
+          FileUtils.cp(source, target)
+          copied += 1
+        end
+        copied
+      end
+
+      def load_components
+        Dir.glob(File.join(@widgets_dir, "**", "*.gnt")).to_h do |path|
+          [File.basename(path, ".gnt"), SFC.parse_file(path)]
+        end
+      end
+
+      def build_page(page_path, components)
+        html = File.read(page_path)
+        used = []
+
+        html = html.gsub(WIDGET_PLACEHOLDER) do
+          # Capture 1 = double-quoted name; capture 2 = single-quoted name.
+          name = Regexp.last_match(1) || Regexp.last_match(2)
+          comp = components[name] || raise(Error, "Unknown component: #{name.inspect} (referenced in #{page_path})")
+          used << name
+          default_markup(comp)
+        end
+
+        injection = build_injection(used.uniq, components)
+        html = inject_before_body_close(html, injection) unless injection.empty?
+
+        File.write(output_path_for(page_path).tap { |p| FileUtils.mkdir_p(File.dirname(p)) }, html)
+      end
+
+      def default_markup(component)
+        component.default_templates.map(&:body).join.strip
+      end
+
+      def build_injection(used_names, components)
+        named_templates = used_names.flat_map { |name|
+          components[name].named_templates.map { |t| render_named_template(t) }
+        }
+
+        scripts = used_names.map { |name| components[name].script.strip }.reject(&:empty?)
+        script_block = scripts.empty? ? nil : render_script(scripts.join("\n\n"))
+
+        # Live reload is dev-only; the `grainet build` command leaves it
+        # off. When on, the snippet opens an SSE connection back to the
+        # dev server and reloads the page on any "message" event.
+        parts = [named_templates, script_block]
+        parts << LIVE_RELOAD_SCRIPT if @live_reload
+        parts.flatten.compact.join("\n")
+      end
+
+      def render_named_template(template)
+        %(<template data-template="#{escape_attr(template.name)}">#{template.body}</template>)
+      end
+
+      def render_script(ruby_source)
+        "<script type=\"text/ruby\">\n#{ruby_source}\n</script>"
+      end
+
+      def escape_attr(value)
+        value.gsub("&", "&amp;").gsub('"', "&quot;").gsub("<", "&lt;")
+      end
+
+      def inject_before_body_close(html, injection)
+        # Prefer the last </body> so any earlier mention (e.g. inside a
+        # <pre> code example) doesn't get hijacked.
+        idx = html.rindex(%r{</body>}i)
+        return "#{html}\n#{injection}" unless idx
+
+        "#{html[0...idx]}#{injection}\n#{html[idx..]}"
+      end
+
+      def output_path_for(page_path)
+        rel = Pathname.new(page_path).relative_path_from(Pathname.new(@pages_dir))
+        File.join(@output_dir, rel.to_s)
+      end
+    end
+  end
+end
