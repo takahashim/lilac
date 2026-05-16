@@ -4,8 +4,6 @@ require "test_helper"
 
 # Per-directive emit behaviour for Codegen.
 class TestDirectiveCodegen < Minitest::Test
-  Directive = Grainet::CLI::Directive
-
   def gen(directives, source_path: nil)
     Grainet::CLI::Codegen.generate(
       component_name: "counter",
@@ -15,17 +13,17 @@ class TestDirectiveCodegen < Minitest::Test
   end
 
   def text(value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :text, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :text, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "span")
   end
 
   def on(name:, value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :on, name: name, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :on, name: name, value: value, ref_id: ref_id,
                   line: line, element_tag: "button")
   end
 
   def component(ref_id: "g0", line: 1)
-    Directive.new(kind: :component, name: nil, value: "Counter", ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :component, name: nil, value: "Counter", ref_id: ref_id,
                   line: line, element_tag: "div")
   end
 
@@ -134,7 +132,7 @@ class TestDirectiveCodegen < Minitest::Test
   # ---- data-unsafe-html -------------------------------------------
 
   def unsafe_html(value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :unsafe_html, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :unsafe_html, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "div")
   end
 
@@ -150,7 +148,7 @@ class TestDirectiveCodegen < Minitest::Test
   # ---- data-value -------------------------------------------------
 
   def value_dir(value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :value, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :value, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "input")
   end
 
@@ -174,7 +172,7 @@ class TestDirectiveCodegen < Minitest::Test
   # ---- data-checked -----------------------------------------------
 
   def checked_dir(value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :checked, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :checked, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "input",
                   element_attrs: { "type" => "checkbox" })
   end
@@ -191,12 +189,12 @@ class TestDirectiveCodegen < Minitest::Test
   # ---- data-show / data-hide --------------------------------------
 
   def show(value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :show, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :show, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "div")
   end
 
   def hide(value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :hide, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :hide, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "div")
   end
 
@@ -228,7 +226,7 @@ class TestDirectiveCodegen < Minitest::Test
   # ---- data-attr-X ------------------------------------------------
 
   def attr_dir(name:, value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :attr, name: name, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :attr, name: name, value: value, ref_id: ref_id,
                   line: line, element_tag: "a")
   end
 
@@ -264,7 +262,7 @@ class TestDirectiveCodegen < Minitest::Test
   # ---- data-css-X -------------------------------------------------
 
   def css(name:, value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :css, name: name, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :css, name: name, value: value, ref_id: ref_id,
                   line: line, element_tag: "div")
   end
 
@@ -309,7 +307,7 @@ class TestDirectiveCodegen < Minitest::Test
   # ---- data-class -------------------------------------------------
 
   def class_dir(value:, ref_id: "g0", line: 1)
-    Directive.new(kind: :class_, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :class_, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "div")
   end
 
@@ -361,17 +359,17 @@ class TestDirectiveCodegen < Minitest::Test
   # ---- data-each / data-key --------------------------------------
 
   def each_dir(value:, ref_id: "g0", line: 1, scope_id: nil)
-    Directive.new(kind: :each, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :each, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "ul", scope_id: scope_id)
   end
 
   def key_dir(value:, ref_id: "g0", line: 1, scope_id: nil)
-    Directive.new(kind: :key, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :key, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "ul", scope_id: scope_id)
   end
 
   def scoped_text(value:, ref_id: "g1", scope_id: "g0", line: 2)
-    Directive.new(kind: :text, name: nil, value: value, ref_id: ref_id,
+    Grainet::CLI::Directive.new(kind: :text, name: nil, value: value, ref_id: ref_id,
                   line: line, element_tag: "span", scope_id: scope_id)
   end
 
@@ -433,7 +431,7 @@ class TestDirectiveCodegen < Minitest::Test
     out = gen(
       [
         each_dir(value: "@todos"),
-        Directive.new(kind: :on, name: "click", value: "remove",
+        Grainet::CLI::Directive.new(kind: :on, name: "click", value: "remove",
                       ref_id: "g1", line: 2, element_tag: "button", scope_id: "g0"),
       ],
     )
@@ -486,7 +484,7 @@ class TestDirectiveCodegen < Minitest::Test
     # Top-level data-text + data-each-bodied directive together.
     out = gen(
       [
-        Directive.new(kind: :text, name: nil, value: "@title",
+        Grainet::CLI::Directive.new(kind: :text, name: nil, value: "@title",
                       ref_id: "gT", line: 1, element_tag: "h1", scope_id: nil),
         each_dir(value: "@todos"),
         scoped_text(value: "it.title"),
@@ -520,7 +518,7 @@ class TestDirectiveCodegen < Minitest::Test
       gen(
         [value_dir(value: "@s", line: 5)].tap do |dirs|
           # value_dir helper uses tag: "input"; rebuild on div to trip the check.
-          dirs[0] = Directive.new(kind: :value, name: nil, value: "@s",
+          dirs[0] = Grainet::CLI::Directive.new(kind: :value, name: nil, value: "@s",
                                   ref_id: "g0", line: 5, element_tag: "div")
         end,
         source_path: "form.gnt",
@@ -535,7 +533,7 @@ class TestDirectiveCodegen < Minitest::Test
   def test_unimplemented_directive_falls_back_to_placeholder_comment
     # `data-arg-X` is implemented in a follow-up; for now Codegen emits
     # a comment placeholder so the build doesn't choke.
-    d = Directive.new(kind: :arg, name: "id", value: "it.id",
+    d = Grainet::CLI::Directive.new(kind: :arg, name: "id", value: "it.id",
                       ref_id: "g0", line: 1, element_tag: "li")
     out = gen([d])
     assert_includes out, "data-arg-id"

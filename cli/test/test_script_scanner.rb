@@ -3,8 +3,6 @@
 require "test_helper"
 
 class TestScriptScanner < Minitest::Test
-  SS = Grainet::CLI::ScriptScanner
-
   # ---- signal patterns -------------------------------------------
 
   def test_extracts_signal_declarations
@@ -15,7 +13,7 @@ class TestScriptScanner < Minitest::Test
         end
       end
     RUBY
-    assert_includes SS.scan(src).signals, "@count"
+    assert_includes Grainet::CLI::ScriptScanner.scan(src).signals, "@count"
   end
 
   def test_extracts_computed_resource_persistent_signal
@@ -24,7 +22,7 @@ class TestScriptScanner < Minitest::Test
       @user    = resource(-> { Fetchy.json("/user") })
       @prefs   = persistent_signal(:prefs, default: {})
     RUBY
-    signals = SS.scan(src).signals
+    signals = Grainet::CLI::ScriptScanner.scan(src).signals
     assert_includes signals, "@doubled"
     assert_includes signals, "@user"
     assert_includes signals, "@prefs"
@@ -35,7 +33,7 @@ class TestScriptScanner < Minitest::Test
       @plain = "not a signal"
       @list = [1, 2, 3]
     RUBY
-    assert_empty SS.scan(src).signals
+    assert_empty Grainet::CLI::ScriptScanner.scan(src).signals
   end
 
   def test_ignores_signal_declarations_inside_comments
@@ -43,7 +41,7 @@ class TestScriptScanner < Minitest::Test
       # @stale = signal(0)
       @real = signal(1)
     RUBY
-    signals = SS.scan(src).signals
+    signals = Grainet::CLI::ScriptScanner.scan(src).signals
     assert_includes signals, "@real"
     refute_includes signals, "@stale"
   end
@@ -53,7 +51,7 @@ class TestScriptScanner < Minitest::Test
       @count = signal(0)
       @count = signal(1)
     RUBY
-    assert_equal ["@count"], SS.scan(src).signals
+    assert_equal ["@count"], Grainet::CLI::ScriptScanner.scan(src).signals
   end
 
   # ---- method patterns -------------------------------------------
@@ -66,19 +64,19 @@ class TestScriptScanner < Minitest::Test
 
       def reset(_ev) = @count.value = 0
     RUBY
-    methods = SS.scan(src).methods
+    methods = Grainet::CLI::ScriptScanner.scan(src).methods
     assert_includes methods, "increment"
     assert_includes methods, "reset"
   end
 
   def test_extracts_predicate_method_name
     src = "def valid?; true; end"
-    assert_includes SS.scan(src).methods, "valid?"
+    assert_includes Grainet::CLI::ScriptScanner.scan(src).methods, "valid?"
   end
 
   def test_extracts_self_method
     src = "def self.factory; new; end"
-    assert_includes SS.scan(src).methods, "factory"
+    assert_includes Grainet::CLI::ScriptScanner.scan(src).methods, "factory"
   end
 
   # ---- soft ivar-assignment fallback (helper-init coverage) ------
@@ -86,7 +84,7 @@ class TestScriptScanner < Minitest::Test
   def test_assigned_ivars_includes_signal_declarations
     # Signal/computed/etc. assignments are also bare `@x =`, so they
     # appear in both sets — the linter prefers strict signals over soft.
-    result = SS.scan("@count = signal(0)")
+    result = Grainet::CLI::ScriptScanner.scan("@count = signal(0)")
     assert_includes result.signals, "@count"
     assert_includes result.assigned_ivars, "@count"
   end
@@ -102,7 +100,7 @@ class TestScriptScanner < Minitest::Test
         signal(0)
       end
     RUBY
-    result = SS.scan(src)
+    result = Grainet::CLI::ScriptScanner.scan(src)
     refute_includes result.signals, "@count"
     assert_includes result.assigned_ivars, "@count"
   end
@@ -113,7 +111,7 @@ class TestScriptScanner < Minitest::Test
       @list  = []
       @num   = 42
     RUBY
-    assigned = SS.scan(src).assigned_ivars
+    assigned = Grainet::CLI::ScriptScanner.scan(src).assigned_ivars
     assert_includes assigned, "@plain"
     assert_includes assigned, "@list"
     assert_includes assigned, "@num"
@@ -121,6 +119,6 @@ class TestScriptScanner < Minitest::Test
 
   def test_assigned_ivars_excludes_equality_comparison
     src = "if @count == 0; end"
-    refute_includes SS.scan(src).assigned_ivars, "@count"
+    refute_includes Grainet::CLI::ScriptScanner.scan(src).assigned_ivars, "@count"
   end
 end

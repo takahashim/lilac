@@ -5,8 +5,6 @@ require "test_helper"
 # Structural tests for Codegen.generate — empty/skeleton/naming concerns.
 # Per-directive emit behaviour lives in test_directive_codegen.rb.
 class TestCodegen < Minitest::Test
-  Directive = Grainet::CLI::Directive
-
   def gen(name, directives, source_path: nil)
     Grainet::CLI::Codegen.generate(
       component_name: name,
@@ -16,7 +14,7 @@ class TestCodegen < Minitest::Test
   end
 
   def text_directive(value: "@count", ref_id: "g0", line: 1)
-    Directive.new(
+    Grainet::CLI::Directive.new(
       kind: :text,
       name: nil,
       value: value,
@@ -34,7 +32,7 @@ class TestCodegen < Minitest::Test
     # `data-component` alone has no codegen target — only the runtime
     # autoregister consumes it. The emitter should suppress the module
     # entirely instead of emitting an empty `bind_template_hook`.
-    component_directive = Directive.new(
+    component_directive = Grainet::CLI::Directive.new(
       kind: :component,
       name: nil,
       value: "Counter",

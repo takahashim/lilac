@@ -3,178 +3,176 @@
 require "test_helper"
 
 class TestValueGrammar < Minitest::Test
-  VG = Grainet::CLI::ValueGrammar
-
   # ---- ivar? ------------------------------------------------------
 
   def test_ivar_matches_basic
-    assert VG.ivar?("@count")
-    assert VG.ivar?("@is_active")
-    assert VG.ivar?("@_internal")
+    assert Grainet::CLI::ValueGrammar.ivar?("@count")
+    assert Grainet::CLI::ValueGrammar.ivar?("@is_active")
+    assert Grainet::CLI::ValueGrammar.ivar?("@_internal")
   end
 
   def test_ivar_allows_predicate_suffix
-    assert VG.ivar?("@valid?")
+    assert Grainet::CLI::ValueGrammar.ivar?("@valid?")
   end
 
   def test_ivar_rejects_bang
-    refute VG.ivar?("@save!")
+    refute Grainet::CLI::ValueGrammar.ivar?("@save!")
   end
 
   def test_ivar_rejects_no_at_prefix
-    refute VG.ivar?("count")
+    refute Grainet::CLI::ValueGrammar.ivar?("count")
   end
 
   def test_ivar_rejects_dot
-    refute VG.ivar?("@user.name")
+    refute Grainet::CLI::ValueGrammar.ivar?("@user.name")
   end
 
   def test_ivar_rejects_digit_start
-    refute VG.ivar?("@1count")
+    refute Grainet::CLI::ValueGrammar.ivar?("@1count")
   end
 
   # ---- it_path? ---------------------------------------------------
 
   def test_it_path_matches_bare_it
-    assert VG.it_path?("it")
+    assert Grainet::CLI::ValueGrammar.it_path?("it")
   end
 
   def test_it_path_matches_one_dot
-    assert VG.it_path?("it.title")
-    assert VG.it_path?("it.is_done")
+    assert Grainet::CLI::ValueGrammar.it_path?("it.title")
+    assert Grainet::CLI::ValueGrammar.it_path?("it.is_done")
   end
 
   def test_it_path_allows_predicate_field
-    assert VG.it_path?("it.valid?")
+    assert Grainet::CLI::ValueGrammar.it_path?("it.valid?")
   end
 
   def test_it_path_rejects_two_dots
-    refute VG.it_path?("it.user.name")
+    refute Grainet::CLI::ValueGrammar.it_path?("it.user.name")
   end
 
   def test_it_path_rejects_method_call
-    refute VG.it_path?("it.foo()")
+    refute Grainet::CLI::ValueGrammar.it_path?("it.foo()")
   end
 
   def test_it_path_rejects_bang
-    refute VG.it_path?("it.save!")
+    refute Grainet::CLI::ValueGrammar.it_path?("it.save!")
   end
 
   # ---- read_value? (union of ivar / it_path) ---------------------
 
   def test_read_value_accepts_both_forms
-    assert VG.read_value?("@count")
-    assert VG.read_value?("it")
-    assert VG.read_value?("it.title")
+    assert Grainet::CLI::ValueGrammar.read_value?("@count")
+    assert Grainet::CLI::ValueGrammar.read_value?("it")
+    assert Grainet::CLI::ValueGrammar.read_value?("it.title")
   end
 
   def test_read_value_rejects_arbitrary_expr
-    refute VG.read_value?("@a + 1")
-    refute VG.read_value?("@a.b")
-    refute VG.read_value?("not @a")
+    refute Grainet::CLI::ValueGrammar.read_value?("@a + 1")
+    refute Grainet::CLI::ValueGrammar.read_value?("@a.b")
+    refute Grainet::CLI::ValueGrammar.read_value?("not @a")
   end
 
   # ---- method_ident? ---------------------------------------------
 
   def test_method_ident_matches_basic
-    assert VG.method_ident?("increment")
-    assert VG.method_ident?("add_todo")
-    assert VG.method_ident?("_helper")
+    assert Grainet::CLI::ValueGrammar.method_ident?("increment")
+    assert Grainet::CLI::ValueGrammar.method_ident?("add_todo")
+    assert Grainet::CLI::ValueGrammar.method_ident?("_helper")
   end
 
   def test_method_ident_rejects_predicate
     # event handler must not be `?` — spec L99 reserves predicates for
     # read-only queries
-    refute VG.method_ident?("valid?")
+    refute Grainet::CLI::ValueGrammar.method_ident?("valid?")
   end
 
   def test_method_ident_rejects_bang
-    refute VG.method_ident?("save!")
+    refute Grainet::CLI::ValueGrammar.method_ident?("save!")
   end
 
   def test_method_ident_rejects_at_prefix
-    refute VG.method_ident?("@thing")
+    refute Grainet::CLI::ValueGrammar.method_ident?("@thing")
   end
 
   # ---- class_name? -----------------------------------------------
 
   def test_class_name_single_segment
-    assert VG.class_name?("Counter")
-    assert VG.class_name?("UserCard")
+    assert Grainet::CLI::ValueGrammar.class_name?("Counter")
+    assert Grainet::CLI::ValueGrammar.class_name?("UserCard")
   end
 
   def test_class_name_namespaced
-    assert VG.class_name?("Admin::UserCard")
-    assert VG.class_name?("Top::Mid::Leaf")
+    assert Grainet::CLI::ValueGrammar.class_name?("Admin::UserCard")
+    assert Grainet::CLI::ValueGrammar.class_name?("Top::Mid::Leaf")
   end
 
   def test_class_name_rejects_lowercase_start
-    refute VG.class_name?("counter")
+    refute Grainet::CLI::ValueGrammar.class_name?("counter")
   end
 
   def test_class_name_rejects_single_colon
-    refute VG.class_name?("Admin:UserCard")
+    refute Grainet::CLI::ValueGrammar.class_name?("Admin:UserCard")
   end
 
   # ---- ref_ident? ------------------------------------------------
 
   def test_ref_ident_lowercase_only
-    assert VG.ref_ident?("canvas")
-    assert VG.ref_ident?("submit_button")
-    refute VG.ref_ident?("Canvas")
+    assert Grainet::CLI::ValueGrammar.ref_ident?("canvas")
+    assert Grainet::CLI::ValueGrammar.ref_ident?("submit_button")
+    refute Grainet::CLI::ValueGrammar.ref_ident?("Canvas")
   end
 
   # ---- kebab_name? -----------------------------------------------
 
   def test_kebab_name_accepts_letter_only
-    assert VG.kebab_name?("href")
-    assert VG.kebab_name?("color")
+    assert Grainet::CLI::ValueGrammar.kebab_name?("href")
+    assert Grainet::CLI::ValueGrammar.kebab_name?("color")
   end
 
   def test_kebab_name_accepts_hyphenated
-    assert VG.kebab_name?("theme-color")
-    assert VG.kebab_name?("data-id")
+    assert Grainet::CLI::ValueGrammar.kebab_name?("theme-color")
+    assert Grainet::CLI::ValueGrammar.kebab_name?("data-id")
   end
 
   def test_kebab_name_accepts_digit_in_middle
-    assert VG.kebab_name?("h1-size")
+    assert Grainet::CLI::ValueGrammar.kebab_name?("h1-size")
   end
 
   def test_kebab_name_rejects_uppercase
-    refute VG.kebab_name?("Color")
-    refute VG.kebab_name?("themeColor")
+    refute Grainet::CLI::ValueGrammar.kebab_name?("Color")
+    refute Grainet::CLI::ValueGrammar.kebab_name?("themeColor")
   end
 
   def test_kebab_name_rejects_digit_start
-    refute VG.kebab_name?("3d-effect")
+    refute Grainet::CLI::ValueGrammar.kebab_name?("3d-effect")
   end
 
   def test_kebab_name_rejects_underscore
-    refute VG.kebab_name?("theme_color")
+    refute Grainet::CLI::ValueGrammar.kebab_name?("theme_color")
   end
 
   def test_kebab_name_rejects_leading_hyphen
-    refute VG.kebab_name?("-theme-color")
-    refute VG.kebab_name?("--theme")
+    refute Grainet::CLI::ValueGrammar.kebab_name?("-theme-color")
+    refute Grainet::CLI::ValueGrammar.kebab_name?("--theme")
   end
 
   # ---- banned_attr? ----------------------------------------------
 
   def test_banned_attr_matches_on_handlers
-    assert VG.banned_attr?("onclick")
-    assert VG.banned_attr?("onload")
-    assert VG.banned_attr?("onmouseover")
+    assert Grainet::CLI::ValueGrammar.banned_attr?("onclick")
+    assert Grainet::CLI::ValueGrammar.banned_attr?("onload")
+    assert Grainet::CLI::ValueGrammar.banned_attr?("onmouseover")
   end
 
   def test_banned_attr_matches_srcdoc_and_style
-    assert VG.banned_attr?("srcdoc")
-    assert VG.banned_attr?("style")
+    assert Grainet::CLI::ValueGrammar.banned_attr?("srcdoc")
+    assert Grainet::CLI::ValueGrammar.banned_attr?("style")
   end
 
   def test_banned_attr_does_not_match_safe_names
-    refute VG.banned_attr?("href")
-    refute VG.banned_attr?("data-id")
-    refute VG.banned_attr?("on")             # missing trailing handler suffix
-    refute VG.banned_attr?("onclick-extra")  # not pure on[a-z]+
+    refute Grainet::CLI::ValueGrammar.banned_attr?("href")
+    refute Grainet::CLI::ValueGrammar.banned_attr?("data-id")
+    refute Grainet::CLI::ValueGrammar.banned_attr?("on")             # missing trailing handler suffix
+    refute Grainet::CLI::ValueGrammar.banned_attr?("onclick-extra")  # not pure on[a-z]+
   end
 end

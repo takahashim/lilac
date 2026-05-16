@@ -4,11 +4,8 @@ require "test_helper"
 require "stringio"
 
 class TestCrossRefLinter < Minitest::Test
-  Linter = Grainet::CLI::CrossRefLinter
-  Directive = Grainet::CLI::Directive
-
   def dir(kind, value:, name: nil, line: 1, tag: "div", ref_id: "g0")
-    Directive.new(
+    Grainet::CLI::Directive.new(
       kind: kind, name: name, value: value, ref_id: ref_id,
       line: line, element_tag: tag, scope_id: nil,
     )
@@ -16,7 +13,7 @@ class TestCrossRefLinter < Minitest::Test
 
   def lint(script:, directives:, component: "Counter", file: "x.gnt")
     io = StringIO.new
-    count = Linter.lint(
+    count = Grainet::CLI::CrossRefLinter.lint(
       script_text: script, directives: directives,
       component_name: component, file: file, out: io,
     )
