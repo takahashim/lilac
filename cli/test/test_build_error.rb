@@ -4,9 +4,14 @@ require "test_helper"
 
 class TestBuildError < Minitest::Test
   BE = Grainet::CLI::BuildError
+  SL = Grainet::CLI::SourceLocation
+
+  def loc(file, line)
+    SL.new(file: file, line: line)
+  end
 
   def test_structured_form_renders_header_and_body
-    err = BE.new("data-value not allowed on <div>", file: "form.gnt", line: 8)
+    err = BE.new("data-value not allowed on <div>", at: loc("form.gnt", 8))
     expected = <<~MSG.chomp
       grainet: build error in form.gnt:8
         data-value not allowed on <div>
@@ -17,7 +22,7 @@ class TestBuildError < Minitest::Test
   def test_suggestion_appended_after_body
     err = BE.new(
       "data-key is not a bare field name.",
-      file: "x.gnt", line: 4,
+      at: loc("x.gnt", 4),
       suggestion: "Use `data-key=\"id\"` (no `it.` prefix, no `@`, no `.`, no `?`).",
     )
     expected = <<~MSG.chomp
@@ -29,7 +34,7 @@ class TestBuildError < Minitest::Test
   end
 
   def test_multiline_body_is_indented_per_line
-    err = BE.new("first line\nsecond line", file: "x.gnt", line: 1)
+    err = BE.new("first line\nsecond line", at: loc("x.gnt", 1))
     expected = <<~MSG.chomp
       grainet: build error in x.gnt:1
         first line
@@ -49,11 +54,11 @@ class TestBuildError < Minitest::Test
   end
 
   def test_subclasses_inherit_formatter
-    codegen_err = Grainet::CLI::Codegen::Error.new("oops", file: "a.gnt", line: 1)
+    codegen_err = Grainet::CLI::Codegen::Error.new("oops", at: loc("a.gnt", 1))
     assert_includes codegen_err.message, "grainet: build error in a.gnt:1"
     assert_includes codegen_err.message, "  oops"
 
-    compat_err = Grainet::CLI::DirectiveCompatibility::Error.new("clash", file: "b.gnt", line: 2)
+    compat_err = Grainet::CLI::DirectiveCompatibility::Error.new("clash", at: loc("b.gnt", 2))
     assert_includes compat_err.message, "grainet: build error in b.gnt:2"
     assert_includes compat_err.message, "  clash"
   end

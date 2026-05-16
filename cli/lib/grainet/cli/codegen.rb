@@ -248,7 +248,7 @@ module Grainet
         raise Error.new(
           "Invalid value for #{attr_name}: #{directive.value.inspect} " \
           "(expected `@ivar` or `it.path`)",
-          file: @file, line: directive.line,
+          at: directive.source_location(@file),
         )
       end
 
@@ -259,7 +259,7 @@ module Grainet
         raise Error.new(
           "Invalid value for #{attr_name}: #{directive.value.inspect} " \
           "(expected `@ivar` — writable signal only)",
-          file: @file, line: directive.line,
+          at: directive.source_location(@file),
         )
       end
 
@@ -274,7 +274,7 @@ module Grainet
             "Invalid value for data-on-#{directive.name}: " \
             "#{directive.value.inspect} (expected a method name; " \
             "`?` predicate and `!` bang are banned)",
-            file: @file, line: directive.line,
+            at: directive.source_location(@file),
           )
         end
 
@@ -295,7 +295,7 @@ module Grainet
         if ValueGrammar.banned_attr?(name)
           raise Error.new(
             "data-attr-#{name} targets a banned attribute (on*/srcdoc/style).",
-            file: @file, line: directive.line,
+            at: directive.source_location(@file),
             suggestion: "Use data-on-X for event handlers, data-css-X or RefElement#set_style for style.",
           )
         end
@@ -316,7 +316,7 @@ module Grainet
         unless ValueGrammar.kebab_name?(name)
           raise Error.new(
             "data-css-#{name}: X must be kebab-lowercase ([a-z][a-z0-9-]*) and not start with `-`.",
-            file: @file, line: directive.line,
+            at: directive.source_location(@file),
           )
         end
         value = read_value_or_raise(directive, "data-css-#{name}")
@@ -340,7 +340,7 @@ module Grainet
           rescue HashLiteralParser::Error => e
             raise Error.new(
               "data-class: #{e.message}",
-              file: @file, line: directive.line,
+              at: directive.source_location(@file),
             )
           end
         pairs.each do |key, value|
@@ -349,7 +349,7 @@ module Grainet
           raise Error.new(
             "data-class: invalid value #{value.inspect} for key #{key.inspect} " \
             "(expected `@ivar` or `it.path`)",
-            file: @file, line: directive.line,
+            at: directive.source_location(@file),
           )
         end
         body = pairs.map { |k, v| "#{k.inspect} => #{bind_source(v)}" }.join(", ")
@@ -401,7 +401,7 @@ module Grainet
           unless each_ref_ids.include?(d.ref_id)
             raise Error.new(
               "data-key must be on the same element as data-each.",
-              file: @file, line: d.line,
+              at: d.source_location(@file),
               suggestion: "Move it to the data-each element.",
             )
           end
@@ -409,7 +409,7 @@ module Grainet
           unless valid_key_field?(field)
             raise Error.new(
               "data-key: #{d.value.inspect} is not a bare field name.",
-              file: @file, line: d.line,
+              at: d.source_location(@file),
               suggestion: "Use `data-key=\"id\"` (no `it.` prefix, no `@`, no `.`, no `?`).",
             )
           end

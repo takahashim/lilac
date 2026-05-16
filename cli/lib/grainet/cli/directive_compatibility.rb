@@ -78,7 +78,7 @@ module Grainet
           offenders = dirs.select { |d| pair.include?(d.kind) }
           raise Error.new(
             "Directive collision: #{message}",
-            file: file, line: offenders.last.line,
+            at: offenders.last.source_location(file),
           )
         end
       end
@@ -101,7 +101,7 @@ module Grainet
           raise Error.new(
             "data-value: <input type=\"#{type}\"> is not a text-style input — " \
             "use data-checked for checkbox/radio.",
-            file: file, line: directive.line,
+            at: directive.source_location(file),
           )
         end
         return if VALUE_ELEMENTS.include?(tag)
@@ -109,7 +109,7 @@ module Grainet
         raise Error.new(
           "data-value: only valid on <input>, <textarea>, or <select> — " \
           "found on <#{tag}>",
-          file: file, line: directive.line,
+          at: directive.source_location(file),
         )
       end
 
@@ -122,14 +122,14 @@ module Grainet
           raise Error.new(
             "data-checked: <input type=\"#{type}\"> is not a checkbox or radio — " \
             "use data-value for text-style inputs.",
-            file: file, line: directive.line,
+            at: directive.source_location(file),
           )
         end
 
         raise Error.new(
           "data-checked: only valid on <input type=\"checkbox\"> or " \
           "<input type=\"radio\"> — found on <#{tag}>",
-          file: file, line: directive.line,
+          at: directive.source_location(file),
         )
       end
 
@@ -172,7 +172,7 @@ module Grainet
         raise Error.new(
           "data-class uses the reserved class `gn-hidden` on an element " \
           "that also has data-show / data-hide.",
-          file: file, line: class_dir.line,
+          at: class_dir.source_location(file),
           suggestion: "Drop the `gn-hidden` key from data-class — data-show/data-hide manage it.",
         )
       end

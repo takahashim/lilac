@@ -85,7 +85,7 @@ module Grainet
 
       def self.emit_signal_warning(out, directive, ivar, declared, component_name, file)
         emit(out, LintWarning.new(
-          file: file, line: directive.line,
+          at: directive.source_location(file),
           body: "Signal #{ivar} is not declared via signal/computed/resource/persistent_signal " \
                 "in #{component_name}. Possible typo or dynamic declaration.",
           declared_label: "Declared signals", declared: declared,
@@ -95,7 +95,7 @@ module Grainet
 
       def self.emit_method_warning(out, directive, method, declared, component_name, file)
         emit(out, LintWarning.new(
-          file: file, line: directive.line,
+          at: directive.source_location(file),
           body: "Method `#{method}` (referenced by data-on-#{directive.name}) is not defined " \
                 "in #{component_name}. Possible typo or external delegation.",
           declared_label: "Declared methods", declared: declared,

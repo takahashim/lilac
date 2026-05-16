@@ -16,9 +16,8 @@ module Grainet
     # corresponding lines are omitted so single-fact warnings stay
     # compact.
     class LintWarning
-      def initialize(file:, line:, body:, declared_label: nil, declared: [], suggestion: nil)
-        @file = file
-        @line = line
+      def initialize(at:, body:, declared_label: nil, declared: [], suggestion: nil)
+        @at = at
         @body = body
         @declared_label = declared_label
         @declared = declared
@@ -26,7 +25,7 @@ module Grainet
       end
 
       def to_s
-        parts = ["grainet: lint warning in #{@file}:#{@line}", "  #{@body}"]
+        parts = ["grainet: lint warning in #{@at}", "  #{@body}"]
         parts << "  #{@declared_label}: #{@declared.join(', ')}." if @declared_label && !@declared.empty?
         parts << "  Did you mean: #{@suggestion}?" if @suggestion
         parts.join("\n")

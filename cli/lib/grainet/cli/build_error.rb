@@ -11,18 +11,16 @@ module Grainet
     #     <suggestion>       # optional
     #
     # The bare-string form (`raise BuildError, "..."`) is supported so
-    # callers that don't have a file/line on hand can still raise, but
-    # the formatted shape only kicks in when `file:` and `line:` are
-    # provided.
+    # callers that don't have a location on hand can still raise, but
+    # the formatted shape only kicks in when `at:` is provided.
     #
     # Subclassed by `Codegen::Error` and `DirectiveCompatibility::Error`
     # so existing `assert_raises(Codegen::Error)` calls keep matching.
     class BuildError < StandardError
-      attr_reader :file, :line, :snippet, :suggestion
+      attr_reader :at, :snippet, :suggestion
 
-      def initialize(message = nil, file: nil, line: nil, snippet: nil, suggestion: nil)
-        @file = file
-        @line = line
+      def initialize(message = nil, at: nil, snippet: nil, suggestion: nil)
+        @at = at
         @snippet = snippet
         @suggestion = suggestion
         @body = message
@@ -31,13 +29,13 @@ module Grainet
 
       private
 
-      # Two paths: structured (file+line known → spec header + indented
-      # body) vs bare (no file+line → return body verbatim, mostly used
-      # by code paths that haven't migrated yet or have no location).
+      # Two paths: structured (location known → spec header + indented
+      # body) vs bare (no location → return body verbatim, mostly used
+      # by code paths that have no source coordinates).
       def format
-        return @body unless @file && @line
+        return @body unless @at
 
-        parts = ["grainet: build error in #{@file}:#{@line}"]
+        parts = ["grainet: build error in #{@at}"]
         parts << "  #{@snippet}" if @snippet
         # Indent each body line so multi-line messages stay aligned.
         if @body

@@ -4,9 +4,14 @@ require "test_helper"
 
 class TestLintWarning < Minitest::Test
   LW = Grainet::CLI::LintWarning
+  SL = Grainet::CLI::SourceLocation
+
+  def loc(file, line)
+    SL.new(file: file, line: line)
+  end
 
   def test_minimal_warning_renders_header_and_body
-    w = LW.new(file: "x.gnt", line: 7, body: "Signal @foo is not declared")
+    w = LW.new(at: loc("x.gnt", 7), body: "Signal @foo is not declared")
     assert_equal <<~MSG.chomp, w.to_s
       grainet: lint warning in x.gnt:7
         Signal @foo is not declared
@@ -15,7 +20,7 @@ class TestLintWarning < Minitest::Test
 
   def test_declared_list_rendered_when_present
     w = LW.new(
-      file: "x.gnt", line: 3, body: "Method `foo` is not defined",
+      at: loc("x.gnt", 3), body: "Method `foo` is not defined",
       declared_label: "Declared methods", declared: %w[bar baz],
     )
     assert_equal <<~MSG.chomp, w.to_s
@@ -27,7 +32,7 @@ class TestLintWarning < Minitest::Test
 
   def test_empty_declared_omits_the_line
     w = LW.new(
-      file: "x.gnt", line: 3, body: "...",
+      at: loc("x.gnt", 3), body: "...",
       declared_label: "Declared signals", declared: [],
     )
     refute_includes w.to_s, "Declared"
@@ -35,7 +40,7 @@ class TestLintWarning < Minitest::Test
 
   def test_suggestion_rendered_with_did_you_mean
     w = LW.new(
-      file: "x.gnt", line: 5, body: "Signal @cont is not declared",
+      at: loc("x.gnt", 5), body: "Signal @cont is not declared",
       declared_label: "Declared signals", declared: ["@count"],
       suggestion: "@count",
     )
@@ -48,7 +53,7 @@ class TestLintWarning < Minitest::Test
   end
 
   def test_nil_suggestion_omits_the_line
-    w = LW.new(file: "x.gnt", line: 1, body: "...", suggestion: nil)
+    w = LW.new(at: loc("x.gnt", 1), body: "...", suggestion: nil)
     refute_includes w.to_s, "Did you mean"
   end
 end

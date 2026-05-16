@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "source_location"
+
 module Grainet
   module CLI
     # A single `data-*` directive occurrence on a template element.
@@ -48,6 +50,14 @@ module Grainet
       :scope_id,
       :element_attrs,
       keyword_init: true,
-    )
+    ) do
+      # Pair the directive's line with the source file (which the
+      # Directive itself doesn't carry) for use in BuildError /
+      # LintWarning `at:` kwargs. Saves callers from writing
+      # `SourceLocation.new(file: f, line: directive.line)` over and over.
+      def source_location(file)
+        SourceLocation.new(file: file, line: line)
+      end
+    end
   end
 end
