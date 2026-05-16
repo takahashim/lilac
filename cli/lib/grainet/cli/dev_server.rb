@@ -94,24 +94,35 @@ module Grainet
       # to `/private/tmp`; without this the resolver's within-root check
       # rejects every request as 403.
       def build_app
-        default_app = Wsv::App.new(File.realpath(@config.output_dir))
-        live_reload = @live_reload
-        endpoint = LiveReload::ENDPOINT_PATH
-
-        Class.new do
-          define_method(:call) do |request|
-            path, = request.target.split("?", 2)
-            if path == endpoint
-              live_reload.call(request)
-            else
-              default_app.call(request)
-            end
-          end
-        end.new
+        RoutingApp.new(
+          default_app: Wsv::App.new(File.realpath(@config.output_dir)),
+          live_reload: @live_reload,
+          endpoint: LiveReload::ENDPOINT_PATH,
+        )
       end
 
       def banner
         "grainet dev: serving #{@config.output_dir} at http://#{@host}:#{@port}"
+      end
+
+      # Wsv app that routes one path to `live_reload`, everything else
+      # to `default_app`. Lives here because it's only useful as the
+      # dev server's request demultiplexer.
+      class RoutingApp
+        def initialize(default_app:, live_reload:, endpoint:)
+          @default_app = default_app
+          @live_reload = live_reload
+          @endpoint = endpoint
+        end
+
+        def call(request)
+          path, = request.target.split("?", 2)
+          if path == @endpoint
+            @live_reload.call(request)
+          else
+            @default_app.call(request)
+          end
+        end
       end
     end
   end

@@ -86,11 +86,7 @@ module Grainet
         opts = {}
         parser = OptionParser.new do |o|
           o.banner = "Usage: grainet doctor [options]"
-          o.on("--components DIR", "Components directory (default: components)") { |v| opts[:components] = v }
-          o.on("--pages DIR", "Pages directory (default: pages)") { |v| opts[:pages] = v }
-          o.on("--public DIR", "Static-passthrough directory (default: public)") { |v| opts[:public] = v }
-          o.on("--output DIR", "-o DIR", "Output directory (default: dist)") { |v| opts[:output] = v }
-          o.on("--root DIR", "Project root (default: cwd)") { |v| opts[:root] = v }
+          add_path_options(o, opts)
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
         parser.parse!(@argv)
@@ -182,11 +178,7 @@ module Grainet
           o.banner = "Usage: grainet dev [options]"
           o.on("--host HOST", "Bind host (default: #{Config::DEFAULT_DEV_HOST})") { |v| opts[:host] = v }
           o.on("--port PORT", Integer, "Bind port (default: #{Config::DEFAULT_DEV_PORT})") { |v| opts[:port] = v }
-          o.on("--components DIR", "Components directory (default: components)") { |v| opts[:components] = v }
-          o.on("--pages DIR", "Pages directory (default: pages)") { |v| opts[:pages] = v }
-          o.on("--public DIR", "Static-passthrough directory (default: public)") { |v| opts[:public] = v }
-          o.on("--output DIR", "-o DIR", "Output directory (default: dist)") { |v| opts[:output] = v }
-          o.on("--root DIR", "Project root (default: cwd)") { |v| opts[:root] = v }
+          add_path_options(o, opts)
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
         parser.parse!(@argv)
@@ -197,15 +189,22 @@ module Grainet
         opts = {}
         parser = OptionParser.new do |o|
           o.banner = "Usage: grainet build [options]"
-          o.on("--components DIR", "Components directory (default: components)") { |v| opts[:components] = v }
-          o.on("--pages DIR", "Pages directory (default: pages)") { |v| opts[:pages] = v }
-          o.on("--public DIR", "Static-passthrough directory (default: public)") { |v| opts[:public] = v }
-          o.on("--output DIR", "-o DIR", "Output directory (default: dist)") { |v| opts[:output] = v }
-          o.on("--root DIR", "Project root (default: cwd)") { |v| opts[:root] = v }
+          add_path_options(o, opts)
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
         parser.parse!(@argv)
         opts
+      end
+
+      # The path-config flags `build` / `dev` / `doctor` all accept.
+      # `o.on` mutates the OptionParser passed in; `opts` collects the
+      # parsed values for the caller's later Config.load merge.
+      def add_path_options(o, opts)
+        o.on("--components DIR", "Components directory (default: components)") { |v| opts[:components] = v }
+        o.on("--pages DIR", "Pages directory (default: pages)") { |v| opts[:pages] = v }
+        o.on("--public DIR", "Static-passthrough directory (default: public)") { |v| opts[:public] = v }
+        o.on("--output DIR", "-o DIR", "Output directory (default: dist)") { |v| opts[:output] = v }
+        o.on("--root DIR", "Project root (default: cwd)") { |v| opts[:root] = v }
       end
 
       def print_help(io: @out)

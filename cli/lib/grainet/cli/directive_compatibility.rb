@@ -143,13 +143,20 @@ module Grainet
       # puts `'gn-hidden': @x` in data-class on the same element, three
       # signals can race over the class — fail at build time and tell
       # the user to drop the data-class entry.
+      #
+      # Note: re-parses the data-class hash literal even though
+      # `Codegen#emit_class` will parse it again moments later. The
+      # double work is intentional — compatibility checks must stay
+      # decoupled from codegen so they can run independently (e.g. a
+      # future `--lint-only` flag, or surfacing all violations in one
+      # pass instead of stopping at the first emit failure). The
+      # substring guard above keeps the cost zero for the common case
+      # (no `gn-hidden` anywhere in the value).
       def self.check_gn_hidden_conflict(dirs, file)
         return unless dirs.any? { |d| %i[show hide].include?(d.kind) }
 
         class_dir = dirs.find { |d| d.kind == :class_ }
         return unless class_dir
-        # Substring guard avoids re-parsing when the class hash doesn't
-        # mention `gn-hidden` at all.
         return unless class_dir.value.to_s.include?("gn-hidden")
 
         pairs =

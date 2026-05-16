@@ -42,9 +42,9 @@ module Grainet
         [
           check_pages_dir,
           check_components_dir,
-          *check_widgets_parse,
-          *check_widget_references,
-          check_unused_widgets,
+          *check_components_parse,
+          *check_component_references,
+          check_unused_components,
           check_public_dir,
           check_runtime_wasm,
           check_js_adapter,
@@ -69,7 +69,7 @@ module Grainet
 
       # Each .gnt file gets its own Result so a parse failure pinpoints
       # the offending file (rather than aborting the whole report).
-      def check_widgets_parse
+      def check_components_parse
         gnt_paths.map do |path|
           SFC.parse_file(path)
           ok("component parses: #{relative(path)}")
@@ -78,7 +78,7 @@ module Grainet
         end
       end
 
-      def check_widget_references
+      def check_component_references
         return [] unless File.directory?(@config.pages_dir)
 
         component_names = gnt_paths.map { |p| File.basename(p, ".gnt") }.to_set
@@ -98,7 +98,7 @@ module Grainet
         results.empty? ? [ok("all <grainet-component> references resolve")] : results
       end
 
-      def check_unused_widgets
+      def check_unused_components
         return ok("no components to check for usage") if gnt_paths.empty?
 
         component_names = gnt_paths.map { |p| File.basename(p, ".gnt") }.to_set
