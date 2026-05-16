@@ -39,20 +39,28 @@ module Lilac
       end
 
       def scan_and_bind
-        root_js = @host.root.to_js
-        # Process the host root's own directives (e.g. `<div data-component
-        # data-class="...">`). The `data-component` attribute on the root
-        # is its mount marker — Compat / dispatch see it but ignore it
-        # via the :component no-op branch.
-        process_element(root_js, nil)
-        walk(root_js, item: nil)
+        scan_subtree(@host.root.to_js, item: nil)
       end
 
-      # Iterative descent so deeply-nested templates don't blow the
-      # mruby stack. Children of the root are processed first; we then
-      # recurse into each (except across nested-component boundaries
-      # and into-data-each bodies, which are out of scope for Phase 1).
-      def walk(node_js, item:)
+      # Process this element, then descend. Used both for the main
+      # component scan (entry: host root) and per-row scans inside a
+      # `data-each` body. Stops descent when:
+      #   - the element carries `data-each` (its body lives in the
+      #     bind_list template; the per-row scan owns descent),
+      #   - the element is a nested `data-component` other than the
+      #     host's own root (the nested component runs its own scan).
+      def scan_subtree(node_js, item:)
+        kinds = process_element(node_js, item)
+        return if kinds.include?(:each)
+        if node_js != @host.root.to_js && node_js.call(:hasAttribute, "data-component").js_bool
+          return
+        end
+        walk_children(node_js, item: item)
+      end
+
+      # Iterative DFS over `node_js`'s descendants. Does NOT process
+      # node_js itself — call scan_subtree for that.
+      def walk_children(node_js, item:)
         stack = [[node_js, item]]
         until stack.empty?
           current, current_item = stack.pop
@@ -61,29 +69,19 @@ module Lilac
           # Push in reverse so document order is preserved when popped.
           (length - 1).downto(0) do |i|
             child = children[i]
-            next if nested_component_root?(child, current)
+            # Nested component subtrees mount via their own component
+            # instance + their own Scanner pass; skip here.
+            next if child.call(:hasAttribute, "data-component").js_bool
 
             kinds_present = process_element(child, current_item)
 
-            # Phase 1: data-each pauses descent (the iteration body's
-            # bindings need data-each support to be meaningful, which
-            # arrives in Phase 3). Once supported, the each handler
-            # will own the recursive scan of its body.
+            # `data-each` owns the descent into its body (which lives
+            # in the bind_list template, not the live DOM here).
             next if kinds_present.include?(:each)
 
             stack.push([child, current_item])
           end
         end
-      end
-
-      # An element is a "nested component root" when:
-      #   - it has `data-component`,
-      #   - it is not the host's own root.
-      # The host's own root carries `data-component` itself but must
-      # still be scanned (its directives belong to this component).
-      def nested_component_root?(el, parent)
-        return false if el == @host.root.to_js
-        el.call(:hasAttribute, "data-component").js_bool
       end
 
       # Extract + dispatch all directives on a single element.
@@ -186,10 +184,7 @@ module Lilac
         when :on
           dispatch_on(name, raw_value, el, item)
         when :each
-          Lilac.logger.warn(
-            "data-each is not supported in Phase 1 runtime scanner (#{descriptor}); " \
-            "use lilac-cli for now, or wait for Phase 3"
-          )
+          dispatch_each(raw_value, el, item)
         when :value
           dispatch_value(raw_value, el)
         when :checked
@@ -260,6 +255,75 @@ module Lilac
       def dispatch_checked(raw_value, el)
         sig = ivar_or_raise(raw_value, "data-checked")
         @host.bind_input(wrap_ref(el), sig, property: :checked)
+      end
+
+      # data-each iteration:
+      #   1. Snapshot the data-each element's child HTML.
+      #   2. Empty the live element (bind_list expects an empty
+      #      container that it populates per item).
+      #   3. Build an in-memory `<template>` from the snapshot.
+      #   4. Resolve `data-key` to a key proc (fallback to object_id).
+      #   5. Call host.bind_list with a per-item block that clones the
+      #      template, recursively scans the clone with `item` bound,
+      #      and returns it as a `Lilac::Template`.
+      #
+      # Nested data-each works naturally: when the per-row scan
+      # encounters another data-each in the clone subtree, this same
+      # dispatch_each fires with the inner `item` shadowing the outer.
+      def dispatch_each(raw_value, el, parent_item)
+        value = parse_value_or_raise(raw_value, "data-each")
+        key_proc = build_key_proc(el)
+
+        cached_html = el[:innerHTML].to_s
+        el[:innerHTML] = ""
+
+        doc = JS.global[:document]
+        tpl = doc.call(:createElement, "template")
+        tpl[:innerHTML] = cached_html
+
+        source = @evaluator.bind_source(value, parent_item)
+        ref = wrap_ref(el)
+        host = @host
+
+        @host.bind_list(ref, source, key: key_proc) do |it, prev_t|
+          row_node =
+            if prev_t
+              # Reuse the existing cloned row — bind_list dispatches
+              # to apply_template with same-node identity check, so
+              # no DOM op is performed when nothing structural changed.
+              prev_t.to_js
+            else
+              frag = tpl[:content].call(:cloneNode, true)
+              frag[:firstElementChild]
+            end
+          # Fresh Scanner per row keeps `@evaluator` bound to the same
+          # host (so `@ivar` continues to resolve on the host) but
+          # opens its own walk state.
+          Scanner.new(host).scan_subtree(row_node, item: it)
+          Lilac::Template.new(row_node, host)
+        end
+      end
+
+      # data-key="id" → ->(it) { it.id }. Without a valid data-key
+      # value, fall back to object_id (stable for the render cycle —
+      # CLI lint flags this case at build time as a warning).
+      def build_key_proc(el)
+        raw = el.call(:getAttribute, "data-key")
+        field = raw.js_null? ? "" : raw.to_s.strip
+        if field.empty? || !Grammar.method_ident?(field)
+          return ->(it) { it.object_id } if field.empty?
+          raise Lilac::Error,
+                "data-key: #{field.inspect} is not a bare field name " \
+                "(use `data-key=\"id\"` — no `it.` prefix, no `@`, no `.`, no `?`)"
+        end
+        sym = field.to_sym
+        ->(it) do
+          if it.is_a?(Hash)
+            it.key?(sym) ? it[sym] : it[field]
+          else
+            it.public_send(sym)
+          end
+        end
       end
 
       # data-class hash literal: parse into pairs, validate each value

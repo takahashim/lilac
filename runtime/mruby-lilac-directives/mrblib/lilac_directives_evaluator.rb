@@ -43,15 +43,20 @@ module Lilac
 
       private
 
-      # Iteration items can be plain Hashes (`{ id: 1, title: "x" }`)
-      # or Data / Struct-like objects (`Todo.new(id: 1, title: "x")`).
-      # Hashes lookup by symbol key; everything else uses `public_send`,
-      # which lets `?` predicates on the field name (`it.done?`)
-      # dispatch as ordinary method calls.
+      # Iteration items can be plain Hashes (`{ id: 1, title: "x" }`
+      # or JSON-loaded `{ "id" => 1, "title" => "x" }`) or Data /
+      # Struct-like objects. Hashes try Symbol key first, then String;
+      # everything else uses `public_send`, which lets `?` predicates
+      # on the field name (`it.done?`) dispatch as ordinary calls.
       def read_field(item, field)
         return nil if item.nil?
         if item.is_a?(Hash)
-          item[field.to_sym]
+          sym = field.to_sym
+          if item.key?(sym)
+            item[sym]
+          else
+            item[field]
+          end
         else
           item.public_send(field.to_sym)
         end

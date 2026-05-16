@@ -37,31 +37,6 @@ Spec.describe "Scanner walk boundaries (runtime)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
-  Spec.assert "data-each emits Phase 1 warning and skips descent (no binding attempted)" do
-    captured = []
-    prev_logger = Lilac.logger
-    Lilac.logger = ->(level, msg, _err) { captured << [level, msg] }
-
-    body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="each-rt"><ul data-each="@items"><li data-text="it.name"></li></ul></div>'
-
-    klass = Class.new(Lilac::Component) do
-      define_method(:setup) { @items = signal([]) }
-    end
-
-    Lilac.register("each-rt", klass)
-    Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
-
-    warns = captured.select { |level, msg| level == :warn && msg.to_s.include?("data-each") }
-    Spec.assert_equal 1, warns.length
-
-    Lilac.reset!
-    body[:innerHTML] = ""
-    Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
-  end
-
   Spec.assert "scanner processes directives on the component root element itself" do
     # Root binding pattern (theme demo style): the component's own
     # data-component element also carries data-class. The scanner must

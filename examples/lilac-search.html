@@ -68,8 +68,8 @@
 
     <div data-component="country-picker" class="panel">
       <div class="row">
-        <input data-ref="query" type="text" placeholder="国名 (英語) を入力…">
-        <select data-ref="region">
+        <input data-value="@query" type="text" placeholder="国名 (英語) を入力…">
+        <select data-value="@region">
           <option value="">All regions</option>
           <option value="Asia">Asia</option>
           <option value="Americas">Americas</option>
@@ -78,8 +78,14 @@
           <option value="Africa">Africa</option>
         </select>
       </div>
-      <p data-ref="status" class="status">loading…</p>
-      <ul data-ref="results" class="results"></ul>
+      <p class="status" data-text="@status_text" data-class="{ error: @has_error }"></p>
+      <ul class="results" data-each="@filtered" data-key="code">
+        <li>
+          <span class="name" data-text="it.name"></span>
+          <span class="code" data-text="it.code"></span>
+          <span class="region" data-text="it.region"></span>
+        </li>
+      </ul>
     </div>
 
     <p id="boot">booting…</p>
@@ -87,15 +93,11 @@
     <script type="text/ruby" id="ruby-source">
 class CountryPicker < Lilac::Component
   def setup
-    @query   = signal("")
-    @region  = signal("")
-    @items   = resource(initial: []) do |r|
+    @query  = signal("")
+    @region = signal("")
+    @items  = resource(initial: []) do |r|
       Fetchy.json("./data/countries.json", timeout: 5000, signal: r.abort_signal)
     end
-
-    # Two-way bind for both inputs.
-    bind_input refs.query,  @query
-    bind_input refs.region, @region
 
     # Filter computed from @items + @query + @region. computed skips
     # downstream notifies when the result is the same Array (== check),
@@ -110,9 +112,9 @@ class CountryPicker < Lilac::Component
       end
     end
 
-    bind refs.status, class: { "error" => computed { !@items.error.nil? } }
+    @has_error = computed { !@items.error.nil? }
 
-    bind refs.status, :text do
+    @status_text = computed do
       if @items.loading?
         "loading…"
       elsif @items.error
@@ -123,17 +125,6 @@ class CountryPicker < Lilac::Component
         n == total ? "#{total} countries" : "#{n} of #{total}"
       end
     end
-
-    # Each row is keyed by ISO code so DOM nodes survive across filter
-    # changes — no flicker, no focus loss on the input.
-    bind_list refs.results, @filtered, key: ->(it) { it["code"] } do |it|
-      HTML(:li, [
-        HTML(:span, it["name"], class: "name"),
-        HTML(:span, it["code"], class: "code"),
-        HTML(:span, it["region"], class: "region"),
-      ])
-    end
-
   end
 end
 
