@@ -208,14 +208,27 @@ module Lilac
     end
 
     # Called automatically by `mount` immediately after `setup` returns.
-    # Default is a no-op; the build-time codegen (lilac-cli) generates a
-    # `Lilac::Bindings::<ClassName>` module whose `bind_template_hook`
-    # applies the data-* directive bindings declared in the `.lil`
-    # template (e.g. `bind refs.lilN, text: @count`,
-    # `refs.gM.on(:click) { ... }`). The user class includes the
-    # generated module, so this default no-op is overridden in practice.
+    # Two paths can populate bindings here:
+    #
+    # 1. **CLI codegen path** — lilac-cli generates a
+    #    `Lilac::Bindings::<ClassName>` module whose `bind_template_hook`
+    #    applies the data-* directive bindings declared in the `.lil`
+    #    template. The user class includes the generated module, so its
+    #    override wins and this default never runs.
+    #
+    # 2. **Runtime scanner path** — when no codegen module is included
+    #    (e.g. plain HTML + Ruby authored without the CLI), the default
+    #    delegates to `Lilac::Directives::Scanner`, which walks the
+    #    component subtree at mount time and wires the same `bind` /
+    #    `bind_input` / `bind_list` calls that codegen would produce.
+    #
     # See docs/lilac-directive-spec.md Section 11 (Mount order).
     def bind_template_hook
+      # `const_defined?` (not `defined?`) because mruby's `defined?`
+      # keyword doesn't reliably resolve namespaced constants.
+      return unless Lilac.const_defined?(:Directives)
+      return unless Lilac::Directives.const_defined?(:Scanner)
+      Lilac::Directives::Scanner.new(self).scan_and_bind
     end
 
     # ---- Expose / Lookup -------------------------------------------

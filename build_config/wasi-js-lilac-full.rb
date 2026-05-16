@@ -101,7 +101,9 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem "#{mwr_mrbgem}/mruby-wasi-env"
 
   # Lilac framework mrbgems (this repo).
+  conf.gem "#{runtime_dir}/mruby-regexp-compat"
   conf.gem "#{runtime_dir}/mruby-lilac"
+  conf.gem "#{runtime_dir}/mruby-lilac-directives"
   conf.gem "#{runtime_dir}/mruby-lilac-async"
   conf.gem "#{runtime_dir}/mruby-lilac-router"
   conf.gem "#{runtime_dir}/mruby-lilac-form"

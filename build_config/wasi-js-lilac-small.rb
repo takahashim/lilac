@@ -67,7 +67,9 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem "#{mwr_mrbgem}/mruby-wasi-dir"
   conf.gem "#{mwr_mrbgem}/mruby-wasi-env"
 
+  conf.gem "#{runtime_dir}/mruby-regexp-compat"
   conf.gem "#{runtime_dir}/mruby-lilac"
+  conf.gem "#{runtime_dir}/mruby-lilac-directives"
   # async / router / form are NOT included — see wasi-js-lilac-full.rb
   # for the variant with all Lilac gems.
 
