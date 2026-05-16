@@ -10,7 +10,7 @@ class TestSFC < Minitest::Test
       </template>
 
       <script type="text/ruby">
-        class Counter < Grainet::Widget
+        class Counter < Grainet::Component
         end
       </script>
     GNT
@@ -19,7 +19,7 @@ class TestSFC < Minitest::Test
     assert_equal 1, comp.templates.length
     assert_nil comp.templates.first.name
     assert_includes comp.templates.first.body, 'data-ref="count"'
-    assert_includes comp.script, "class Counter < Grainet::Widget"
+    assert_includes comp.script, "class Counter < Grainet::Component"
   end
 
   def test_named_template
@@ -29,7 +29,7 @@ class TestSFC < Minitest::Test
       </template>
 
       <script type="text/ruby">
-        class TodoList < Grainet::Widget
+        class TodoList < Grainet::Component
         end
       </script>
     GNT
@@ -43,7 +43,7 @@ class TestSFC < Minitest::Test
   def test_multiple_templates_in_document_order
     source = <<~GNT
       <template>
-        <div data-widget="x">A</div>
+        <div data-component="x">A</div>
       </template>
 
       <template data-template="row">
@@ -51,11 +51,11 @@ class TestSFC < Minitest::Test
       </template>
 
       <template>
-        <div data-widget="y">C</div>
+        <div data-component="y">C</div>
       </template>
 
       <script type="text/ruby">
-        class X < Grainet::Widget; end
+        class X < Grainet::Component; end
       </script>
     GNT
 
@@ -72,13 +72,13 @@ class TestSFC < Minitest::Test
   def test_multiple_script_blocks_concatenated
     source = <<~GNT
       <script type="text/ruby">
-        class A < Grainet::Widget; end
+        class A < Grainet::Component; end
       </script>
 
       <template></template>
 
       <script type="text/ruby">
-        class B < Grainet::Widget; end
+        class B < Grainet::Component; end
       </script>
     GNT
 

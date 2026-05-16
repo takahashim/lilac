@@ -24,7 +24,7 @@ class TestConfigLoader < Minitest::Test
   def test_loads_settings_from_full_config
     write_config <<~RB
       Grainet::CLI.configure do |c|
-        c.widgets_dir = "src/components"
+        c.components_dir = "src/components"
         c.pages_dir   = "src/pages"
         c.public_dir  = "static"
         c.output_dir  = "_site"
@@ -34,7 +34,7 @@ class TestConfigLoader < Minitest::Test
     RB
 
     s = Grainet::CLI::ConfigLoader.load(@tmp)
-    assert_equal "src/components", s.widgets_dir
+    assert_equal "src/components", s.components_dir
     assert_equal "src/pages", s.pages_dir
     assert_equal "static", s.public_dir
     assert_equal "_site", s.output_dir
@@ -51,14 +51,14 @@ class TestConfigLoader < Minitest::Test
 
     s = Grainet::CLI::ConfigLoader.load(@tmp)
     assert_equal 8000, s.dev_port
-    assert_nil s.widgets_dir
+    assert_nil s.components_dir
     assert_nil s.dev_host
   end
 
   def test_empty_configure_block_returns_blank_settings
     write_config "Grainet::CLI.configure { |_c| }"
     s = Grainet::CLI::ConfigLoader.load(@tmp)
-    assert_nil s.widgets_dir
+    assert_nil s.components_dir
     assert_nil s.dev_port
   end
 

@@ -6,7 +6,7 @@ module Grainet
     # `Grainet::CLI.configure` DSL:
     #
     #   Grainet::CLI.configure do |c|
-    #     c.widgets_dir = "src/components"
+    #     c.components_dir = "src/components"
     #     c.dev_port    = 3000
     #   end
     #
@@ -21,7 +21,7 @@ module Grainet
       # Fields here are the union of every value the CLI knows how to
       # configure. Keep in sync with Config defaults.
       Settings = Struct.new(
-        :widgets_dir, :pages_dir, :public_dir, :output_dir,
+        :components_dir, :pages_dir, :public_dir, :output_dir,
         :dev_host, :dev_port,
         keyword_init: true,
       )

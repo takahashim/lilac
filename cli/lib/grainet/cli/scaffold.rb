@@ -12,7 +12,7 @@ module Grainet
     #   ├── Gemfile
     #   ├── README.md
     #   ├── pages/index.html
-    #   └── widgets/counter.gnt
+    #   └── components/counter.gnt
     #
     # Templates live under `lib/grainet/cli/templates/`. Files are copied
     # 1:1 with `{{name}}` substituted to the chosen project name. The
@@ -73,7 +73,7 @@ module Grainet
       def relative_template_path(source)
         rel = Pathname.new(source).relative_path_from(Pathname.new(TEMPLATES_DIR)).to_s
         # `gitignore` → `.gitignore` only when it's a top-level entry; a
-        # `widgets/gitignore` wouldn't be silently renamed.
+        # `components/gitignore` wouldn't be silently renamed.
         rel == "gitignore" ? ".gitignore" : rel
       end
 

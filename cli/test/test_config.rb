@@ -20,7 +20,7 @@ class TestConfig < Minitest::Test
   def test_widgets_pages_output_default_relative_to_root
     config = Grainet::CLI::Config.new(root: "/tmp/proj")
     assert_equal "/tmp/proj", config.root
-    assert_equal "/tmp/proj/widgets", config.widgets_dir
+    assert_equal "/tmp/proj/components", config.components_dir
     assert_equal "/tmp/proj/pages", config.pages_dir
     assert_equal "/tmp/proj/dist", config.output_dir
     assert_equal "/tmp/proj/public", config.public_dir
@@ -29,10 +29,10 @@ class TestConfig < Minitest::Test
   def test_explicit_dirs_override_defaults
     config = Grainet::CLI::Config.new(
       root: "/tmp/proj",
-      widgets_dir: "components",
+      components_dir: "components",
       output_dir: "../out",
     )
-    assert_equal "/tmp/proj/components", config.widgets_dir
+    assert_equal "/tmp/proj/components", config.components_dir
     assert_equal "/tmp/out", config.output_dir
   end
 
@@ -58,31 +58,31 @@ class TestConfig < Minitest::Test
 
   def test_load_without_file_falls_back_to_defaults
     config = Grainet::CLI::Config.load(root: @tmp)
-    assert_equal File.join(@tmp, "widgets"), config.widgets_dir
+    assert_equal File.join(@tmp, "components"), config.components_dir
     assert_equal 5173, config.dev_port
   end
 
   def test_load_uses_config_file_when_no_cli_override
     write_config <<~RB
       Grainet::CLI.configure do |c|
-        c.widgets_dir = "components"
+        c.components_dir = "components"
         c.dev_port    = 4000
       end
     RB
     config = Grainet::CLI::Config.load(root: @tmp)
-    assert_equal File.join(@tmp, "components"), config.widgets_dir
+    assert_equal File.join(@tmp, "components"), config.components_dir
     assert_equal 4000, config.dev_port
   end
 
   def test_load_cli_overrides_file
     write_config <<~RB
       Grainet::CLI.configure do |c|
-        c.widgets_dir = "from-file"
+        c.components_dir = "from-file"
         c.dev_port    = 4000
       end
     RB
-    config = Grainet::CLI::Config.load(root: @tmp, widgets_dir: "from-cli", dev_port: 9999)
-    assert_equal File.join(@tmp, "from-cli"), config.widgets_dir
+    config = Grainet::CLI::Config.load(root: @tmp, components_dir: "from-cli", dev_port: 9999)
+    assert_equal File.join(@tmp, "from-cli"), config.components_dir
     assert_equal 9999, config.dev_port
   end
 
@@ -95,7 +95,7 @@ class TestConfig < Minitest::Test
     config = Grainet::CLI::Config.load(root: @tmp)
     # dev_port comes from file:
     assert_equal 4000, config.dev_port
-    # widgets_dir not set anywhere — built-in default applies:
-    assert_equal File.join(@tmp, "widgets"), config.widgets_dir
+    # components_dir not set anywhere — built-in default applies:
+    assert_equal File.join(@tmp, "components"), config.components_dir
   end
 end

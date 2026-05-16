@@ -1,5 +1,5 @@
 <template>
-  <div data-widget="counter">
+  <div data-component="counter">
     <button data-ref="decrement" type="button">-</button>
     <span data-ref="count" class="count">0</span>
     <button data-ref="increment" type="button">+</button>
@@ -7,7 +7,7 @@
 </template>
 
 <script type="text/ruby">
-class Counter < Grainet::Widget
+class Counter < Grainet::Component
   def setup
     @count = signal(0)
     refs.increment.on(:click) { @count.update(&:succ) }

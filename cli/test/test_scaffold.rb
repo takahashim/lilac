@@ -19,14 +19,14 @@ class TestScaffold < Minitest::Test
     assert_includes files, "Gemfile"
     assert_includes files, "README.md"
     assert_includes files, "pages/index.html"
-    assert_includes files, "widgets/counter.gnt"
+    assert_includes files, "components/counter.gnt"
     assert_includes files, "public/.gitkeep"
     assert_includes files, "grainet.config.rb"
   end
 
   def test_writes_actual_files_to_disk
     Grainet::CLI::Scaffold.new("my-app", root: @tmp).run
-    %w[.gitignore Gemfile README.md pages/index.html widgets/counter.gnt public/.gitkeep grainet.config.rb].each do |rel|
+    %w[.gitignore Gemfile README.md pages/index.html components/counter.gnt public/.gitkeep grainet.config.rb].each do |rel|
       assert File.exist?(File.join(@tmp, "my-app", rel)), "missing: #{rel}"
     end
   end
@@ -57,8 +57,8 @@ class TestScaffold < Minitest::Test
 
   def test_counter_widget_is_complete_and_uses_succ_pred
     Grainet::CLI::Scaffold.new("my-app", root: @tmp).run
-    content = File.read(File.join(@tmp, "my-app", "widgets", "counter.gnt"))
-    assert_includes content, "class Counter < Grainet::Widget"
+    content = File.read(File.join(@tmp, "my-app", "components", "counter.gnt"))
+    assert_includes content, "class Counter < Grainet::Component"
     assert_includes content, "&:succ"
     assert_includes content, "&:pred"
     assert_includes content, "<template>"
@@ -112,14 +112,14 @@ class TestScaffold < Minitest::Test
     File.write(File.join(dest, "public", "favicon.txt"), "stub")
 
     Grainet::CLI::Builder.new(
-      widgets_dir: File.join(dest, "widgets"),
+      components_dir: File.join(dest, "components"),
       pages_dir: File.join(dest, "pages"),
       output_dir: File.join(dest, "dist"),
       public_dir: File.join(dest, "public"),
     ).build
     out = File.read(File.join(dest, "dist", "index.html"))
-    assert_includes out, 'data-widget="counter"'
-    assert_includes out, "class Counter < Grainet::Widget"
+    assert_includes out, 'data-component="counter"'
+    assert_includes out, "class Counter < Grainet::Component"
     # public/ passthrough delivers favicon.txt to dist/, but the .gitkeep
     # placeholder is filtered out.
     assert_equal "stub", File.read(File.join(dest, "dist", "favicon.txt"))

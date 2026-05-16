@@ -27,7 +27,7 @@ module Grainet
       end
 
       def start
-        # No `only:` filter: callers pass `widgets/`, `pages/`, and
+        # No `only:` filter: callers pass `components/`, `pages/`, and
         # `public/`, and the public mirror needs to react to arbitrary
         # static assets (.js, .css, .wasm, images). Listen's default
         # ignore list already filters .git, swap files, OS metadata.

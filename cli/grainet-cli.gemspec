@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.summary = "Build tool for Grainet single-file components (.gnt)"
   spec.description = "grainet-cli compiles .gnt single-file components " \
                      "(template + Ruby script) into static HTML for the Grainet " \
-                     "widget runtime on mruby-wasm."
+                     "component runtime on mruby-wasm."
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
 

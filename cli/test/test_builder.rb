@@ -7,10 +7,10 @@ require "fileutils"
 class TestBuilder < Minitest::Test
   def setup
     @tmp = Dir.mktmpdir("grainet-cli-test")
-    @widgets = File.join(@tmp, "widgets")
+    @components = File.join(@tmp, "components")
     @pages = File.join(@tmp, "pages")
     @output = File.join(@tmp, "dist")
-    FileUtils.mkdir_p(@widgets)
+    FileUtils.mkdir_p(@components)
     FileUtils.mkdir_p(@pages)
   end
 
@@ -19,7 +19,7 @@ class TestBuilder < Minitest::Test
   end
 
   def write_widget(name, source)
-    File.write(File.join(@widgets, "#{name}.gnt"), source)
+    File.write(File.join(@components, "#{name}.gnt"), source)
   end
 
   def write_page(name, source)
@@ -28,7 +28,7 @@ class TestBuilder < Minitest::Test
 
   def build!
     Grainet::CLI::Builder.new(
-      widgets_dir: @widgets,
+      components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
     ).build
@@ -40,38 +40,38 @@ class TestBuilder < Minitest::Test
 
   def test_self_closing_widget_placeholder_is_replaced
     write_widget "counter", <<~GNT
-      <template><div data-widget="counter"></div></template>
-      <script type="text/ruby">class Counter < Grainet::Widget; end</script>
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Grainet::Component; end</script>
     GNT
 
     write_page "index", <<~HTML
       <html><body>
-        <grainet-widget name="counter" />
+        <grainet-component name="counter" />
       </body></html>
     HTML
 
     build!
     out = read_output("index.html")
-    assert_includes out, '<div data-widget="counter">'
-    refute_includes out, "<grainet-widget"
+    assert_includes out, '<div data-component="counter">'
+    refute_includes out, "<grainet-component"
   end
 
   def test_single_quoted_widget_placeholder_is_replaced
     write_widget "counter", <<~GNT
-      <template><div data-widget="counter"></div></template>
-      <script type="text/ruby">class Counter < Grainet::Widget; end</script>
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Grainet::Component; end</script>
     GNT
 
     write_page "index", <<~HTML
       <html><body>
-        <grainet-widget name='counter'></grainet-widget>
+        <grainet-component name='counter'></grainet-component>
       </body></html>
     HTML
 
     build!
     out = read_output("index.html")
-    assert_includes out, '<div data-widget="counter">'
-    refute_includes out, "<grainet-widget"
+    assert_includes out, '<div data-component="counter">'
+    refute_includes out, "<grainet-component"
   end
 
   def test_extra_attributes_on_widget_placeholder_are_not_matched
@@ -79,52 +79,52 @@ class TestBuilder < Minitest::Test
     # is replaced wholesale), so we leave the tag untouched. This shows
     # up clearly in the output and lets the user notice the typo.
     write_widget "counter", <<~GNT
-      <template><div data-widget="counter"></div></template>
-      <script type="text/ruby">class Counter < Grainet::Widget; end</script>
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Grainet::Component; end</script>
     GNT
 
     write_page "index", <<~HTML
       <html><body>
-        <grainet-widget name="counter" data-id="3"></grainet-widget>
+        <grainet-component name="counter" data-id="3"></grainet-component>
       </body></html>
     HTML
 
     build!
     out = read_output("index.html")
     # Tag stays literal — Counter component markup is NOT injected.
-    assert_includes out, '<grainet-widget name="counter" data-id="3">'
-    refute_includes out, '<div data-widget="counter">'
+    assert_includes out, '<grainet-component name="counter" data-id="3">'
+    refute_includes out, '<div data-component="counter">'
   end
 
   def test_widget_placeholder_is_replaced_with_default_template
     write_widget "counter", <<~GNT
       <template>
-        <div data-widget="counter"><span data-ref="count">0</span></div>
+        <div data-component="counter"><span data-ref="count">0</span></div>
       </template>
 
       <script type="text/ruby">
-        class Counter < Grainet::Widget; end
+        class Counter < Grainet::Component; end
       </script>
     GNT
 
     write_page "index", <<~HTML
       <html><body>
         <main>
-          <grainet-widget name="counter"></grainet-widget>
+          <grainet-component name="counter"></grainet-component>
         </main>
       </body></html>
     HTML
 
     build!
     out = read_output("index.html")
-    assert_includes out, '<div data-widget="counter">'
-    refute_includes out, "<grainet-widget"
+    assert_includes out, '<div data-component="counter">'
+    refute_includes out, "<grainet-component"
   end
 
   def test_named_subtemplates_are_emitted_before_body_close
     write_widget "todo-list", <<~GNT
       <template>
-        <div data-widget="todo-list"><ul data-ref="list"></ul></div>
+        <div data-component="todo-list"><ul data-ref="list"></ul></div>
       </template>
 
       <template data-template="todo-row">
@@ -132,13 +132,13 @@ class TestBuilder < Minitest::Test
       </template>
 
       <script type="text/ruby">
-        class TodoList < Grainet::Widget; end
+        class TodoList < Grainet::Component; end
       </script>
     GNT
 
     write_page "index", <<~HTML
       <html><body>
-        <grainet-widget name="todo-list"></grainet-widget>
+        <grainet-component name="todo-list"></grainet-component>
       </body></html>
     HTML
 
@@ -146,7 +146,7 @@ class TestBuilder < Minitest::Test
     out = read_output("index.html")
     assert_includes out, '<template data-template="todo-row">'
     # Named template must appear before </body>, after the main markup.
-    main_idx = out.index('data-widget="todo-list"')
+    main_idx = out.index('data-component="todo-list"')
     tmpl_idx = out.index('data-template="todo-row"')
     body_idx = out.index("</body>")
     assert main_idx < tmpl_idx
@@ -155,19 +155,19 @@ class TestBuilder < Minitest::Test
 
   def test_ruby_scripts_are_bundled_into_one_block
     write_widget "a", <<~GNT
-      <template><div data-widget="a"></div></template>
-      <script type="text/ruby">class A < Grainet::Widget; end</script>
+      <template><div data-component="a"></div></template>
+      <script type="text/ruby">class A < Grainet::Component; end</script>
     GNT
 
     write_widget "b", <<~GNT
-      <template><div data-widget="b"></div></template>
-      <script type="text/ruby">class B < Grainet::Widget; end</script>
+      <template><div data-component="b"></div></template>
+      <script type="text/ruby">class B < Grainet::Component; end</script>
     GNT
 
     write_page "index", <<~HTML
       <html><body>
-        <grainet-widget name="a"></grainet-widget>
-        <grainet-widget name="b"></grainet-widget>
+        <grainet-component name="a"></grainet-component>
+        <grainet-component name="b"></grainet-component>
       </body></html>
     HTML
 
@@ -176,43 +176,43 @@ class TestBuilder < Minitest::Test
     # Exactly one bundled ruby script block.
     ruby_blocks = out.scan(/<script\s+type="text\/ruby">/)
     assert_equal 1, ruby_blocks.length
-    assert_includes out, "class A < Grainet::Widget"
-    assert_includes out, "class B < Grainet::Widget"
+    assert_includes out, "class A < Grainet::Component"
+    assert_includes out, "class B < Grainet::Component"
   end
 
   def test_repeated_component_inlines_template_each_time_but_script_once
     write_widget "counter", <<~GNT
-      <template><div data-widget="counter">0</div></template>
-      <script type="text/ruby">class Counter < Grainet::Widget; end</script>
+      <template><div data-component="counter">0</div></template>
+      <script type="text/ruby">class Counter < Grainet::Component; end</script>
     GNT
 
     write_page "index", <<~HTML
       <html><body>
-        <grainet-widget name="counter"></grainet-widget>
-        <grainet-widget name="counter"></grainet-widget>
-        <grainet-widget name="counter"></grainet-widget>
+        <grainet-component name="counter"></grainet-component>
+        <grainet-component name="counter"></grainet-component>
+        <grainet-component name="counter"></grainet-component>
       </body></html>
     HTML
 
     build!
     out = read_output("index.html")
-    assert_equal 3, out.scan('data-widget="counter"').length
-    assert_equal 1, out.scan("class Counter < Grainet::Widget").length
+    assert_equal 3, out.scan('data-component="counter"').length
+    assert_equal 1, out.scan("class Counter < Grainet::Component").length
   end
 
   def test_only_referenced_widgets_are_bundled
     write_widget "used", <<~GNT
-      <template><div data-widget="used"></div></template>
-      <script type="text/ruby">class Used < Grainet::Widget; end</script>
+      <template><div data-component="used"></div></template>
+      <script type="text/ruby">class Used < Grainet::Component; end</script>
     GNT
 
     write_widget "unused", <<~GNT
-      <template><div data-widget="unused"></div></template>
-      <script type="text/ruby">class Unused < Grainet::Widget; end</script>
+      <template><div data-component="unused"></div></template>
+      <script type="text/ruby">class Unused < Grainet::Component; end</script>
     GNT
 
     write_page "index", <<~HTML
-      <html><body><grainet-widget name="used"></grainet-widget></body></html>
+      <html><body><grainet-component name="used"></grainet-component></body></html>
     HTML
 
     build!
@@ -223,7 +223,7 @@ class TestBuilder < Minitest::Test
 
   def test_unknown_component_reference_raises
     write_page "index", <<~HTML
-      <html><body><grainet-widget name="nope"></grainet-widget></body></html>
+      <html><body><grainet-component name="nope"></grainet-component></body></html>
     HTML
 
     err = assert_raises(Grainet::CLI::Builder::Error) { build! }
@@ -233,35 +233,35 @@ class TestBuilder < Minitest::Test
   def test_namespaced_component_name_via_double_dash
     write_widget "admin--user-card", <<~GNT
       <template>
-        <div data-widget="admin--user-card"></div>
+        <div data-component="admin--user-card"></div>
       </template>
       <script type="text/ruby">
-        module Admin; class UserCard < Grainet::Widget; end; end
+        module Admin; class UserCard < Grainet::Component; end; end
       </script>
     GNT
 
     write_page "index", <<~HTML
-      <html><body><grainet-widget name="admin--user-card"></grainet-widget></body></html>
+      <html><body><grainet-component name="admin--user-card"></grainet-component></body></html>
     HTML
 
     build!
     out = read_output("index.html")
-    assert_includes out, 'data-widget="admin--user-card"'
+    assert_includes out, 'data-component="admin--user-card"'
     assert_includes out, "module Admin"
   end
 
   def test_live_reload_option_injects_eventsource_script
     write_widget "counter", <<~GNT
-      <template><div data-widget="counter"></div></template>
-      <script type="text/ruby">class Counter < Grainet::Widget; end</script>
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Grainet::Component; end</script>
     GNT
 
     write_page "index", <<~HTML
-      <html><body><grainet-widget name="counter"></grainet-widget></body></html>
+      <html><body><grainet-component name="counter"></grainet-component></body></html>
     HTML
 
     Grainet::CLI::Builder.new(
-      widgets_dir: @widgets,
+      components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
       live_reload: true,
@@ -274,12 +274,12 @@ class TestBuilder < Minitest::Test
 
   def test_live_reload_default_off
     write_widget "counter", <<~GNT
-      <template><div data-widget="counter"></div></template>
-      <script type="text/ruby">class Counter < Grainet::Widget; end</script>
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Grainet::Component; end</script>
     GNT
 
     write_page "index", <<~HTML
-      <html><body><grainet-widget name="counter"></grainet-widget></body></html>
+      <html><body><grainet-component name="counter"></grainet-component></body></html>
     HTML
 
     build!  # live_reload defaults to false
@@ -293,10 +293,10 @@ class TestBuilder < Minitest::Test
 
   def test_public_files_are_mirrored_to_output
     write_widget "x", <<~GNT
-      <template><div data-widget="x"></div></template>
-      <script type="text/ruby">class X < Grainet::Widget; end</script>
+      <template><div data-component="x"></div></template>
+      <script type="text/ruby">class X < Grainet::Component; end</script>
     GNT
-    write_page "index", '<html><body><grainet-widget name="x"></grainet-widget></body></html>'
+    write_page "index", '<html><body><grainet-component name="x"></grainet-component></body></html>'
 
     public_dir = File.join(@tmp, "public")
     FileUtils.mkdir_p(File.join(public_dir, "vendor", "mruby-wasm-js"))
@@ -305,7 +305,7 @@ class TestBuilder < Minitest::Test
     File.write(File.join(public_dir, "vendor", "mruby-wasm-js", "index.js"), "export {}")
 
     Grainet::CLI::Builder.new(
-      widgets_dir: @widgets,
+      components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
       public_dir: public_dir,
@@ -318,13 +318,13 @@ class TestBuilder < Minitest::Test
 
   def test_public_dir_absent_is_silent
     write_widget "x", <<~GNT
-      <template><div data-widget="x"></div></template>
-      <script type="text/ruby">class X < Grainet::Widget; end</script>
+      <template><div data-component="x"></div></template>
+      <script type="text/ruby">class X < Grainet::Component; end</script>
     GNT
-    write_page "index", '<html><body><grainet-widget name="x"></grainet-widget></body></html>'
+    write_page "index", '<html><body><grainet-component name="x"></grainet-component></body></html>'
 
     result = Grainet::CLI::Builder.new(
-      widgets_dir: @widgets,
+      components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
       public_dir: File.join(@tmp, "public-not-here"),
@@ -336,10 +336,10 @@ class TestBuilder < Minitest::Test
 
   def test_public_dir_skip_gitkeep
     write_widget "x", <<~GNT
-      <template><div data-widget="x"></div></template>
-      <script type="text/ruby">class X < Grainet::Widget; end</script>
+      <template><div data-component="x"></div></template>
+      <script type="text/ruby">class X < Grainet::Component; end</script>
     GNT
-    write_page "index", '<html><body><grainet-widget name="x"></grainet-widget></body></html>'
+    write_page "index", '<html><body><grainet-component name="x"></grainet-component></body></html>'
 
     public_dir = File.join(@tmp, "public")
     FileUtils.mkdir_p(public_dir)
@@ -347,7 +347,7 @@ class TestBuilder < Minitest::Test
     File.write(File.join(public_dir, "real.css"), "body{}")
 
     result = Grainet::CLI::Builder.new(
-      widgets_dir: @widgets,
+      components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
       public_dir: public_dir,
@@ -360,10 +360,10 @@ class TestBuilder < Minitest::Test
 
   def test_build_result_reports_public_files_count
     write_widget "x", <<~GNT
-      <template><div data-widget="x"></div></template>
-      <script type="text/ruby">class X < Grainet::Widget; end</script>
+      <template><div data-component="x"></div></template>
+      <script type="text/ruby">class X < Grainet::Component; end</script>
     GNT
-    write_page "index", '<html><body><grainet-widget name="x"></grainet-widget></body></html>'
+    write_page "index", '<html><body><grainet-component name="x"></grainet-component></body></html>'
 
     public_dir = File.join(@tmp, "public")
     FileUtils.mkdir_p(public_dir)
@@ -371,7 +371,7 @@ class TestBuilder < Minitest::Test
     File.write(File.join(public_dir, "b.txt"), "b")
 
     result = Grainet::CLI::Builder.new(
-      widgets_dir: @widgets,
+      components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
       public_dir: public_dir,

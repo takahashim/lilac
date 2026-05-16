@@ -34,7 +34,7 @@ without templating) directly under `public/`.
 bundle exec grainet dev
 ```
 
-Open <http://localhost:5173>. Edit any `.gnt` widget or `.html` page and
+Open <http://localhost:5173>. Edit any `.gnt` component or `.html` page and
 the browser reloads automatically (Server-Sent Events).
 
 ## Build for production

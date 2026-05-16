@@ -8,7 +8,7 @@ require "stringio"
 class TestCommand < Minitest::Test
   def setup
     @tmp = Dir.mktmpdir("grainet-cmd-test")
-    FileUtils.mkdir_p(File.join(@tmp, "widgets"))
+    FileUtils.mkdir_p(File.join(@tmp, "components"))
     FileUtils.mkdir_p(File.join(@tmp, "pages"))
   end
 
@@ -24,13 +24,13 @@ class TestCommand < Minitest::Test
   end
 
   def test_build_succeeds_with_minimum_inputs
-    File.write(File.join(@tmp, "widgets", "counter.gnt"), <<~GNT)
-      <template><div data-widget="counter"></div></template>
-      <script type="text/ruby">class Counter < Grainet::Widget; end</script>
+    File.write(File.join(@tmp, "components", "counter.gnt"), <<~GNT)
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Grainet::Component; end</script>
     GNT
 
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
-      <html><body><grainet-widget name="counter"></grainet-widget></body></html>
+      <html><body><grainet-component name="counter"></grainet-component></body></html>
     HTML
 
     status, out, err = run_cmd("build", "--root", @tmp)
@@ -41,7 +41,7 @@ class TestCommand < Minitest::Test
 
   def test_build_reports_unknown_component_via_stderr
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
-      <html><body><grainet-widget name="missing"></grainet-widget></body></html>
+      <html><body><grainet-component name="missing"></grainet-component></body></html>
     HTML
 
     status, _out, err = run_cmd("build", "--root", @tmp)
@@ -68,7 +68,7 @@ class TestCommand < Minitest::Test
       assert_equal 0, status
       assert_match(/Created demoapp\//, out)
       assert_match(/Next steps:/, out)
-      assert File.exist?(File.join(@tmp, "demoapp", "widgets", "counter.gnt"))
+      assert File.exist?(File.join(@tmp, "demoapp", "components", "counter.gnt"))
     end
   end
 

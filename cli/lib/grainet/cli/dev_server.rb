@@ -9,7 +9,7 @@ module Grainet
   module CLI
     # Long-running dev server: initial build, file watch, live reload.
     #
-    #   1. Builds `widgets/*.gnt + pages/*.html` → `output_dir/` once,
+    #   1. Builds `components/*.gnt + pages/*.html` → `output_dir/` once,
     #      with the live-reload client script injected
     #   2. Wraps `Wsv::Server` with a custom app that routes
     #      `/__grainet/livereload` to the SSE pub/sub, everything else
@@ -53,7 +53,7 @@ module Grainet
 
       def rebuild!
         Builder.new(
-          widgets_dir: @config.widgets_dir,
+          components_dir: @config.components_dir,
           pages_dir: @config.pages_dir,
           output_dir: @config.output_dir,
           public_dir: @config.public_dir,
@@ -62,7 +62,7 @@ module Grainet
       end
 
       def watched_paths
-        [@config.widgets_dir, @config.pages_dir, @config.public_dir].select { |p| File.directory?(p) }
+        [@config.components_dir, @config.pages_dir, @config.public_dir].select { |p| File.directory?(p) }
       end
 
       def rebuild_and_notify

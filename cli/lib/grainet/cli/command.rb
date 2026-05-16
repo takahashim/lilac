@@ -50,14 +50,14 @@ module Grainet
 
         config = Config.load(
           root: opts[:root],
-          widgets_dir: opts[:widgets],
+          components_dir: opts[:components],
           pages_dir: opts[:pages],
           output_dir: opts[:output],
           public_dir: opts[:public],
         )
 
         builder = Builder.new(
-          widgets_dir: config.widgets_dir,
+          components_dir: config.components_dir,
           pages_dir: config.pages_dir,
           output_dir: config.output_dir,
           public_dir: config.public_dir,
@@ -73,7 +73,7 @@ module Grainet
 
         config = Config.load(
           root: opts[:root],
-          widgets_dir: opts[:widgets],
+          components_dir: opts[:components],
           pages_dir: opts[:pages],
           output_dir: opts[:output],
           public_dir: opts[:public],
@@ -86,7 +86,7 @@ module Grainet
         opts = {}
         parser = OptionParser.new do |o|
           o.banner = "Usage: grainet doctor [options]"
-          o.on("--widgets DIR", "Components directory (default: widgets)") { |v| opts[:widgets] = v }
+          o.on("--components DIR", "Components directory (default: components)") { |v| opts[:components] = v }
           o.on("--pages DIR", "Pages directory (default: pages)") { |v| opts[:pages] = v }
           o.on("--public DIR", "Static-passthrough directory (default: public)") { |v| opts[:public] = v }
           o.on("--output DIR", "-o DIR", "Output directory (default: dist)") { |v| opts[:output] = v }
@@ -157,7 +157,7 @@ module Grainet
 
         config = Config.load(
           root: opts[:root],
-          widgets_dir: opts[:widgets],
+          components_dir: opts[:components],
           pages_dir: opts[:pages],
           output_dir: opts[:output],
           public_dir: opts[:public],
@@ -182,7 +182,7 @@ module Grainet
           o.banner = "Usage: grainet dev [options]"
           o.on("--host HOST", "Bind host (default: #{Config::DEFAULT_DEV_HOST})") { |v| opts[:host] = v }
           o.on("--port PORT", Integer, "Bind port (default: #{Config::DEFAULT_DEV_PORT})") { |v| opts[:port] = v }
-          o.on("--widgets DIR", "Components directory (default: widgets)") { |v| opts[:widgets] = v }
+          o.on("--components DIR", "Components directory (default: components)") { |v| opts[:components] = v }
           o.on("--pages DIR", "Pages directory (default: pages)") { |v| opts[:pages] = v }
           o.on("--public DIR", "Static-passthrough directory (default: public)") { |v| opts[:public] = v }
           o.on("--output DIR", "-o DIR", "Output directory (default: dist)") { |v| opts[:output] = v }
@@ -197,7 +197,7 @@ module Grainet
         opts = {}
         parser = OptionParser.new do |o|
           o.banner = "Usage: grainet build [options]"
-          o.on("--widgets DIR", "Components directory (default: widgets)") { |v| opts[:widgets] = v }
+          o.on("--components DIR", "Components directory (default: components)") { |v| opts[:components] = v }
           o.on("--pages DIR", "Pages directory (default: pages)") { |v| opts[:pages] = v }
           o.on("--public DIR", "Static-passthrough directory (default: public)") { |v| opts[:public] = v }
           o.on("--output DIR", "-o DIR", "Output directory (default: dist)") { |v| opts[:output] = v }
@@ -217,7 +217,7 @@ module Grainet
 
           Commands:
             new <name>  Scaffold a new Grainet app
-            build       Compile widgets/ + pages/ into dist/
+            build       Compile components/ + pages/ into dist/
             dev         Build, serve, watch — live reload on changes
             doctor      Verify project setup (runtime, references, paths)
             help        Show this help

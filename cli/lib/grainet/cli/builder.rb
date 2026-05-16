@@ -3,39 +3,41 @@
 require "fileutils"
 require "pathname"
 require_relative "sfc"
+require_relative "template_ast"
+require_relative "codegen"
 
 module Grainet
   module CLI
     # Reads `.gnt` components and `.html` pages, then emits static HTML.
     #
     # Page authors mark component insertion points with
-    #   <grainet-widget name="counter"></grainet-widget>
+    #   <grainet-component name="counter"></grainet-component>
     # which is replaced by the component's default-template markup.
     # Named sub-templates and Ruby class scripts from all components used
     # on the page are injected once each before `</body>`.
     #
-    # Component file naming: `widgets/<data-widget-name>.gnt`. The file's
+    # Component file naming: `components/<data-component-name>.gnt`. The file's
     # basename is taken verbatim as the component name, so
-    # `admin--user-card.gnt` matches `<grainet-widget name="admin--user-card">`
+    # `admin--user-card.gnt` matches `<grainet-component name="admin--user-card">`
     # and (via the runtime autoregister) the `Admin::UserCard` class.
     class Builder
       class Error < StandardError; end
 
       # Accepted forms (all match the same component name in capture 1):
       #
-      #   <grainet-widget name="counter"></grainet-widget>
-      #   <grainet-widget name='counter'></grainet-widget>
-      #   <grainet-widget name="counter" />
-      #   <grainet-widget name="counter"/>
+      #   <grainet-component name="counter"></grainet-component>
+      #   <grainet-component name='counter'></grainet-component>
+      #   <grainet-component name="counter" />
+      #   <grainet-component name="counter"/>
       #
       # Additional attributes beyond `name` are intentionally NOT supported:
       # the placeholder is replaced wholesale at build time, so any extra
-      # attribute would silently disappear rather than reach the widget.
-      WIDGET_PLACEHOLDER = %r{
-        <grainet-widget
+      # attribute would silently disappear rather than reach the component.
+      COMPONENT_PLACEHOLDER = %r{
+        <grainet-component
         \s+name=(?:"([^"]+)"|'([^']+)')
         \s*
-        (?:/>|>\s*</grainet-widget>)
+        (?:/>|>\s*</grainet-component>)
       }x
 
       # Filenames that must not land in the build output even when they
@@ -50,8 +52,8 @@ module Grainet
         </script>
       HTML
 
-      def initialize(widgets_dir:, pages_dir:, output_dir:, public_dir: nil, live_reload: false)
-        @widgets_dir = widgets_dir
+      def initialize(components_dir:, pages_dir:, output_dir:, public_dir: nil, live_reload: false)
+        @components_dir = components_dir
         @pages_dir = pages_dir
         @output_dir = output_dir
         # public_dir is optional. When nil or absent on disk, the
@@ -69,6 +71,10 @@ module Grainet
 
         public_files = mirror_public_files
 
+        # Caches per component name to avoid re-parsing template bodies
+        # when the same component appears on multiple pages.
+        @template_ast_cache = {}
+
         pages.each do |page_path|
           build_page(page_path, components)
         end
@@ -77,6 +83,28 @@ module Grainet
       end
 
       private
+
+      # Returns { default_html:, default_directives:, named: [{name:, html:, directives:}, ...] }
+      # for a component, caching the result.
+      def template_ast_for(name, component)
+        @template_ast_cache[name] ||= begin
+          default_results = component.default_templates.map do |t|
+            TemplateAST.new(t.body, source_path: component.path).parse
+          end
+
+          named = component.named_templates.map do |t|
+            result = TemplateAST.new(t.body, source_path: component.path).parse
+            { name: t.name, html: result.html, directives: result.directives }
+          end
+
+          {
+            default_html: default_results.map(&:html).join.strip,
+            default_directives: default_results.flat_map(&:directives),
+            named: named,
+            source_path: component.path,
+          }
+        end
+      end
 
       # Mirror `public/**/*` → `output_dir/`. Preserves the relative
       # directory structure (e.g. `public/vendor/x.js` →
@@ -106,7 +134,7 @@ module Grainet
       end
 
       def load_components
-        Dir.glob(File.join(@widgets_dir, "**", "*.gnt")).to_h do |path|
+        Dir.glob(File.join(@components_dir, "**", "*.gnt")).to_h do |path|
           [File.basename(path, ".gnt"), SFC.parse_file(path)]
         end
       end
@@ -115,12 +143,12 @@ module Grainet
         html = File.read(page_path)
         used = []
 
-        html = html.gsub(WIDGET_PLACEHOLDER) do
+        html = html.gsub(COMPONENT_PLACEHOLDER) do
           # Capture 1 = double-quoted name; capture 2 = single-quoted name.
           name = Regexp.last_match(1) || Regexp.last_match(2)
           comp = components[name] || raise(Error, "Unknown component: #{name.inspect} (referenced in #{page_path})")
           used << name
-          default_markup(comp)
+          default_markup(name, comp)
         end
 
         injection = build_injection(used.uniq, components)
@@ -129,16 +157,28 @@ module Grainet
         File.write(output_path_for(page_path).tap { |p| FileUtils.mkdir_p(File.dirname(p)) }, html)
       end
 
-      def default_markup(component)
-        component.default_templates.map(&:body).join.strip
+      def default_markup(name, component)
+        template_ast_for(name, component)[:default_html]
       end
 
       def build_injection(used_names, components)
         named_templates = used_names.flat_map { |name|
-          components[name].named_templates.map { |t| render_named_template(t) }
+          parsed = template_ast_for(name, components[name])
+          parsed[:named].map { |nt| render_named_template(nt[:name], nt[:html]) }
         }
 
-        scripts = used_names.map { |name| components[name].script.strip }.reject(&:empty?)
+        scripts = used_names.map { |name|
+          comp = components[name]
+          parsed = template_ast_for(name, comp)
+          user_script = comp.script.strip
+          generated = Codegen.generate(
+            component_name: name,
+            directives: parsed[:default_directives],
+            source_path: parsed[:source_path],
+          ).strip
+          [user_script, generated].reject(&:empty?).join("\n\n")
+        }.reject(&:empty?)
+
         script_block = scripts.empty? ? nil : render_script(scripts.join("\n\n"))
 
         # Live reload is dev-only; the `grainet build` command leaves it
@@ -149,8 +189,8 @@ module Grainet
         parts.flatten.compact.join("\n")
       end
 
-      def render_named_template(template)
-        %(<template data-template="#{escape_attr(template.name)}">#{template.body}</template>)
+      def render_named_template(template_name, body_html)
+        %(<template data-template="#{escape_attr(template_name)}">#{body_html}</template>)
       end
 
       def render_script(ruby_source)

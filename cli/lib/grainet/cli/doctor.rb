@@ -7,7 +7,7 @@ module Grainet
   module CLI
     # Inspect a Grainet project for the common ways a fresh `grainet new`
     # fails before the user sees the page boot. Catches missing wasm
-    # runtime, dangling `<grainet-widget>` references, unparseable
+    # runtime, dangling `<grainet-component>` references, unparseable
     # `.gnt`, and similar setup problems.
     #
     # `run` returns 0 when every check passes (or only warns); 1 when
@@ -41,7 +41,7 @@ module Grainet
       def run_checks
         [
           check_pages_dir,
-          check_widgets_dir,
+          check_components_dir,
           *check_widgets_parse,
           *check_widget_references,
           check_unused_widgets,
@@ -59,11 +59,11 @@ module Grainet
         end
       end
 
-      def check_widgets_dir
-        if File.directory?(@config.widgets_dir)
-          ok("widgets/ directory found at #{relative(@config.widgets_dir)}")
+      def check_components_dir
+        if File.directory?(@config.components_dir)
+          ok("components/ directory found at #{relative(@config.components_dir)}")
         else
-          warn("widgets/ directory missing: #{relative(@config.widgets_dir)} (OK if you have no components yet)")
+          warn("components/ directory missing: #{relative(@config.components_dir)} (OK if you have no components yet)")
         end
       end
 
@@ -72,9 +72,9 @@ module Grainet
       def check_widgets_parse
         gnt_paths.map do |path|
           SFC.parse_file(path)
-          ok("widget parses: #{relative(path)}")
+          ok("component parses: #{relative(path)}")
         rescue SFC::ParseError => e
-          error("widget parse error: #{relative(path)}: #{e.message}")
+          error("component parse error: #{relative(path)}: #{e.message}")
         end
       end
 
@@ -85,32 +85,32 @@ module Grainet
         results = []
         page_paths.each do |page_path|
           html = File.read(page_path)
-          html.scan(Builder::WIDGET_PLACEHOLDER) do |dq, sq|
+          html.scan(Builder::COMPONENT_PLACEHOLDER) do |dq, sq|
             name = dq || sq
             unless component_names.include?(name)
               results << error(
-                "page #{relative(page_path)} references <grainet-widget name=#{name.inspect}>, " \
-                "but no widgets/#{name}.gnt exists"
+                "page #{relative(page_path)} references <grainet-component name=#{name.inspect}>, " \
+                "but no components/#{name}.gnt exists"
               )
             end
           end
         end
-        results.empty? ? [ok("all <grainet-widget> references resolve")] : results
+        results.empty? ? [ok("all <grainet-component> references resolve")] : results
       end
 
       def check_unused_widgets
-        return ok("no widgets to check for usage") if gnt_paths.empty?
+        return ok("no components to check for usage") if gnt_paths.empty?
 
         component_names = gnt_paths.map { |p| File.basename(p, ".gnt") }.to_set
         referenced = page_paths.flat_map do |page_path|
-          File.read(page_path).scan(Builder::WIDGET_PLACEHOLDER).map { |dq, sq| dq || sq }
+          File.read(page_path).scan(Builder::COMPONENT_PLACEHOLDER).map { |dq, sq| dq || sq }
         end.uniq.to_set
 
         unused = component_names - referenced
         if unused.empty?
-          ok("all widgets are referenced from at least one page")
+          ok("all components are referenced from at least one page")
         else
-          warn("unused widgets: #{unused.to_a.sort.join(', ')}")
+          warn("unused components: #{unused.to_a.sort.join(', ')}")
         end
       end
 
@@ -141,9 +141,9 @@ module Grainet
       end
 
       def gnt_paths
-        return [] unless File.directory?(@config.widgets_dir)
+        return [] unless File.directory?(@config.components_dir)
 
-        @gnt_paths ||= Dir.glob(File.join(@config.widgets_dir, "**", "*.gnt"))
+        @gnt_paths ||= Dir.glob(File.join(@config.components_dir, "**", "*.gnt"))
       end
 
       def page_paths

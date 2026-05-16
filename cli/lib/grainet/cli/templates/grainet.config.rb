@@ -5,7 +5,7 @@
 # `grainet dev --port 8000`) take precedence over values set here.
 
 Grainet::CLI.configure do |c|
-  # c.widgets_dir = "widgets"     # where .gnt components live
+  # c.components_dir = "components"     # where .gnt components live
   # c.pages_dir   = "pages"       # where .html pages live
   # c.public_dir  = "public"      # static-passthrough directory
   # c.output_dir  = "dist"        # build output
