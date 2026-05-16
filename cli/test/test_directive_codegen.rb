@@ -497,6 +497,39 @@ class TestDirectiveCodegen < Minitest::Test
     assert_includes out, "bind t.refs.g1, text: computed { it.title }"
   end
 
+  # ---- compatibility integration ---------------------------------
+
+  def test_codegen_propagates_collision_check_failure
+    # `text + unsafe_html` on the same ref_id triggers
+    # DirectiveCompatibility, surfaced before emit runs.
+    err = assert_raises(Grainet::CLI::DirectiveCompatibility::Error) do
+      gen(
+        [
+          text(value: "@x", ref_id: "g0"),
+          unsafe_html(value: "@y", ref_id: "g0", line: 2),
+        ],
+        source_path: "x.gnt",
+      )
+    end
+    assert_includes err.message, "x.gnt:2"
+    assert_includes err.message, "data-text and data-unsafe-html"
+  end
+
+  def test_codegen_propagates_element_type_check_failure
+    err = assert_raises(Grainet::CLI::DirectiveCompatibility::Error) do
+      gen(
+        [value_dir(value: "@s", line: 5)].tap do |dirs|
+          # value_dir helper uses tag: "input"; rebuild on div to trip the check.
+          dirs[0] = Directive.new(kind: :value, name: nil, value: "@s",
+                                  ref_id: "g0", line: 5, element_tag: "div")
+        end,
+        source_path: "form.gnt",
+      )
+    end
+    assert_includes err.message, "form.gnt:5"
+    assert_includes err.message, "<div>"
+  end
+
   # ---- unimplemented directive fallback ---------------------------
 
   def test_unimplemented_directive_falls_back_to_placeholder_comment

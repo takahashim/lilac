@@ -2,6 +2,7 @@
 
 require_relative "value_grammar"
 require_relative "hash_literal_parser"
+require_relative "directive_compatibility"
 
 module Grainet
   module CLI
@@ -70,6 +71,11 @@ module Grainet
 
       def run
         return "" if @directives.empty?
+
+        # Spec Sections 8 + 9 build-time checks. Run before key_map so
+        # composition violations are reported with their own messages
+        # rather than getting masked by a downstream parse/emit error.
+        DirectiveCompatibility.check!(@directives, file: @file)
 
         # data-key directives are paired with their data-each by
         # ref_id; build the lookup once so emit_each doesn't have to
