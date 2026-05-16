@@ -1,8 +1,25 @@
 # lilac-cli
 
-Build tool for **Lilac single-file components** (`.lil`) — template +
-Ruby script in one file, compiled to static HTML for the Lilac component
-runtime on mruby-wasm.
+Optional build tool for **Lilac single-file components** (`.lil`) —
+template + Ruby script in one file, compiled to static HTML for the
+Lilac component runtime on mruby-wasm.
+
+The runtime is the canonical interpreter of `data-*` directives, so
+Lilac apps can be shipped as plain HTML without this CLI (see the
+repo-root README's Quick start). What lilac-cli adds on top:
+
+- **Static lint** for directive grammar / undeclared signals / dead
+  methods, caught at build time with source positions.
+- **`.lil` single-file component** format + project structure
+  (`components/` + `pages/`) and `<lilac-component name="...">`
+  placeholders.
+- **Pre-compiled bindings** (`codegen: :auto`, default) — directive
+  interpretation moves from mount time to build time; the generated
+  `Lilac::Bindings::<Class>#bind_template_hook` takes precedence over
+  the runtime scanner, so there's no double-binding when both paths
+  coexist on the same page. Set `codegen: :off` to validate the
+  runtime path against the same `.lil` source.
+- **Dev server** with live reload, `scaffold`, `doctor`.
 
 > [!WARNING]
 > Pre-alpha. API and CLI surface will change.
@@ -103,6 +120,10 @@ Lilac::CLI.configure do |c|
   c.components_dir = "src/components"
   c.pages_dir   = "src/pages"
   c.dev_port    = 3000
+  # c.codegen     = :off   # skip bind_template_hook codegen and let
+                           # the runtime scanner interpret directives
+                           # at mount time (parity-testing or
+                           # runtime-only deployment).
 end
 ```
 

@@ -1113,7 +1113,7 @@ safe + HTML.tag(:b, "x")        # → HTML::Safe (両者 Safe なら素通し連
 HTML.escape("<&>")   # → "&lt;&amp;&gt;"
 ```
 
-`&`, `<`, `>`, `"`, `'` を実体参照に変換。Regexp 非依存実装 (mruby 標準ビルドに Regexp が無いため `each_char` ベース)。
+`&`, `<`, `>`, `"`, `'` を実体参照に変換。`each_char` ベースの実装で、毎バインド呼ばれる hot path なのでブリッジ越しの Regexp 呼び出しを避けている。
 
 ### `HTML.tag(name, body, **attrs, &block)` / `HTML(name, ...)`
 
@@ -1783,9 +1783,11 @@ mruby は `if x.nil?` を型タグチェックにインライン化し、`#nil?`
 
 **対策**: mruby-wasm-js が別名の `JS::Object#js_null?` を提供している。Widget 内部の JS handle nil チェックはすべて `x.js_null?` を使う。詳細: [mruby-wasm-js/docs/js-object.md](../mrbgem/mruby-wasm-js/docs/js-object.md)
 
-### `Regexp` 非搭載
+### `Regexp` の扱い
 
-mruby の標準ビルドには Regexp が無いことがある。本 gem は Regexp を一切使わない実装になっている (`HTML.escape` は `each_char` ベース、`update/mutate` の error message 判定は `String#include?` で行う)。
+`mruby-regexp-compat` (mruby master の `mruby-regexp` をベンダー) を `js-lilac-full` / `js-lilac-small` バンドルに同梱しているので、ユーザコードからは普通に Regexp / `=~` / `match?` が使える。`js-lilac-min` は意図的に同梱外。
+
+ランタイム本体は hot path 上では Regexp を避けて `each_char` / `String#include?` ベースで実装する方針(`HTML.escape`、`update/mutate` の error 判定など)。バインド毎に走るコードでブリッジ越し Regexp 呼び出しを発生させないため。一方、Lilac::Directives の文法バリデータなど one-shot な処理は Regexp を使う。
 
 ### Build size
 
