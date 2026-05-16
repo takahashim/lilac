@@ -1,0 +1,26 @@
+# Build outputs
+/build/
+/dist/
+
+# direnv local override
+.envrc.local
+
+# Editor / OS
+.DS_Store
+*.swp
+*~
+
+# Test artifacts
+/node_modules/
+
+# Local mrbgem.rake.lock generated during builds
+build_config/*.lock
+
+# Ruby gem build artifacts (cli/)
+/cli/*.gem
+/cli/.bundle/
+/cli/Gemfile.lock
+/cli/pkg/
+
+# Misc
+*.tsbuildinfo

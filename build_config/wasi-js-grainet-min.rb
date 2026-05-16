@@ -10,7 +10,14 @@
 # NotImplementedError (the JS bridge surfaces it).
 #
 # Environment knobs:
-#   MRUBY_WASM_RELEASE=1   enable -Os + --strip-debug
+#   MRUBY_WASM_RELEASE=1     enable -Os + --strip-debug
+#   MRUBY_WASM_RUNTIME_PATH  local mruby-wasm-runtime clone (required)
+
+LOCAL_WASM_RUNTIME = ENV["MRUBY_WASM_RUNTIME_PATH"]
+unless LOCAL_WASM_RUNTIME && File.directory?(LOCAL_WASM_RUNTIME)
+  abort "Set MRUBY_WASM_RUNTIME_PATH to a local mruby-wasm-runtime clone " \
+        "(see .envrc or wasi-js-grainet-full.rb)"
+end
 
 wasi_sdk = ENV.fetch("WASI_SDK_PATH") { abort "Set WASI_SDK_PATH" }
 sysroot = "#{wasi_sdk}/share/wasi-sysroot"
@@ -21,7 +28,8 @@ target = "wasm32-wasip1"
 release = ENV["MRUBY_WASM_RELEASE"] == "1"
 build_name = "wasi-js-grainet-min"
 build_name += "-release" if release
-mrbgem_root = File.expand_path("../mrbgem", __dir__)
+mwr_mrbgem   = "#{LOCAL_WASM_RUNTIME}/mrbgem"
+runtime_dir  = File.expand_path("../runtime", __dir__)
 
 MRuby::CrossBuild.new(build_name) do |conf|
   conf.toolchain :clang
@@ -33,7 +41,7 @@ MRuby::CrossBuild.new(build_name) do |conf|
 
   common_flags = ["--target=#{target}", "--sysroot=#{sysroot}"]
   sjlj_flags = ["-mllvm", "-wasm-enable-sjlj"]
-  shim_dir = "#{mrbgem_root}/hal-wasi-io/include"
+  shim_dir = "#{mwr_mrbgem}/hal-wasi-io/include"
   stub_flags = ["-isystem", shim_dir, "-include", "#{shim_dir}/wasi-shims.h"]
   size_flags = release ? ["-Os"] : []
 
@@ -68,8 +76,8 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem core: "mruby-error"       # NoMethodError refinements
   conf.gem core: "mruby-sprintf"     # Kernel#sprintf, "%s" % ...
 
-  conf.gem "#{mrbgem_root}/mruby-wasm-js"
-  conf.gem "#{mrbgem_root}/mruby-grainet"
+  conf.gem "#{mwr_mrbgem}/mruby-wasm-js"
+  conf.gem "#{runtime_dir}/mruby-grainet"
 
   conf.bins = []
 end

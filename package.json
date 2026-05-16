@@ -1,0 +1,10 @@
+{
+  "name": "grainet-test-harness",
+  "version": "0.0.0-dev",
+  "description": "Dev-only deps for running Grainet wasm_spec via Node + happy-dom.",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "happy-dom": "^15.11.7"
+  }
+}

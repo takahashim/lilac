@@ -1,13 +1,45 @@
 # mruby cross-build for the Grainet "full" variant — compiler + all
 # Grainet gems (core / async / router / form). Produces
-# `mruby-js-grainet-full.wasm` (npm `@takahashim/mruby-grainet-full`).
+# `mruby-js-grainet-full.wasm`.
 #
-# Sibling configs:
-#   build_config/wasi-js.rb                — general mruby, no Grainet
+# Sibling configs in this repo:
 #   build_config/wasi-js-grainet-min.rb    — no compiler, Grainet core only
 #   build_config/wasi-js-grainet-small.rb  — compiler, Grainet core only
 #
 # Build mode (debug vs release) is selected via MRUBY_WASM_RELEASE.
+#
+# DEPENDENCY: mruby-wasm-runtime
+#
+# Grainet's wasm bundle includes the `mruby-wasm-js` JS↔mruby bridge
+# and a handful of WASI shim mrbgems (`hal-wasi-io`, `mruby-wasi-dir`,
+# `mruby-wasi-env`) that live in the separate mruby-wasm-runtime repo.
+# Point `MRUBY_WASM_RUNTIME_PATH` at a local clone:
+#
+#   export MRUBY_WASM_RUNTIME_PATH=~/git/mruby-wasm-runtime
+#
+# With direnv installed, the repo's `.envrc` sets this automatically
+# when you `cd grainet/`.
+#
+# TODO: support `conf.gem github: 'takahashim/mruby-wasm-runtime', path: ...`
+# as a fallback. Blocker: hal-wasi-io currently exposes its POSIX shim
+# headers via build_config-side `-isystem` / `-include` flags (see
+# `stub_flags` below). Once hal-wasi-io self-contains those include
+# paths in its own mrbgem.rake, this build_config can drop the
+# absolute path and the github: fallback becomes straightforward.
+
+LOCAL_WASM_RUNTIME = ENV["MRUBY_WASM_RUNTIME_PATH"]
+unless LOCAL_WASM_RUNTIME && File.directory?(LOCAL_WASM_RUNTIME)
+  abort <<~MSG
+    Grainet's build needs a local clone of mruby-wasm-runtime.
+
+    Set MRUBY_WASM_RUNTIME_PATH to point at it:
+
+      export MRUBY_WASM_RUNTIME_PATH=$(cd .. && pwd)/mruby-wasm-runtime
+
+    Or `direnv allow` in this directory to pick up the bundled .envrc
+    automatically.
+  MSG
+end
 
 wasi_sdk = ENV.fetch("WASI_SDK_PATH") { abort "Set WASI_SDK_PATH" }
 sysroot = "#{wasi_sdk}/share/wasi-sysroot"
@@ -17,7 +49,11 @@ target = "wasm32-wasip1"
 
 release = ENV["MRUBY_WASM_RELEASE"] == "1"
 build_name = release ? "wasi-js-grainet-full-release" : "wasi-js-grainet-full"
-mrbgem_root = File.expand_path("../mrbgem", __dir__)
+
+# Bridge mrbgems live in mruby-wasm-runtime; framework mrbgems live
+# in this repo's runtime/ subdir.
+mwr_mrbgem   = "#{LOCAL_WASM_RUNTIME}/mrbgem"
+runtime_dir  = File.expand_path("../runtime", __dir__)
 
 MRuby::CrossBuild.new(build_name) do |conf|
   conf.toolchain :clang
@@ -30,32 +66,19 @@ MRuby::CrossBuild.new(build_name) do |conf|
   common_flags = ["--target=#{target}", "--sysroot=#{sysroot}"]
   # Lower setjmp/longjmp (used by mruby for exceptions and GC mark scan)
   # to legacy Wasm EH — accepted by all modern browsers and Node without
-  # flags. wasi-cmd.rb opts into modern EH because wasmtime ≥37 dropped
-  # legacy support.
+  # flags.
   sjlj_flags = ["-mllvm", "-wasm-enable-sjlj"]
   # POSIX shim headers (mrbgem/hal-wasi-io/include/) for wasi-sysroot
-  # gaps. See hal-wasi-io/README.md for details.
-  shim_dir = "#{mrbgem_root}/hal-wasi-io/include"
+  # gaps. See hal-wasi-io/README.md in mruby-wasm-runtime for details.
+  shim_dir = "#{mwr_mrbgem}/hal-wasi-io/include"
   stub_flags = ["-isystem", shim_dir, "-include", "#{shim_dir}/wasi-shims.h"]
   size_flags = release ? ["-Os"] : []
   conf.cc.flags.concat(common_flags + size_flags + sjlj_flags + stub_flags)
   conf.cxx.flags.concat(common_flags + size_flags + sjlj_flags + stub_flags)
   conf.linker.flags.concat(common_flags)
 
-  # Allow undefined imports (we declare them via __attribute__((import_module)))
   conf.linker.flags << "-Wl,--allow-undefined"
-
-  # In release mode, drop `.debug_*` custom sections at link time. They
-  # make up ~75% of the unstripped artifact and are unused at runtime.
-  # The `name` section is preserved so wasm stack traces still show
-  # function names.
   conf.linker.flags << "-Wl,--strip-debug" if release
-
-  # Reactor module: export `_initialize` (runs ctors, then returns)
-  # instead of `_start`. The JS host keeps the instance alive and drives
-  # execution by calling exports. The mruby VM is brought up by a
-  # __attribute__((constructor)) inside the gem (callback.c), so no
-  # separate main.c is needed.
   conf.linker.flags << "-mexec-model=reactor"
 
   conf.linker.libraries << "setjmp"
@@ -64,26 +87,24 @@ MRuby::CrossBuild.new(build_name) do |conf|
 
   conf.gembox "default-no-stdio"
 
+  # WASI shims + IO mrbgems from mruby-wasm-runtime.
   # hal-wasi-io must come BEFORE mruby-io so the latter's HAL
-  # auto-detector picks it instead of the hal-posix-io fallback. See
-  # hal-wasi-io/README.md for details.
-  conf.gem "#{mrbgem_root}/hal-wasi-io"
+  # auto-detector picks it instead of the hal-posix-io fallback.
+  conf.gem "#{mwr_mrbgem}/hal-wasi-io"
   conf.gem core: "mruby-io"
   conf.gem core: "mruby-time"
   conf.gem core: "mruby-random"
   conf.gem core: "mruby-sprintf"
   conf.gem core: "mruby-metaprog"
+  conf.gem "#{mwr_mrbgem}/mruby-wasm-js"
+  conf.gem "#{mwr_mrbgem}/mruby-wasi-dir"
+  conf.gem "#{mwr_mrbgem}/mruby-wasi-env"
 
-  conf.gem "#{mrbgem_root}/mruby-wasm-js"
-  conf.gem "#{mrbgem_root}/mruby-grainet"
-  conf.gem "#{mrbgem_root}/mruby-grainet-async"
-  conf.gem "#{mrbgem_root}/mruby-grainet-router"
-  conf.gem "#{mrbgem_root}/mruby-grainet-form"
-  # Ruby surface for WASI primitives that mruby core doesn't ship.
-  conf.gem "#{mrbgem_root}/mruby-wasi-dir"
-  conf.gem "#{mrbgem_root}/mruby-wasi-env"
+  # Grainet framework mrbgems (this repo).
+  conf.gem "#{runtime_dir}/mruby-grainet"
+  conf.gem "#{runtime_dir}/mruby-grainet-async"
+  conf.gem "#{runtime_dir}/mruby-grainet-router"
+  conf.gem "#{runtime_dir}/mruby-grainet-form"
 
-  # No CLI entry point — the gem's constructor calls mrb_open from
-  # _initialize, so libmruby.a is all we need to link.
   conf.bins = []
 end
