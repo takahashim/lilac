@@ -5,6 +5,7 @@ require "pathname"
 require_relative "sfc"
 require_relative "template_ast"
 require_relative "codegen"
+require_relative "cross_ref_linter"
 
 module Grainet
   module CLI
@@ -181,6 +182,17 @@ module Grainet
           comp = components[name]
           parsed = template_ast_for(name, comp)
           user_script = comp.script.strip
+          # Cross-reference lint runs before codegen so any warnings
+          # appear ahead of generated source in build output, matching
+          # the user's mental order ("first the diagnostics, then the
+          # result"). Non-fatal — warnings go to stderr and the build
+          # carries on.
+          CrossRefLinter.lint(
+            script_text: user_script,
+            directives: parsed[:default_directives],
+            component_name: Codegen.ruby_class_path(name),
+            file: parsed[:source_path] ? File.basename(parsed[:source_path]) : "(template)",
+          )
           generated = Codegen.generate(
             component_name: name,
             directives: parsed[:default_directives],
