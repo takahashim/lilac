@@ -2,6 +2,7 @@
 
 require_relative "build_error"
 require_relative "component_name"
+require_relative "directive_value"
 require_relative "value_grammar"
 require_relative "hash_literal_parser"
 require_relative "directive_compatibility"
@@ -162,7 +163,7 @@ module Grainet
         value = read_value_or_raise(directive, "data-text")
         [
           "# #{@file}:#{directive.line} — data-text=#{value.inspect}",
-          "bind #{context.refs_expr}.#{directive.ref_id}, text: #{bind_source(value)}",
+          "bind #{context.refs_expr}.#{directive.ref_id}, text: #{value.bind_source}",
         ]
       end
 
@@ -173,7 +174,7 @@ module Grainet
         value = read_value_or_raise(directive, "data-unsafe-html")
         [
           "# #{@file}:#{directive.line} — data-unsafe-html=#{value.inspect}",
-          "bind #{context.refs_expr}.#{directive.ref_id}, html: #{bind_source(value)}",
+          "bind #{context.refs_expr}.#{directive.ref_id}, html: #{value.bind_source}",
         ]
       end
 
@@ -220,30 +221,17 @@ module Grainet
         value = read_value_or_raise(directive, attr_name)
         [
           "# #{@file}:#{directive.line} — #{attr_name}=#{value.inspect}",
-          %(bind #{context.refs_expr}.#{directive.ref_id}, class: { "gn-hidden" => computed { #{negation}#{reactive_read(value)} } }),
+          %(bind #{context.refs_expr}.#{directive.ref_id}, class: { "gn-hidden" => computed { #{negation}#{value.reactive_read} } }),
         ]
       end
 
-      # Inside `computed { ... }`, signals must be unwrapped via `.value`
-      # to subscribe to the dependency; iteration items (`it`,
-      # `it.field`) are plain Data attribute access and pass through.
-      def reactive_read(value)
-        value.start_with?("@") ? "#{value}.value" : value
-      end
-
-      # The kwarg form `bind ref, prop: source` calls `source.value`
-      # internally — fine for an ivar (a Signal), broken for an
-      # it_path (a plain value with no `.value` method). Wrap it_path
-      # values in `computed { ... }` so the inner expression yields a
-      # Computed whose `.value` returns the field. ivar values pass
-      # through verbatim (no double-`.value` wrapping).
-      def bind_source(value)
-        value.start_with?("@") ? value : "computed { #{value} }"
-      end
-
+      # Parses the directive's raw value into a `DirectiveValue` (Ivar
+      # or ItPath), raising a build error on invalid input. Caller uses
+      # the returned object's polymorphic `reactive_read` / `bind_source`
+      # / `to_s` rather than re-classifying the string.
       def read_value_or_raise(directive, attr_name)
-        value = directive.value.to_s.strip
-        return value if ValueGrammar.read_value?(value)
+        value = DirectiveValue.parse(directive.value)
+        return value if value
 
         raise Error.new(
           "Invalid value for #{attr_name}: #{directive.value.inspect} " \
@@ -252,9 +240,12 @@ module Grainet
         )
       end
 
+      # Like `read_value_or_raise` but rejects it_path — used by
+      # `data-value` / `data-checked` which write back to a signal and
+      # therefore can't target an immutable iteration item field.
       def ivar_or_raise(directive, attr_name)
-        value = directive.value.to_s.strip
-        return value if ValueGrammar.ivar?(value)
+        value = DirectiveValue.parse(directive.value)
+        return value if value&.ivar?
 
         raise Error.new(
           "Invalid value for #{attr_name}: #{directive.value.inspect} " \
@@ -302,7 +293,7 @@ module Grainet
         value = read_value_or_raise(directive, "data-attr-#{name}")
         [
           "# #{@file}:#{directive.line} — data-attr-#{name}=#{value.inspect}",
-          %(bind #{context.refs_expr}.#{directive.ref_id}, attr: { #{name.inspect} => #{bind_source(value)} }),
+          %(bind #{context.refs_expr}.#{directive.ref_id}, attr: { #{name.inspect} => #{value.bind_source} }),
         ]
       end
 
@@ -322,7 +313,7 @@ module Grainet
         value = read_value_or_raise(directive, "data-css-#{name}")
         [
           "# #{@file}:#{directive.line} — data-css-#{name}=#{value.inspect}",
-          %(effect { #{context.refs_expr}.#{directive.ref_id}.set_style("--#{name}", #{reactive_read(value)}) }),
+          %(effect { #{context.refs_expr}.#{directive.ref_id}.set_style("--#{name}", #{value.reactive_read}) }),
         ]
       end
 
@@ -343,16 +334,18 @@ module Grainet
               at: directive.source_location(@file),
             )
           end
-        pairs.each do |key, value|
-          next if ValueGrammar.read_value?(value)
-
-          raise Error.new(
-            "data-class: invalid value #{value.inspect} for key #{key.inspect} " \
-            "(expected `@ivar` or `it.path`)",
-            at: directive.source_location(@file),
-          )
+        parsed = pairs.map do |key, raw|
+          value = DirectiveValue.parse(raw)
+          unless value
+            raise Error.new(
+              "data-class: invalid value #{raw.inspect} for key #{key.inspect} " \
+              "(expected `@ivar` or `it.path`)",
+              at: directive.source_location(@file),
+            )
+          end
+          [key, value]
         end
-        body = pairs.map { |k, v| "#{k.inspect} => #{bind_source(v)}" }.join(", ")
+        body = parsed.map { |k, v| "#{k.inspect} => #{v.bind_source}" }.join(", ")
         [
           "# #{@file}:#{directive.line} — data-class=#{directive.value.inspect}",
           "bind #{context.refs_expr}.#{directive.ref_id}, class: { #{body} }",

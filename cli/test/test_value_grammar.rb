@@ -3,74 +3,8 @@
 require "test_helper"
 
 class TestValueGrammar < Minitest::Test
-  # ---- ivar? ------------------------------------------------------
-
-  def test_ivar_matches_basic
-    assert Grainet::CLI::ValueGrammar.ivar?("@count")
-    assert Grainet::CLI::ValueGrammar.ivar?("@is_active")
-    assert Grainet::CLI::ValueGrammar.ivar?("@_internal")
-  end
-
-  def test_ivar_allows_predicate_suffix
-    assert Grainet::CLI::ValueGrammar.ivar?("@valid?")
-  end
-
-  def test_ivar_rejects_bang
-    refute Grainet::CLI::ValueGrammar.ivar?("@save!")
-  end
-
-  def test_ivar_rejects_no_at_prefix
-    refute Grainet::CLI::ValueGrammar.ivar?("count")
-  end
-
-  def test_ivar_rejects_dot
-    refute Grainet::CLI::ValueGrammar.ivar?("@user.name")
-  end
-
-  def test_ivar_rejects_digit_start
-    refute Grainet::CLI::ValueGrammar.ivar?("@1count")
-  end
-
-  # ---- it_path? ---------------------------------------------------
-
-  def test_it_path_matches_bare_it
-    assert Grainet::CLI::ValueGrammar.it_path?("it")
-  end
-
-  def test_it_path_matches_one_dot
-    assert Grainet::CLI::ValueGrammar.it_path?("it.title")
-    assert Grainet::CLI::ValueGrammar.it_path?("it.is_done")
-  end
-
-  def test_it_path_allows_predicate_field
-    assert Grainet::CLI::ValueGrammar.it_path?("it.valid?")
-  end
-
-  def test_it_path_rejects_two_dots
-    refute Grainet::CLI::ValueGrammar.it_path?("it.user.name")
-  end
-
-  def test_it_path_rejects_method_call
-    refute Grainet::CLI::ValueGrammar.it_path?("it.foo()")
-  end
-
-  def test_it_path_rejects_bang
-    refute Grainet::CLI::ValueGrammar.it_path?("it.save!")
-  end
-
-  # ---- read_value? (union of ivar / it_path) ---------------------
-
-  def test_read_value_accepts_both_forms
-    assert Grainet::CLI::ValueGrammar.read_value?("@count")
-    assert Grainet::CLI::ValueGrammar.read_value?("it")
-    assert Grainet::CLI::ValueGrammar.read_value?("it.title")
-  end
-
-  def test_read_value_rejects_arbitrary_expr
-    refute Grainet::CLI::ValueGrammar.read_value?("@a + 1")
-    refute Grainet::CLI::ValueGrammar.read_value?("@a.b")
-    refute Grainet::CLI::ValueGrammar.read_value?("not @a")
-  end
+  # `@ivar` / `it.field` value-shape predicates now live on
+  # DirectiveValue.parse — see test_directive_value.rb.
 
   # ---- method_ident? ---------------------------------------------
 

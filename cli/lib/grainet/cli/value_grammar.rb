@@ -2,26 +2,26 @@
 
 module Grainet
   module CLI
-    # Validators for directive value strings. Each pattern is anchored
-    # (\A...\z) on its public predicate so callers always match the
-    # whole string.
+    # Predicates for *name-shaped* tokens that appear in directives —
+    # event-handler method names, X parts of `data-attr-X` /
+    # `data-css-X` / `data-arg-X`, banned attribute names, etc. Each
+    # pattern is anchored (\A...\z) on its public predicate so callers
+    # always match the whole string.
+    #
+    # Reactive *values* (`@ivar` / `it.field`) live on `DirectiveValue`
+    # so they can carry their kind as polymorphism rather than as a
+    # string-prefix check.
     module ValueGrammar
-      # The base building block. `?` predicate suffix allowed; bang `!`
-      # is rejected at the IDENT level (the regex below stops before any
-      # trailing `!`).
+      # `?` predicate suffix allowed; bang `!` is rejected at the
+      # IDENT level (the regex stops before any trailing `!`).
       IDENT_INNER          = /[a-zA-Z_][a-zA-Z0-9_]*\??/
       METHOD_IDENT_INNER   = /[a-zA-Z_][a-zA-Z0-9_]*/        # no `?` for event handlers
       REF_IDENT_INNER      = /[a-z_][a-zA-Z0-9_]*/           # ref names: lowercase start
       CLASS_SEGMENT_INNER  = /[A-Z][a-zA-Z0-9_]*/            # one PascalCase segment
 
-      IDENT         = /\A#{IDENT_INNER.source}\z/
       METHOD_IDENT  = /\A#{METHOD_IDENT_INNER.source}\z/
       REF_IDENT     = /\A#{REF_IDENT_INNER.source}\z/
       CLASS_NAME    = /\A#{CLASS_SEGMENT_INNER.source}(?:::#{CLASS_SEGMENT_INNER.source})*\z/
-
-      IVAR          = /\A@#{IDENT_INNER.source}\z/
-      IT_PATH       = /\Ait(?:\.#{IDENT_INNER.source})?\z/
-      READ_VALUE    = /\A(?:@#{IDENT_INNER.source}|it(?:\.#{IDENT_INNER.source})?)\z/
 
       # X part of `data-attr-X` / `data-css-X` / `data-arg-X`:
       # kebab-lowercase, letter-first. `--` prefix rejected to avoid
@@ -34,18 +34,6 @@ module Grainet
       BANNED_ATTR   = /\Aon[a-z]+\z|\Asrcdoc\z|\Astyle\z/
 
       module_function
-
-      # `@count` / `@is_negative` / `@valid?`. Bang `!` always rejected.
-      def ivar?(s) = IVAR.match?(s)
-
-      # `it` / `it.title` / `it.valid?`. Only one level of `.`; `it.user.name`
-      # is rejected so the caller can choose to view-model the value.
-      def it_path?(s) = IT_PATH.match?(s)
-
-      # Either an ivar or an it_path. Used by `data-text` /
-      # `data-unsafe-html` / `data-show` / `data-hide` / `data-attr-X` /
-      # `data-css-X` / `data-each`.
-      def read_value?(s) = READ_VALUE.match?(s)
 
       # `increment` / `add_todo`. Event-handler method names — no `?`
       # suffix so a typoed `save?` is caught at build time.
