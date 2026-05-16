@@ -12,7 +12,7 @@ module Lilac
     #   ├── Gemfile
     #   ├── README.md
     #   ├── pages/index.html
-    #   └── components/counter.llc
+    #   └── components/counter.lil
     #
     # Templates live under `lib/lilac/cli/templates/`. Files are copied
     # 1:1 with `{{name}}` substituted to the chosen project name. The

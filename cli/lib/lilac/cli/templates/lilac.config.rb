@@ -5,7 +5,7 @@
 # `lilac dev --port 8000`) take precedence over values set here.
 
 Lilac::CLI.configure do |c|
-  # c.components_dir = "components"     # where .llc components live
+  # c.components_dir = "components"     # where .lil components live
   # c.pages_dir   = "pages"       # where .html pages live
   # c.public_dir  = "public"      # static-passthrough directory
   # c.output_dir  = "dist"        # build output

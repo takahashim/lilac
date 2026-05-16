@@ -13,17 +13,17 @@ class TestTemplateAST < Minitest::Test
     d = result.directives.first
     assert_equal :text, d.kind
     assert_equal "@count", d.value
-    assert_equal "llc0", d.ref_id
+    assert_equal "lil0", d.ref_id
     assert_equal "span", d.element_tag
-    assert_includes result.html, %(data-ref="llc0")
+    assert_includes result.html, %(data-ref="lil0")
   end
 
   def test_uses_explicit_data_ref_when_present
     result = parse(%(<span data-ref="status" data-text="@count">0</span>))
     d = result.directives.first
     assert_equal "status", d.ref_id
-    # No synthetic llcN added when explicit ref exists.
-    refute_match(/data-ref="llc0"/, result.html)
+    # No synthetic lilN added when explicit ref exists.
+    refute_match(/data-ref="lil0"/, result.html)
   end
 
   def test_multiple_directives_on_one_element_share_ref
@@ -32,7 +32,7 @@ class TestTemplateAST < Minitest::Test
     assert_equal 2, result.directives.length
     refs = result.directives.map(&:ref_id).uniq
     assert_equal 1, refs.length
-    assert_equal "llc0", refs.first
+    assert_equal "lil0", refs.first
   end
 
   def test_x_family_directive_carries_name
@@ -77,7 +77,7 @@ class TestTemplateAST < Minitest::Test
     HTML
     result = parse(html)
     ref_ids = result.directives.map(&:ref_id)
-    assert_equal %w[llc0 llc1 llc2], ref_ids
+    assert_equal %w[lil0 lil1 lil2], ref_ids
   end
 
   def test_directives_collected_in_document_order
@@ -116,7 +116,7 @@ class TestTemplateAST < Minitest::Test
 
   def test_refs_map_contains_tag_and_line
     result = parse(%(<button data-on-click="m">x</button>))
-    info = result.refs_map["llc0"]
+    info = result.refs_map["lil0"]
     assert_equal "button", info[:tag]
     assert_kind_of Integer, info[:line]
   end
@@ -258,9 +258,9 @@ class TestTemplateAST < Minitest::Test
       </div>
     HTML
     err = assert_raises(Lilac::CLI::TemplateAST::Error) do
-      Lilac::CLI::TemplateAST.new(html, source_path: "form.llc").parse
+      Lilac::CLI::TemplateAST.new(html, source_path: "form.lil").parse
     end
-    assert_includes err.message, "form.llc"
+    assert_includes err.message, "form.lil"
     assert_includes err.message, "Duplicate data-ref \"email\""
   end
 
@@ -275,17 +275,17 @@ class TestTemplateAST < Minitest::Test
       </div>
     HTML
     assert_raises(Lilac::CLI::TemplateAST::Error) do
-      Lilac::CLI::TemplateAST.new(html, source_path: "x.llc").parse
+      Lilac::CLI::TemplateAST.new(html, source_path: "x.lil").parse
     end
   end
 
   def test_synthetic_ref_skips_user_chosen_collision
-    # The user wrote data-ref="llc0" — our auto-allocator must skip llc0
-    # and pick llc1 (or later) for the synthetic ref instead of stomping.
-    html = %(<div><span data-ref="llc0">x</span><b data-text="@v"></b></div>)
+    # The user wrote data-ref="lil0" — our auto-allocator must skip lil0
+    # and pick lil1 (or later) for the synthetic ref instead of stomping.
+    html = %(<div><span data-ref="lil0">x</span><b data-text="@v"></b></div>)
     result = Lilac::CLI::TemplateAST.new(html).parse
     text_dir = result.directives.find { |d| d.kind == :text }
-    refute_equal "llc0", text_dir.ref_id
+    refute_equal "lil0", text_dir.ref_id
   end
 
   def test_same_ref_name_across_data_each_scopes_does_not_collide
@@ -299,7 +299,7 @@ class TestTemplateAST < Minitest::Test
       </div>
     HTML
     # No raise; both refs coexist.
-    Lilac::CLI::TemplateAST.new(html, source_path: "ok.llc").parse
+    Lilac::CLI::TemplateAST.new(html, source_path: "ok.lil").parse
   end
 
   def test_same_ref_name_across_data_component_scopes_does_not_collide
@@ -313,6 +313,6 @@ class TestTemplateAST < Minitest::Test
         </div>
       </div>
     HTML
-    Lilac::CLI::TemplateAST.new(html, source_path: "ok.llc").parse
+    Lilac::CLI::TemplateAST.new(html, source_path: "ok.lil").parse
   end
 end

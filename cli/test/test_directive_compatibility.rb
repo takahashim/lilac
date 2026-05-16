@@ -3,7 +3,7 @@
 require "test_helper"
 
 class TestDirectiveCompatibility < Minitest::Test
-  def dir(kind, ref_id: "llc0", line: 1, tag: "div", value: "@x", name: nil, scope_id: nil, element_attrs: nil)
+  def dir(kind, ref_id: "lil0", line: 1, tag: "div", value: "@x", name: nil, scope_id: nil, element_attrs: nil)
     Lilac::CLI::Directive.new(
       kind: kind, name: name, value: value, ref_id: ref_id,
       line: line, element_tag: tag, scope_id: scope_id,
@@ -15,24 +15,24 @@ class TestDirectiveCompatibility < Minitest::Test
 
   def test_text_and_unsafe_html_on_same_element_raise
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:text), dir(:unsafe_html, line: 2)], file: "x.llc")
+      Lilac::CLI::DirectiveCompatibility.check!([dir(:text), dir(:unsafe_html, line: 2)], file: "x.lil")
     end
-    assert_includes err.message, "x.llc:2"
+    assert_includes err.message, "x.lil:2"
     assert_includes err.message, "data-text and data-unsafe-html"
   end
 
   def test_text_and_each_on_same_element_raise
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:text, tag: "ul"), dir(:each, tag: "ul", value: "@items")], file: "x.llc")
+      Lilac::CLI::DirectiveCompatibility.check!([dir(:text, tag: "ul"), dir(:each, tag: "ul", value: "@items")], file: "x.lil")
     end
     assert_includes err.message, "data-text and data-each"
   end
 
   def test_show_and_hide_on_same_element_raise
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:show), dir(:hide, line: 3)], file: "x.llc")
+      Lilac::CLI::DirectiveCompatibility.check!([dir(:show), dir(:hide, line: 3)], file: "x.lil")
     end
-    assert_includes err.message, "x.llc:3"
+    assert_includes err.message, "x.lil:3"
     assert_includes err.message, "data-show and data-hide"
   end
 
@@ -47,7 +47,7 @@ class TestDirectiveCompatibility < Minitest::Test
           dir(:value, tag: "input", element_attrs: attrs),
           dir(:checked, tag: "input", line: 4, element_attrs: attrs),
         ],
-        file: "x.llc",
+        file: "x.lil",
       )
     end
     assert_includes err.message, "data-value and data-checked"
@@ -60,10 +60,10 @@ class TestDirectiveCompatibility < Minitest::Test
           dir(:component, value: "X", tag: "ul"),
           dir(:each, value: "@items", tag: "ul", line: 6),
         ],
-        file: "x.llc",
+        file: "x.lil",
       )
     end
-    assert_includes err.message, "x.llc:6"
+    assert_includes err.message, "x.lil:6"
     assert_includes err.message, "data-component and data-each"
   end
 
@@ -71,10 +71,10 @@ class TestDirectiveCompatibility < Minitest::Test
     # Same kinds, but on different refs — no collision.
     Lilac::CLI::DirectiveCompatibility.check!(
       [
-        dir(:text, ref_id: "llc0"),
-        dir(:unsafe_html, ref_id: "llc1"),
+        dir(:text, ref_id: "lil0"),
+        dir(:unsafe_html, ref_id: "lil1"),
       ],
-      file: "x.llc",
+      file: "x.lil",
     )
   end
 
@@ -82,44 +82,44 @@ class TestDirectiveCompatibility < Minitest::Test
 
   def test_data_value_on_form_controls_ok
     # `<input>` without explicit type defaults to text (HTML default).
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input")], file: "x.llc")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input", element_attrs: { "type" => "email" })], file: "x.llc")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input", element_attrs: { "type" => "number" })], file: "x.llc")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "textarea")], file: "x.llc")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "select")], file: "x.llc")
+    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input")], file: "x.lil")
+    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input", element_attrs: { "type" => "email" })], file: "x.lil")
+    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input", element_attrs: { "type" => "number" })], file: "x.lil")
+    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "textarea")], file: "x.lil")
+    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "select")], file: "x.lil")
   end
 
   def test_data_value_on_input_type_checkbox_raises
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
       Lilac::CLI::DirectiveCompatibility.check!(
         [dir(:value, tag: "input", line: 3, element_attrs: { "type" => "checkbox" })],
-        file: "form.llc",
+        file: "form.lil",
       )
     end
-    assert_includes err.message, "form.llc:3"
+    assert_includes err.message, "form.lil:3"
     assert_includes err.message, "checkbox"
     assert_includes err.message, "data-checked"
   end
 
   def test_data_value_on_div_raises_with_tag_in_message
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "div", line: 7)], file: "form.llc")
+      Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "div", line: 7)], file: "form.lil")
     end
-    assert_includes err.message, "form.llc:7"
+    assert_includes err.message, "form.lil:7"
     assert_includes err.message, "<div>"
   end
 
   def test_data_checked_on_input_checkbox_or_radio_ok
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", element_attrs: { "type" => "checkbox" })], file: "x.llc")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", element_attrs: { "type" => "radio" })],    file: "x.llc")
+    Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", element_attrs: { "type" => "checkbox" })], file: "x.lil")
+    Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", element_attrs: { "type" => "radio" })],    file: "x.lil")
   end
 
   def test_data_checked_on_input_default_type_raises
     # No explicit type → defaults to "text" → not checkbox/radio.
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", line: 4)], file: "x.llc")
+      Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", line: 4)], file: "x.lil")
     end
-    assert_includes err.message, "x.llc:4"
+    assert_includes err.message, "x.lil:4"
     assert_includes err.message, "text"
   end
 
@@ -127,7 +127,7 @@ class TestDirectiveCompatibility < Minitest::Test
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
       Lilac::CLI::DirectiveCompatibility.check!(
         [dir(:checked, tag: "input", line: 2, element_attrs: { "type" => "text" })],
-        file: "x.llc",
+        file: "x.lil",
       )
     end
     assert_includes err.message, "data-value"
@@ -135,26 +135,26 @@ class TestDirectiveCompatibility < Minitest::Test
 
   def test_data_checked_on_span_raises
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "span", line: 5)], file: "x.llc")
+      Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "span", line: 5)], file: "x.lil")
     end
-    assert_includes err.message, "x.llc:5"
+    assert_includes err.message, "x.lil:5"
     assert_includes err.message, "<span>"
   end
 
-  # ---- llc-hidden conflict ----------------------------------------
+  # ---- lil-hidden conflict ----------------------------------------
 
   def test_data_class_gn_hidden_with_data_show_raises
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
       Lilac::CLI::DirectiveCompatibility.check!(
         [
           dir(:show, value: "@vis"),
-          dir(:class_, value: "{ 'llc-hidden': @x }", line: 5),
+          dir(:class_, value: "{ 'lil-hidden': @x }", line: 5),
         ],
-        file: "x.llc",
+        file: "x.lil",
       )
     end
-    assert_includes err.message, "x.llc:5"
-    assert_includes err.message, "llc-hidden"
+    assert_includes err.message, "x.lil:5"
+    assert_includes err.message, "lil-hidden"
   end
 
   def test_data_class_gn_hidden_with_data_hide_raises
@@ -162,9 +162,9 @@ class TestDirectiveCompatibility < Minitest::Test
       Lilac::CLI::DirectiveCompatibility.check!(
         [
           dir(:hide, value: "@vis"),
-          dir(:class_, value: "{ 'llc-hidden': @x }"),
+          dir(:class_, value: "{ 'lil-hidden': @x }"),
         ],
-        file: "x.llc",
+        file: "x.lil",
       )
     end
   end
@@ -175,7 +175,7 @@ class TestDirectiveCompatibility < Minitest::Test
         dir(:show, value: "@vis"),
         dir(:class_, value: "{ active: @a }"),
       ],
-      file: "x.llc",
+      file: "x.lil",
     )
   end
 
@@ -183,7 +183,7 @@ class TestDirectiveCompatibility < Minitest::Test
     # No data-show / data-hide on element → no conflict, even with the
     # reserved key in data-class. The standalone reservation warning is
     # a lint concern handled by the cross-reference linter, not a build error.
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:class_, value: "{ 'llc-hidden': @x }")], file: "x.llc")
+    Lilac::CLI::DirectiveCompatibility.check!([dir(:class_, value: "{ 'lil-hidden': @x }")], file: "x.lil")
   end
 
   def test_data_class_substring_gn_hidden_in_value_does_not_false_positive
@@ -193,9 +193,9 @@ class TestDirectiveCompatibility < Minitest::Test
     Lilac::CLI::DirectiveCompatibility.check!(
       [
         dir(:show, value: "@vis"),
-        dir(:class_, value: "{ active: @a, 'not-llc-hidden-key': @b }"),
+        dir(:class_, value: "{ active: @a, 'not-lil-hidden-key': @b }"),
       ],
-      file: "x.llc",
+      file: "x.lil",
     )
   end
 
@@ -205,9 +205,9 @@ class TestDirectiveCompatibility < Minitest::Test
     Lilac::CLI::DirectiveCompatibility.check!(
       [
         dir(:show, value: "@vis"),
-        dir(:class_, value: "{ 'llc-hidden': }"),
+        dir(:class_, value: "{ 'lil-hidden': }"),
       ],
-      file: "x.llc",
+      file: "x.lil",
     )
   end
 end

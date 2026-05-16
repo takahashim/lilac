@@ -1,5 +1,5 @@
 Spec.describe "data-checked directive (lilac-cli codegen target)" do
-  Spec.assert "bind_input refs.llcN, @signal, property: :checked mirrors checkbox state" do
+  Spec.assert "bind_input refs.lilN, @signal, property: :checked mirrors checkbox state" do
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"><input data-ref="gC" type="checkbox"></div>'
 

@@ -2,13 +2,13 @@
 
 module Lilac
   module CLI
-    # Value object for a `.llc` component's kebab-case name. Holds the
+    # Value object for a `.lil` component's kebab-case name. Holds the
     # raw string and exposes the derived forms the build pipeline
     # needs:
     #
     #   name = ComponentName.new("admin--user-card")
     #   name.ruby_class                 # => "Admin::UserCard"
-    #   name.each_template_name("llc0")   # => "llc-each-admin--user-card-llc0"
+    #   name.each_template_name("lil0")   # => "lil-each-admin--user-card-lil0"
     #   name.to_s                       # => "admin--user-card"
     #
     # `--` separates namespace segments, `-` separates words within a
@@ -31,7 +31,7 @@ module Lilac
       # Builder injects the matching `<template data-template="...">`
       # and the runtime resolves it via `bind_list ..., template: ...`.
       def each_template_name(ref_id)
-        "llc-each-#{@kebab}-#{ref_id}"
+        "lil-each-#{@kebab}-#{ref_id}"
       end
 
       def to_s

@@ -1,5 +1,5 @@
 Spec.describe "data-value directive (lilac-cli codegen target)" do
-  Spec.assert "bind_input refs.llcN, @signal mirrors signal ↔ input.value" do
+  Spec.assert "bind_input refs.lilN, @signal mirrors signal ↔ input.value" do
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"><input data-ref="gV" type="text"></div>'
 

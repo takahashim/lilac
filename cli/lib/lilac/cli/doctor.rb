@@ -8,7 +8,7 @@ module Lilac
     # Inspect a Lilac project for the common ways a fresh `lilac new`
     # fails before the user sees the page boot. Catches missing wasm
     # runtime, dangling `<lilac-component>` references, unparseable
-    # `.llc`, and similar setup problems.
+    # `.lil`, and similar setup problems.
     #
     # `run` returns 0 when every check passes (or only warns); 1 when
     # any check produced an :error result. Output is plain-text and
@@ -67,7 +67,7 @@ module Lilac
         end
       end
 
-      # Each .llc file gets its own Result so a parse failure pinpoints
+      # Each .lil file gets its own Result so a parse failure pinpoints
       # the offending file (rather than aborting the whole report).
       def check_components_parse
         gnt_paths.map do |path|
@@ -81,7 +81,7 @@ module Lilac
       def check_component_references
         return [] unless File.directory?(@config.pages_dir)
 
-        component_names = gnt_paths.map { |p| File.basename(p, ".llc") }.to_set
+        component_names = gnt_paths.map { |p| File.basename(p, ".lil") }.to_set
         results = []
         page_paths.each do |page_path|
           html = File.read(page_path)
@@ -90,7 +90,7 @@ module Lilac
             unless component_names.include?(name)
               results << error(
                 "page #{relative(page_path)} references <lilac-component name=#{name.inspect}>, " \
-                "but no components/#{name}.llc exists"
+                "but no components/#{name}.lil exists"
               )
             end
           end
@@ -101,7 +101,7 @@ module Lilac
       def check_unused_components
         return ok("no components to check for usage") if gnt_paths.empty?
 
-        component_names = gnt_paths.map { |p| File.basename(p, ".llc") }.to_set
+        component_names = gnt_paths.map { |p| File.basename(p, ".lil") }.to_set
         referenced = page_paths.flat_map do |page_path|
           File.read(page_path).scan(Builder::COMPONENT_PLACEHOLDER).map { |dq, sq| dq || sq }
         end.uniq.to_set
@@ -143,7 +143,7 @@ module Lilac
       def gnt_paths
         return [] unless File.directory?(@config.components_dir)
 
-        @gnt_paths ||= Dir.glob(File.join(@config.components_dir, "**", "*.llc"))
+        @gnt_paths ||= Dir.glob(File.join(@config.components_dir, "**", "*.lil"))
       end
 
       def page_paths

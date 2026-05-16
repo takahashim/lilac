@@ -1,6 +1,6 @@
 # lilac-cli
 
-Build tool for **Lilac single-file components** (`.llc`) — template +
+Build tool for **Lilac single-file components** (`.lil`) — template +
 Ruby script in one file, compiled to static HTML for the Lilac component
 runtime on mruby-wasm.
 
@@ -11,20 +11,20 @@ runtime on mruby-wasm.
 
 | Phase | Status |
 |---|---|
-| 1. `.llc` parser + `lilac build` (static output) | ✅ |
+| 1. `.lil` parser + `lilac build` (static output) | ✅ |
 | 2. `lilac dev` (file watch via `listen`) | ✅ |
 | 3. SSE live reload (via `Wsv::Response.sse`) | ✅ |
 | 4. `lilac new` scaffold | ✅ |
 | 5. `lilac doctor` setup verifier | ✅ |
 | 6. `lilac.config.rb` project config | ✅ |
 
-## What is a `.llc` file?
+## What is a `.lil` file?
 
 A single-file component containing markup, optional sub-templates, and a
 Ruby script that defines a `Lilac::Component` subclass:
 
 ```html
-<!-- components/counter.llc -->
+<!-- components/counter.lil -->
 <template>
   <div data-component="counter">
     <button data-ref="inc">+</button>
@@ -49,12 +49,12 @@ Ruby script that defines a `Lilac::Component` subclass:
 </script>
 ```
 
-`.llc` is HTML5-valid (use a `.llc → text/html` association in your
+`.lil` is HTML5-valid (use a `.lil → text/html` association in your
 editor for syntax highlighting). The build tool extracts the top-level
 `<template>` and `<script type="text/ruby">` blocks; everything inside
 each block is preserved verbatim.
 
-`lilac build` reads `components/*.llc` + `pages/*.html`, inlines the
+`lilac build` reads `components/*.lil` + `pages/*.html`, inlines the
 referenced component templates and scripts into each page, and writes the
 result to `dist/`.
 
@@ -109,7 +109,7 @@ end
 Precedence (lowest to highest): built-in defaults → `lilac.config.rb`
 → CLI flags (`--components`, `--port`, etc.).
 
-`lilac dev` watches `components/**/*.llc` and `pages/**/*.html` for
+`lilac dev` watches `components/**/*.lil` and `pages/**/*.html` for
 changes, rebuilds on save, and pushes a `reload` event over SSE to every
 connected browser tab.
 

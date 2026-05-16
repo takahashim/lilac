@@ -7,8 +7,8 @@ Gem::Specification.new do |spec|
   spec.version = Lilac::CLI::VERSION
   spec.authors = ["takahashim"]
 
-  spec.summary = "Build tool for Lilac single-file components (.llc)"
-  spec.description = "lilac-cli compiles .llc single-file components " \
+  spec.summary = "Build tool for Lilac single-file components (.lil)"
+  spec.description = "lilac-cli compiles .lil single-file components " \
                      "(template + Ruby script) into static HTML for the Lilac " \
                      "component runtime on mruby-wasm."
   spec.license = "MIT"
@@ -25,7 +25,7 @@ Gem::Specification.new do |spec|
 
   # wsv powers `lilac dev` (static serving + custom app DI + SSE).
   # listen handles file-watch for live reload.
-  # nokogiri parses `.llc` template bodies for directive extraction
+  # nokogiri parses `.lil` template bodies for directive extraction
   # (HTML5 fragment mode, attribute walking, source-line tracking).
   # prism parses the user's Ruby `<script>` body into a real AST so
   # the cross-reference linter can track signal/method declarations

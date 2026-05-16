@@ -1,7 +1,7 @@
 # Lilac
 
 Reactive single-file component framework for [mruby-on-wasm][mwr].
-Templates use HTML5 `data-*` directives; build tool compiles `.llc`
+Templates use HTML5 `data-*` directives; build tool compiles `.lil`
 single-file components into static HTML + wasm.
 
 [mwr]: https://github.com/takahashim/mruby-wasm-runtime
@@ -73,7 +73,7 @@ bundle install
 bundle exec exe/lilac --help
 ```
 
-The CLI lives in this repo at `cli/` (Ruby gem). It compiles `.llc`
+The CLI lives in this repo at `cli/` (Ruby gem). It compiles `.lil`
 files into HTML + Ruby that the wasm runtime evaluates at component
 mount time. See `cli/README.md` for usage / scaffold guide.
 

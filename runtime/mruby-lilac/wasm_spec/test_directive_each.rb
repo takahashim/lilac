@@ -4,8 +4,8 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
     body = doc[:body]
     # Synthetic template + container exactly as lilac-cli would emit.
     body[:innerHTML] = <<~HTML
-      <template data-template="llc-each-todo-list-llc0"><li><span data-ref="llcT"></span></li></template>
-      <div data-component="TodoList"><ul data-ref="llc0"></ul></div>
+      <template data-template="lil-each-todo-list-lil0"><li><span data-ref="lilT"></span></li></template>
+      <div data-component="TodoList"><ul data-ref="lil0"></ul></div>
     HTML
 
     todo_class = Class.new do
@@ -29,13 +29,13 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
     end
     bindings = Module.new do
       define_method(:bind_template_hook) do
-        bind_list refs.llc0, @todos, key: ->(it) { it.id },
-                  template: "llc-each-todo-list-llc0" do |it, t|
-          bind_template_hook__each_llc0(it, t)
+        bind_list refs.lil0, @todos, key: ->(it) { it.id },
+                  template: "lil-each-todo-list-lil0" do |it, t|
+          bind_template_hook__each_lil0(it, t)
         end
       end
-      define_method(:bind_template_hook__each_llc0) do |it, t|
-        bind t.refs.llcT, text: computed { it.title }
+      define_method(:bind_template_hook__each_lil0) do |it, t|
+        bind t.refs.lilT, text: computed { it.title }
       end
     end
     klass.include(bindings)
@@ -45,7 +45,7 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
     titles = -> {
-      list = doc.call(:querySelectorAll, "[data-ref=\"llcT\"]")
+      list = doc.call(:querySelectorAll, "[data-ref=\"lilT\"]")
       (0...list[:length].to_i).map { |i| list[i][:textContent].to_s }
     }
     Spec.assert_equal ["first", "second"], titles.call
@@ -74,8 +74,8 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
     doc = JS.global[:document]
     body = doc[:body]
     body[:innerHTML] = <<~HTML
-      <template data-template="llc-each-todo-list-llc0"><li><button data-ref="llcB">x</button></li></template>
-      <div data-component="TodoList"><ul data-ref="llc0"></ul></div>
+      <template data-template="lil-each-todo-list-lil0"><li><button data-ref="lilB">x</button></li></template>
+      <div data-component="TodoList"><ul data-ref="lil0"></ul></div>
     HTML
 
     todo_class = Class.new do
@@ -95,13 +95,13 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
     end
     bindings = Module.new do
       define_method(:bind_template_hook) do
-        bind_list refs.llc0, @todos, key: ->(it) { it.id },
-                  template: "llc-each-todo-list-llc0" do |it, t|
-          bind_template_hook__each_llc0(it, t)
+        bind_list refs.lil0, @todos, key: ->(it) { it.id },
+                  template: "lil-each-todo-list-lil0" do |it, t|
+          bind_template_hook__each_lil0(it, t)
         end
       end
-      define_method(:bind_template_hook__each_llc0) do |it, t|
-        t.refs.llcB.on(:click) { |ev| remove(it, ev) }
+      define_method(:bind_template_hook__each_lil0) do |it, t|
+        t.refs.lilB.on(:click) { |ev| remove(it, ev) }
       end
     end
     klass.include(bindings)
@@ -111,7 +111,7 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
     inst = Lilac.find_for_element(doc.call(:querySelector, "[data-component=\"TodoList\"]"))
-    buttons = doc.call(:querySelectorAll, "[data-ref=\"llcB\"]")
+    buttons = doc.call(:querySelectorAll, "[data-ref=\"lilB\"]")
     buttons[1].call(:click)
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
     Spec.assert_equal ["y"], inst.removed

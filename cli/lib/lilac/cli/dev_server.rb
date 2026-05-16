@@ -9,7 +9,7 @@ module Lilac
   module CLI
     # Long-running dev server: initial build, file watch, live reload.
     #
-    #   1. Builds `components/*.llc + pages/*.html` → `output_dir/` once,
+    #   1. Builds `components/*.lil + pages/*.html` → `output_dir/` once,
     #      with the live-reload client script injected
     #   2. Wraps `Wsv::Server` with a custom app that routes
     #      `/__lilac/livereload` to the SSE pub/sub, everything else

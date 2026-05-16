@@ -13,7 +13,7 @@ class TestCodegen < Minitest::Test
     )
   end
 
-  def text_directive(value: "@count", ref_id: "llc0", line: 1)
+  def text_directive(value: "@count", ref_id: "lil0", line: 1)
     Lilac::CLI::Directive.new(
       kind: :text,
       name: nil,
@@ -36,7 +36,7 @@ class TestCodegen < Minitest::Test
       kind: :component,
       name: nil,
       value: "Counter",
-      ref_id: "llc0",
+      ref_id: "lil0",
       line: 1,
       element_tag: "div",
     )

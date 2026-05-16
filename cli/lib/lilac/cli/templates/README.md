@@ -1,7 +1,7 @@
 # {{name}}
 
 A Lilac app — Ruby in the browser via [mruby-wasm-runtime][1], composed
-from `.llc` single-file components by [lilac-cli][2].
+from `.lil` single-file components by [lilac-cli][2].
 
 [1]: https://github.com/takahashim/mruby-wasm-runtime
 [2]: https://github.com/takahashim/lilac-cli
@@ -34,7 +34,7 @@ without templating) directly under `public/`.
 bundle exec lilac dev
 ```
 
-Open <http://localhost:5173>. Edit any `.llc` component or `.html` page and
+Open <http://localhost:5173>. Edit any `.lil` component or `.html` page and
 the browser reloads automatically (Server-Sent Events).
 
 ## Build for production
@@ -58,7 +58,7 @@ still take precedence over the file.
 Templates wire DOM to reactive state via `data-*` attributes; the
 build extracts them and generates the equivalent Ruby bindings
 alongside your `<script>`, so the script holds only component logic.
-The scaffold's `components/counter.llc` shows the most common ones:
+The scaffold's `components/counter.lil` shows the most common ones:
 
 ```html
 <button data-on-click="decrement" type="button">-</button>
@@ -82,7 +82,7 @@ Available directive families:
 |---|---|
 | `data-text="@x"` / `data-unsafe-html="@x"` | element body (escaped / raw) |
 | `data-value="@x"` / `data-checked="@x"` | two-way form-control binding |
-| `data-show="@x"` / `data-hide="@x"` | visibility (toggles `.llc-hidden`) |
+| `data-show="@x"` / `data-hide="@x"` | visibility (toggles `.lil-hidden`) |
 | `data-class="{ active: @x, 'btn-primary': @y }"` | class toggles (bare ident or quoted key) |
 | `data-attr-href="@x"` | reactive HTML attribute (URLs auto-sanitized) |
 | `data-css-color="@x"` | reactive CSS custom property (`--color`) |

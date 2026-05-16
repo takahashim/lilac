@@ -1,5 +1,5 @@
 Spec.describe "data-class directive (lilac-cli codegen target)" do
-  Spec.assert "bind refs.llcN, class: { 'a' => @a, 'btn-primary' => @p } toggles both" do
+  Spec.assert "bind refs.lilN, class: { 'a' => @a, 'btn-primary' => @p } toggles both" do
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"><span data-ref="gC" class="base">x</span></div>'
 

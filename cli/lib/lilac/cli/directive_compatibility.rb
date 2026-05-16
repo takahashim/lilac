@@ -139,8 +139,8 @@ module Lilac
         (attrs["type"] || "text").downcase
       end
 
-      # `llc-hidden` is reserved by data-show / data-hide. If the user
-      # puts `'llc-hidden': @x` in data-class on the same element, three
+      # `lil-hidden` is reserved by data-show / data-hide. If the user
+      # puts `'lil-hidden': @x` in data-class on the same element, three
       # signals can race over the class — fail at build time and tell
       # the user to drop the data-class entry.
       #
@@ -151,13 +151,13 @@ module Lilac
       # future `--lint-only` flag, or surfacing all violations in one
       # pass instead of stopping at the first emit failure). The
       # substring guard above keeps the cost zero for the common case
-      # (no `llc-hidden` anywhere in the value).
+      # (no `lil-hidden` anywhere in the value).
       def self.check_gn_hidden_conflict(dirs, file)
         return unless dirs.any? { |d| %i[show hide].include?(d.kind) }
 
         class_dir = dirs.find { |d| d.kind == :class_ }
         return unless class_dir
-        return unless class_dir.value.to_s.include?("llc-hidden")
+        return unless class_dir.value.to_s.include?("lil-hidden")
 
         pairs =
           begin
@@ -167,13 +167,13 @@ module Lilac
             # error with its own location-tagged message instead.
             return
           end
-        return unless pairs.any? { |key, _| key == "llc-hidden" }
+        return unless pairs.any? { |key, _| key == "lil-hidden" }
 
         raise Error.new(
-          "data-class uses the reserved class `llc-hidden` on an element " \
+          "data-class uses the reserved class `lil-hidden` on an element " \
           "that also has data-show / data-hide.",
           at: class_dir.source_location(file),
-          suggestion: "Drop the `llc-hidden` key from data-class — data-show/data-hide manage it.",
+          suggestion: "Drop the `lil-hidden` key from data-class — data-show/data-hide manage it.",
         )
       end
     end

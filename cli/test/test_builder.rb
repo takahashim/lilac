@@ -19,7 +19,7 @@ class TestBuilder < Minitest::Test
   end
 
   def write_widget(name, source)
-    File.write(File.join(@components, "#{name}.llc"), source)
+    File.write(File.join(@components, "#{name}.lil"), source)
   end
 
   def write_page(name, source)

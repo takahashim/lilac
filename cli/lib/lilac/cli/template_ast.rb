@@ -11,7 +11,7 @@ module Lilac
     #
     #   1. Collects every `data-*` directive into a flat list of
     #      `Directive` records (in document order).
-    #   2. Assigns a synthetic `data-ref="llcN"` to any element bearing
+    #   2. Assigns a synthetic `data-ref="lilN"` to any element bearing
     #      a binding directive but no explicit `data-ref`, so codegen
     #      can address the element by stable name.
     #   3. Builds `refs_map` keyed by ref name, recording the element
@@ -34,7 +34,7 @@ module Lilac
 
       # One iteration body extracted from a `data-each` element. The
       # Builder later turns each entry into a
-      # `<template data-template="llc-each-<component>-<ref>">` injected
+      # `<template data-template="lil-each-<component>-<ref>">` injected
       # before `</body>`, which the runtime `bind_list ..., template: ...`
       # clones per iteration item.
       SyntheticBody = Struct.new(:ref_id, :html, keyword_init: true)
@@ -226,10 +226,10 @@ module Lilac
 
         # Auto-assign, skipping refs already used in this scope. The
         # counter is monotonic per parse so we won't loop forever; the
-        # skip just handles `<div data-ref="llc3">` collisions with our
-        # synthetic llc3.
+        # skip just handles `<div data-ref="lil3">` collisions with our
+        # synthetic lil3.
         loop do
-          candidate = "llc#{@ref_counter}"
+          candidate = "lil#{@ref_counter}"
           @ref_counter += 1
           next if current_ref_scope.key?(candidate)
 

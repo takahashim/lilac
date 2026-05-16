@@ -19,14 +19,14 @@ class TestScaffold < Minitest::Test
     assert_includes files, "Gemfile"
     assert_includes files, "README.md"
     assert_includes files, "pages/index.html"
-    assert_includes files, "components/counter.llc"
+    assert_includes files, "components/counter.lil"
     assert_includes files, "public/.gitkeep"
     assert_includes files, "lilac.config.rb"
   end
 
   def test_writes_actual_files_to_disk
     Lilac::CLI::Scaffold.new("my-app", root: @tmp).run
-    %w[.gitignore Gemfile README.md pages/index.html components/counter.llc public/.gitkeep lilac.config.rb].each do |rel|
+    %w[.gitignore Gemfile README.md pages/index.html components/counter.lil public/.gitkeep lilac.config.rb].each do |rel|
       assert File.exist?(File.join(@tmp, "my-app", rel)), "missing: #{rel}"
     end
   end
@@ -57,7 +57,7 @@ class TestScaffold < Minitest::Test
 
   def test_counter_widget_is_complete_and_uses_succ_pred
     Lilac::CLI::Scaffold.new("my-app", root: @tmp).run
-    content = File.read(File.join(@tmp, "my-app", "components", "counter.llc"))
+    content = File.read(File.join(@tmp, "my-app", "components", "counter.lil"))
     assert_includes content, "class Counter < Lilac::Component"
     assert_includes content, "&:succ"
     assert_includes content, "&:pred"

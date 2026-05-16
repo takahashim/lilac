@@ -2,7 +2,7 @@
 
 module Lilac
   module CLI
-    # Parses a `.llc` single-file component into its constituent parts:
+    # Parses a `.lil` single-file component into its constituent parts:
     #
     #   * one or more `<template>` blocks, optionally named via
     #     `data-template="..."` (a standard HTML5 data attribute, same as
@@ -10,7 +10,7 @@ module Lilac
     #   * one or more `<script type="text/ruby">` blocks
     #
     # The format is HTML5-valid: any conformant HTML parser (browser,
-    # nokogiri, gammo) can build a DOM from a `.llc` file. We use regex
+    # nokogiri, gammo) can build a DOM from a `.lil` file. We use regex
     # rather than a full HTML parser internally because we want the
     # `<template>` inner content **verbatim** — a DOM-based parser would
     # require re-serializing children back to HTML and would normalize

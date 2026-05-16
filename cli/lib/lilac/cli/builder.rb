@@ -10,7 +10,7 @@ require_relative "cross_ref_linter"
 
 module Lilac
   module CLI
-    # Reads `.llc` components and `.html` pages, then emits static HTML.
+    # Reads `.lil` components and `.html` pages, then emits static HTML.
     #
     # Page authors mark component insertion points with
     #   <lilac-component name="counter"></lilac-component>
@@ -18,16 +18,16 @@ module Lilac
     # Named sub-templates and Ruby class scripts from all components used
     # on the page are injected once each before `</body>`.
     #
-    # Component file naming: `components/<data-component-name>.llc`. The file's
+    # Component file naming: `components/<data-component-name>.lil`. The file's
     # basename is taken verbatim as the component name, so
-    # `admin--user-card.llc` matches `<lilac-component name="admin--user-card">`
+    # `admin--user-card.lil` matches `<lilac-component name="admin--user-card">`
     # and (via the runtime autoregister) the `Admin::UserCard` class.
     class Builder
       class Error < StandardError; end
 
       # A template ready to be injected as `<template data-template="X">`
       # into the page. Both user-defined named templates (from
-      # `<template data-template="...">` in `.llc` source) and synthetic
+      # `<template data-template="...">` in `.lil` source) and synthetic
       # data-each iteration bodies extracted by TemplateAST end up as
       # this single shape — the page-injection logic doesn't need to
       # know which side they came from.
@@ -101,7 +101,7 @@ module Lilac
       # into `named` as synthetic templates using `ComponentName#each_template_name`
       # so they ride the same `<template data-template>` injection path
       # as user-defined named templates and the runtime can resolve them
-      # via `bind_list ..., template: "llc-each-<component>-<ref>"`.
+      # via `bind_list ..., template: "lil-each-<component>-<ref>"`.
       def template_ast_for(name, component)
         @template_ast_cache[name] ||= begin
           component_name = ComponentName.new(name)
@@ -160,8 +160,8 @@ module Lilac
       end
 
       def load_components
-        Dir.glob(File.join(@components_dir, "**", "*.llc")).to_h do |path|
-          [File.basename(path, ".llc"), SFC.parse_file(path)]
+        Dir.glob(File.join(@components_dir, "**", "*.lil")).to_h do |path|
+          [File.basename(path, ".lil"), SFC.parse_file(path)]
         end
       end
 

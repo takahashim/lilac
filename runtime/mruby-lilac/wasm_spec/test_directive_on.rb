@@ -1,9 +1,9 @@
 Spec.describe "data-on-X directive (lilac-cli codegen target)" do
-  Spec.assert "refs.llcN.on(:click) { |ev| m(ev) } wires click → method dispatch" do
+  Spec.assert "refs.lilN.on(:click) { |ev| m(ev) } wires click → method dispatch" do
     # Mirrors what lilac-cli's codegen produces for:
-    #   <button data-ref="llcB" data-on-click="increment">+</button>
+    #   <button data-ref="lilB" data-on-click="increment">+</button>
     body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="C"><button data-ref="llcB">+</button></div>'
+    body[:innerHTML] = '<div data-component="C"><button data-ref="lilB">+</button></div>'
 
     klass = Class.new(Lilac::Component) do
       attr_reader :count
@@ -12,7 +12,7 @@ Spec.describe "data-on-X directive (lilac-cli codegen target)" do
     end
     bindings = Module.new do
       define_method(:bind_template_hook) do
-        refs.llcB.on(:click) { |ev| increment(ev) }
+        refs.lilB.on(:click) { |ev| increment(ev) }
       end
     end
     klass.include(bindings)
@@ -21,7 +21,7 @@ Spec.describe "data-on-X directive (lilac-cli codegen target)" do
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
-    btn = body.call(:querySelector, "[data-ref=\"llcB\"]")
+    btn = body.call(:querySelector, "[data-ref=\"lilB\"]")
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     Spec.assert_equal 0, inst.count.value
 
@@ -40,9 +40,9 @@ Spec.describe "data-on-X directive (lilac-cli codegen target)" do
   end
 
   Spec.assert "custom event name with hyphens routes via quoted symbol" do
-    # Mirrors codegen for data-on-card-deleted="handle" → refs.llcB.on(:"card-deleted") {...}
+    # Mirrors codegen for data-on-card-deleted="handle" → refs.lilB.on(:"card-deleted") {...}
     body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="C"><div data-ref="llcB"></div></div>'
+    body[:innerHTML] = '<div data-component="C"><div data-ref="lilB"></div></div>'
 
     klass = Class.new(Lilac::Component) do
       attr_reader :received
@@ -51,7 +51,7 @@ Spec.describe "data-on-X directive (lilac-cli codegen target)" do
     end
     bindings = Module.new do
       define_method(:bind_template_hook) do
-        refs.llcB.on(:"card-deleted") { |ev| handle(ev) }
+        refs.lilB.on(:"card-deleted") { |ev| handle(ev) }
       end
     end
     klass.include(bindings)
@@ -61,7 +61,7 @@ Spec.describe "data-on-X directive (lilac-cli codegen target)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
-    inst.refs.llcB.dispatch("card-deleted", detail: { "id" => 42 })
+    inst.refs.lilB.dispatch("card-deleted", detail: { "id" => 42 })
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
     Spec.assert_equal [42], inst.received
 

@@ -1,5 +1,5 @@
-Spec.describe "data-show / data-hide directives (llc-hidden class toggle)" do
-  Spec.assert "data-show: llc-hidden present when signal is falsy, absent when truthy" do
+Spec.describe "data-show / data-hide directives (lil-hidden class toggle)" do
+  Spec.assert "data-show: lil-hidden present when signal is falsy, absent when truthy" do
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"><div data-ref="gS">payload</div></div>'
 
@@ -9,7 +9,7 @@ Spec.describe "data-show / data-hide directives (llc-hidden class toggle)" do
     end
     bindings = Module.new do
       define_method(:bind_template_hook) do
-        bind refs.gS, class: { "llc-hidden" => computed { !@visible.value } }
+        bind refs.gS, class: { "lil-hidden" => computed { !@visible.value } }
       end
     end
     klass.include(bindings)
@@ -19,7 +19,7 @@ Spec.describe "data-show / data-hide directives (llc-hidden class toggle)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
     target = body.call(:querySelector, "[data-ref=\"gS\"]")
-    has = ->() { target[:classList].call(:contains, "llc-hidden").js_bool }
+    has = ->() { target[:classList].call(:contains, "lil-hidden").js_bool }
 
     Spec.assert_false has.call
 
@@ -37,7 +37,7 @@ Spec.describe "data-show / data-hide directives (llc-hidden class toggle)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
-  Spec.assert "data-hide: llc-hidden present when signal is truthy, absent when falsy" do
+  Spec.assert "data-hide: lil-hidden present when signal is truthy, absent when falsy" do
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"><div data-ref="gH">payload</div></div>'
 
@@ -47,7 +47,7 @@ Spec.describe "data-show / data-hide directives (llc-hidden class toggle)" do
     end
     bindings = Module.new do
       define_method(:bind_template_hook) do
-        bind refs.gH, class: { "llc-hidden" => computed { @loading.value } }
+        bind refs.gH, class: { "lil-hidden" => computed { @loading.value } }
       end
     end
     klass.include(bindings)
@@ -57,7 +57,7 @@ Spec.describe "data-show / data-hide directives (llc-hidden class toggle)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
     target = body.call(:querySelector, "[data-ref=\"gH\"]")
-    has = ->() { target[:classList].call(:contains, "llc-hidden").js_bool }
+    has = ->() { target[:classList].call(:contains, "lil-hidden").js_bool }
 
     Spec.assert_false has.call
 

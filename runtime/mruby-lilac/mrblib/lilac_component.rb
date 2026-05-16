@@ -210,8 +210,8 @@ module Lilac
     # Called automatically by `mount` immediately after `setup` returns.
     # Default is a no-op; the build-time codegen (lilac-cli) generates a
     # `Lilac::Bindings::<ClassName>` module whose `bind_template_hook`
-    # applies the data-* directive bindings declared in the `.llc`
-    # template (e.g. `bind refs.llcN, text: @count`,
+    # applies the data-* directive bindings declared in the `.lil`
+    # template (e.g. `bind refs.lilN, text: @count`,
     # `refs.gM.on(:click) { ... }`). The user class includes the
     # generated module, so this default no-op is overridden in practice.
     # See docs/lilac-directive-spec.md Section 11 (Mount order).

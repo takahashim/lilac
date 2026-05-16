@@ -1,7 +1,7 @@
 Spec.describe "data-css-X directive (lilac-cli codegen target)" do
   Spec.assert "data-css-progress sets --progress CSS variable reactively" do
     body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="C"><div data-ref="llcB">x</div></div>'
+    body[:innerHTML] = '<div data-component="C"><div data-ref="lilB">x</div></div>'
 
     klass = Class.new(Lilac::Component) do
       attr_reader :percent
@@ -9,7 +9,7 @@ Spec.describe "data-css-X directive (lilac-cli codegen target)" do
     end
     bindings = Module.new do
       define_method(:bind_template_hook) do
-        effect { refs.llcB.set_style("--progress", @percent.value) }
+        effect { refs.lilB.set_style("--progress", @percent.value) }
       end
     end
     klass.include(bindings)
@@ -18,7 +18,7 @@ Spec.describe "data-css-X directive (lilac-cli codegen target)" do
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
-    target = body.call(:querySelector, "[data-ref=\"llcB\"]")
+    target = body.call(:querySelector, "[data-ref=\"lilB\"]")
     read = ->() { target[:style].call(:getPropertyValue, "--progress").to_s }
 
     Spec.assert_equal "42", read.call
@@ -40,7 +40,7 @@ Spec.describe "data-css-X directive (lilac-cli codegen target)" do
 
   Spec.assert "data-css-theme-color works for hyphenated property names" do
     body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="C"><div data-ref="llcB"></div></div>'
+    body[:innerHTML] = '<div data-component="C"><div data-ref="lilB"></div></div>'
 
     klass = Class.new(Lilac::Component) do
       attr_reader :color
@@ -48,7 +48,7 @@ Spec.describe "data-css-X directive (lilac-cli codegen target)" do
     end
     bindings = Module.new do
       define_method(:bind_template_hook) do
-        effect { refs.llcB.set_style("--theme-color", @color.value) }
+        effect { refs.lilB.set_style("--theme-color", @color.value) }
       end
     end
     klass.include(bindings)
@@ -57,7 +57,7 @@ Spec.describe "data-css-X directive (lilac-cli codegen target)" do
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
-    target = body.call(:querySelector, "[data-ref=\"llcB\"]")
+    target = body.call(:querySelector, "[data-ref=\"lilB\"]")
     Spec.assert_equal "#ff0000", target[:style].call(:getPropertyValue, "--theme-color").to_s
 
     Lilac.reset!

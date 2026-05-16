@@ -1,5 +1,5 @@
 Spec.describe "data-unsafe-html directive (lilac-cli codegen target)" do
-  Spec.assert "bind refs.llcN, html: @signal writes innerHTML" do
+  Spec.assert "bind refs.lilN, html: @signal writes innerHTML" do
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"><div data-ref="gH">init</div></div>'
 

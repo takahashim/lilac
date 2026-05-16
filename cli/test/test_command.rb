@@ -24,7 +24,7 @@ class TestCommand < Minitest::Test
   end
 
   def test_build_succeeds_with_minimum_inputs
-    File.write(File.join(@tmp, "components", "counter.llc"), <<~GNT)
+    File.write(File.join(@tmp, "components", "counter.lil"), <<~GNT)
       <template><div data-component="counter"></div></template>
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
@@ -68,7 +68,7 @@ class TestCommand < Minitest::Test
       assert_equal 0, status
       assert_match(/Created demoapp\//, out)
       assert_match(/Next steps:/, out)
-      assert File.exist?(File.join(@tmp, "demoapp", "components", "counter.llc"))
+      assert File.exist?(File.join(@tmp, "demoapp", "components", "counter.lil"))
     end
   end
 

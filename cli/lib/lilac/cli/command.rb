@@ -209,7 +209,7 @@ module Lilac
 
       def print_help(io: @out)
         io.puts <<~HELP
-          lilac — build .llc single-file components into static HTML
+          lilac — build .lil single-file components into static HTML
 
           Usage:
             lilac <command> [options]

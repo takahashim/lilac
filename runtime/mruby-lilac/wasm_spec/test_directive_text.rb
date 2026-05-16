@@ -1,16 +1,16 @@
 Spec.describe "data-text directive (lilac-cli codegen target)" do
-  Spec.assert "bind refs.llcN, text: @signal mirrors signal updates into textContent" do
+  Spec.assert "bind refs.lilN, text: @signal mirrors signal updates into textContent" do
     # Mirrors what lilac-cli's codegen produces for:
-    #   <span data-ref="llcT" data-text="@msg"></span>
+    #   <span data-ref="lilT" data-text="@msg"></span>
     body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="C"><span data-ref="llcT">initial</span></div>'
+    body[:innerHTML] = '<div data-component="C"><span data-ref="lilT">initial</span></div>'
 
     klass = Class.new(Lilac::Component) do
       attr_reader :msg
       define_method(:setup) { @msg = signal("hello") }
     end
     bindings = Module.new do
-      define_method(:bind_template_hook) { bind refs.llcT, text: @msg }
+      define_method(:bind_template_hook) { bind refs.lilT, text: @msg }
     end
     klass.include(bindings)
 
@@ -18,7 +18,7 @@ Spec.describe "data-text directive (lilac-cli codegen target)" do
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
-    span = body.call(:querySelector, "[data-ref=\"llcT\"]")
+    span = body.call(:querySelector, "[data-ref=\"lilT\"]")
     Spec.assert_equal "hello", span[:textContent].to_s
 
     root = body.call(:querySelector, "[data-component=\"C\"]")
@@ -32,9 +32,9 @@ Spec.describe "data-text directive (lilac-cli codegen target)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
-  Spec.assert "bind refs.llcN, text: @computed reacts to dependency changes" do
+  Spec.assert "bind refs.lilN, text: @computed reacts to dependency changes" do
     body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="C"><span data-ref="llcT">0</span></div>'
+    body[:innerHTML] = '<div data-component="C"><span data-ref="lilT">0</span></div>'
 
     klass = Class.new(Lilac::Component) do
       attr_reader :count
@@ -44,7 +44,7 @@ Spec.describe "data-text directive (lilac-cli codegen target)" do
       end
     end
     bindings = Module.new do
-      define_method(:bind_template_hook) { bind refs.llcT, text: @label }
+      define_method(:bind_template_hook) { bind refs.lilT, text: @label }
     end
     klass.include(bindings)
 
@@ -52,7 +52,7 @@ Spec.describe "data-text directive (lilac-cli codegen target)" do
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
 
-    span = body.call(:querySelector, "[data-ref=\"llcT\"]")
+    span = body.call(:querySelector, "[data-ref=\"lilT\"]")
     Spec.assert_equal "Count: 0", span[:textContent].to_s
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))

@@ -27,7 +27,7 @@ class TestDoctor < Minitest::Test
     FileUtils.mkdir_p(File.join(@tmp, "public", "vendor", "mruby-wasm-js"))
     File.write(File.join(@tmp, "pages", "index.html"),
                '<html><body><lilac-component name="counter"></lilac-component></body></html>')
-    File.write(File.join(@tmp, "components", "counter.llc"), <<~GNT)
+    File.write(File.join(@tmp, "components", "counter.lil"), <<~GNT)
       <template><div data-component="counter"></div></template>
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
@@ -75,12 +75,12 @@ class TestDoctor < Minitest::Test
 
     status, out = run_doctor
     refute_equal 0, status
-    assert_match(/no components\/ghost\.llc exists/, out)
+    assert_match(/no components\/ghost\.lil exists/, out)
   end
 
   def test_warns_on_unused_widget
     scaffold_minimal_project
-    File.write(File.join(@tmp, "components", "spare.llc"), <<~GNT)
+    File.write(File.join(@tmp, "components", "spare.lil"), <<~GNT)
       <template><div data-component="spare"></div></template>
       <script type="text/ruby">class Spare < Lilac::Component; end</script>
     GNT
@@ -92,11 +92,11 @@ class TestDoctor < Minitest::Test
 
   def test_fails_on_widget_parse_error
     scaffold_minimal_project
-    File.write(File.join(@tmp, "components", "broken.llc"), "<template>unterminated")
+    File.write(File.join(@tmp, "components", "broken.lil"), "<template>unterminated")
 
     status, out = run_doctor
     refute_equal 0, status
-    assert_match(/\[FAIL\].*component parse error.*broken\.llc/, out)
+    assert_match(/\[FAIL\].*component parse error.*broken\.lil/, out)
   end
 
   def test_summary_line_counts_results

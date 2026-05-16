@@ -18,7 +18,7 @@ module Lilac
     #     def bind_template_hook
     #       # ... emitted statements for top-level directives ...
     #     end
-    #     def bind_template_hook__each_llc0(it, t)
+    #     def bind_template_hook__each_lil0(it, t)
     #       # ... emitted statements for directives inside <ul data-each>
     #     end
     #   end
@@ -49,7 +49,7 @@ module Lilac
         end
       end
 
-      # `component_name` is the kebab-case `.llc` basename
+      # `component_name` is the kebab-case `.lil` basename
       # (e.g. "counter", "admin--user-card"). It is converted to the
       # Ruby class path the runtime's autoregister already uses.
       # `directives` is an Array<Directive>; pass `[]` (or omit) for
@@ -156,7 +156,7 @@ module Lilac
         nil
       end
 
-      # data-text="@s" → `bind refs.llcN, text: @s`. Value must be
+      # data-text="@s" → `bind refs.lilN, text: @s`. Value must be
       # ivar or it_path (read-only); arbitrary expressions are rejected
       # at build time.
       def emit_text(directive, context)
@@ -167,7 +167,7 @@ module Lilac
         ]
       end
 
-      # data-unsafe-html="@s" → `bind refs.llcN, html: @s`. Same value
+      # data-unsafe-html="@s" → `bind refs.lilN, html: @s`. Same value
       # shape as data-text. Named "unsafe" so users actively opt in to
       # injecting raw HTML rather than escaped text.
       def emit_unsafe_html(directive, context)
@@ -178,7 +178,7 @@ module Lilac
         ]
       end
 
-      # data-value="@s" → `bind_input refs.llcN, @s`. ivar-only because
+      # data-value="@s" → `bind_input refs.lilN, @s`. ivar-only because
       # bind_input writes back to the signal on input events; an
       # immutable iteration item field (`it.x`) couldn't accept the
       # write.
@@ -190,7 +190,7 @@ module Lilac
         ]
       end
 
-      # data-checked="@s" → `bind_input refs.llcN, @s, property: :checked`.
+      # data-checked="@s" → `bind_input refs.lilN, @s, property: :checked`.
       # Same ivar-only constraint as data-value; the difference is the
       # DOM property targeted (checkbox / radio `checked` instead of
       # input `value`).
@@ -202,7 +202,7 @@ module Lilac
         ]
       end
 
-      # data-show / data-hide → toggle the reserved `llc-hidden` class
+      # data-show / data-hide → toggle the reserved `lil-hidden` class
       # based on the signal. `data-show` adds the class when falsy
       # (show on truthy); `data-hide` adds it when truthy. Always wraps
       # the value in `computed { ... }` so ivar (`@s.value`) and
@@ -221,7 +221,7 @@ module Lilac
         value = read_value_or_raise(directive, attr_name)
         [
           "# #{@file}:#{directive.line} — #{attr_name}=#{value.inspect}",
-          %(bind #{context.refs_expr}.#{directive.ref_id}, class: { "llc-hidden" => computed { #{negation}#{value.reactive_read} } }),
+          %(bind #{context.refs_expr}.#{directive.ref_id}, class: { "lil-hidden" => computed { #{negation}#{value.reactive_read} } }),
         ]
       end
 
@@ -254,8 +254,8 @@ module Lilac
         )
       end
 
-      # data-on-X="m" → `refs.llcN.on(:X) { |ev| m(ev) }` at the top
-      # level, or `t.refs.llcN.on(:X) { |ev| m(it, ev) }` inside a
+      # data-on-X="m" → `refs.lilN.on(:X) { |ev| m(ev) }` at the top
+      # level, or `t.refs.lilN.on(:X) { |ev| m(it, ev) }` inside a
       # data-each body — iteration handlers receive `(item, event)` so
       # the method can act on the row.
       def emit_on(directive, context)
@@ -277,7 +277,7 @@ module Lilac
         ]
       end
 
-      # data-attr-X="@s" → `bind refs.llcN, attr: { "X" => @s }`. Goes
+      # data-attr-X="@s" → `bind refs.lilN, attr: { "X" => @s }`. Goes
       # through Bindable#bind_attr which calls `source.value` in an
       # effect, handles nil/false → removeAttribute, and runs the URL
       # sanitizer on href/src/action/formaction.
@@ -297,7 +297,7 @@ module Lilac
         ]
       end
 
-      # data-css-X="@s" → `effect { refs.llcN.set_style("--X", @s.value) }`.
+      # data-css-X="@s" → `effect { refs.lilN.set_style("--X", @s.value) }`.
       # The framework auto-prepends `--`, so users write
       # `data-css-progress` (kebab) and get the CSS variable `--progress`.
       # RefElement#set_style maps nil/false → removeProperty so falsy
@@ -318,7 +318,7 @@ module Lilac
       end
 
       # data-class="{ active: @s, 'btn-primary': @p }" →
-      #   `bind refs.llcN, class: { "active" => @s, "btn-primary" => @p }`.
+      #   `bind refs.lilN, class: { "active" => @s, "btn-primary" => @p }`.
       # Hash keys are normalized to double-quoted strings regardless of
       # the source form (bare ident vs single/double quotes) so the
       # generated Ruby is uniform. Reuses Bindable#bind_class which
@@ -353,8 +353,8 @@ module Lilac
       end
 
       # data-each="@col" + (optional) data-key="id" →
-      #   bind_list refs.llcN, @col, key: ->(it) { it.id },
-      #             template: "llc-each-<component>-llcN" do |it, t|
+      #   bind_list refs.lilN, @col, key: ->(it) { it.id },
+      #             template: "lil-each-<component>-lilN" do |it, t|
       #     bind_template_hook__each_gN(it, t)
       #   end
       # The body of the iteration becomes a separate method on the
