@@ -80,7 +80,20 @@ patch(re_compiler *c, uint32_t pos, uint16_t offset)
 }
 
 /* Insert an instruction at position `pos` by shifting code.
-   Adjusts all jump offsets >= pos by +1. */
+   Adjusts jump offsets > pos by +1.
+   Offsets equal to `pos` are intentionally NOT adjusted: in this
+   compiler they represent forward-references patched to
+   `c->code_len`, i.e. "the position where the *next* sub-pattern's
+   first instruction will be emitted". When a subsequent insert_inst
+   targets that same position (e.g. a quantifier wrapping that
+   sub-pattern with its own SPLIT), the inserted instruction *is*
+   the next sub-pattern's first instruction, so the forward reference
+   should continue to point at it — not at the original instruction
+   that has just been shifted forward.
+   Regression: `^\w*\??$` failing to match "" was caused by
+   incrementing the `\w*` SPLIT's offset (= insertion point) so it
+   landed on the shifted RE_CHAR `?` instead of on the new SPLIT
+   that fronts `\??`. */
 static void
 insert_inst(re_compiler *c, uint32_t pos, uint8_t op, uint8_t a, uint16_t offset)
 {
@@ -91,12 +104,11 @@ insert_inst(re_compiler *c, uint32_t pos, uint8_t op, uint8_t a, uint16_t offset
   c->code[pos].a = a;
   c->code[pos].offset = offset;
 
-  /* fix all jump targets that point at or past the insertion point */
   for (uint32_t i = 0; i < c->code_len; i++) {
     if (i == pos) continue;
     switch (c->code[i].op) {
     case RE_JMP: case RE_SPLIT: case RE_SPLITNG:
-      if (c->code[i].offset >= pos && c->code[i].offset < 0xffff) {
+      if (c->code[i].offset > pos && c->code[i].offset < 0xffff) {
         c->code[i].offset++;
       }
       break;
