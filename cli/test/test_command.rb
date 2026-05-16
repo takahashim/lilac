@@ -7,7 +7,7 @@ require "stringio"
 
 class TestCommand < Minitest::Test
   def setup
-    @tmp = Dir.mktmpdir("grainet-cmd-test")
+    @tmp = Dir.mktmpdir("lilac-cmd-test")
     FileUtils.mkdir_p(File.join(@tmp, "components"))
     FileUtils.mkdir_p(File.join(@tmp, "pages"))
   end
@@ -19,18 +19,18 @@ class TestCommand < Minitest::Test
   def run_cmd(*argv)
     out = StringIO.new
     err = StringIO.new
-    status = Grainet::CLI::Command.new(argv, out: out, err: err).run
+    status = Lilac::CLI::Command.new(argv, out: out, err: err).run
     [status, out.string, err.string]
   end
 
   def test_build_succeeds_with_minimum_inputs
-    File.write(File.join(@tmp, "components", "counter.gnt"), <<~GNT)
+    File.write(File.join(@tmp, "components", "counter.llc"), <<~GNT)
       <template><div data-component="counter"></div></template>
-      <script type="text/ruby">class Counter < Grainet::Component; end</script>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
 
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
-      <html><body><grainet-component name="counter"></grainet-component></body></html>
+      <html><body><lilac-component name="counter"></lilac-component></body></html>
     HTML
 
     status, out, err = run_cmd("build", "--root", @tmp)
@@ -41,7 +41,7 @@ class TestCommand < Minitest::Test
 
   def test_build_reports_unknown_component_via_stderr
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
-      <html><body><grainet-component name="missing"></grainet-component></body></html>
+      <html><body><lilac-component name="missing"></lilac-component></body></html>
     HTML
 
     status, _out, err = run_cmd("build", "--root", @tmp)
@@ -68,14 +68,14 @@ class TestCommand < Minitest::Test
       assert_equal 0, status
       assert_match(/Created demoapp\//, out)
       assert_match(/Next steps:/, out)
-      assert File.exist?(File.join(@tmp, "demoapp", "components", "counter.gnt"))
+      assert File.exist?(File.join(@tmp, "demoapp", "components", "counter.llc"))
     end
   end
 
   def test_new_without_name_returns_usage_error
     status, _out, err = run_cmd("new")
     refute_equal 0, status
-    assert_match(/Usage: grainet new/, err)
+    assert_match(/Usage: lilac new/, err)
   end
 
   def test_new_with_invalid_name_returns_error_via_stderr

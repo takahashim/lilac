@@ -1,7 +1,7 @@
 {
-  "name": "grainet-test-harness",
+  "name": "lilac-test-harness",
   "version": "0.0.0-dev",
-  "description": "Dev-only deps for running Grainet wasm_spec via Node + happy-dom.",
+  "description": "Dev-only deps for running Lilac wasm_spec via Node + happy-dom.",
   "private": true,
   "type": "module",
   "devDependencies": {

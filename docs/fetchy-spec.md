@@ -1,6 +1,6 @@
 # Fetchy v2 仕様
 
-Grainet 専用の軽量 HTTP クライアント。主に `Widget#resource` の block の中で `window.fetch` を呼び、Request object や値を返す。
+Lilac 専用の軽量 HTTP クライアント。主に `Widget#resource` の block の中で `window.fetch` を呼び、Request object や値を返す。
 
 ```ruby
 @user = resource(initial: nil) do |r|

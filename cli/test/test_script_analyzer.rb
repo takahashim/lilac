@@ -4,7 +4,7 @@ require "test_helper"
 
 class TestScriptAnalyzer < Minitest::Test
   def analyze(src)
-    Grainet::CLI::ScriptAnalyzer.analyze(src)
+    Lilac::CLI::ScriptAnalyzer.analyze(src)
   end
 
   # ---- signal declarations ---------------------------------------

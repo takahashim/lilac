@@ -4,16 +4,16 @@ require "test_helper"
 require "stringio"
 
 class TestCrossRefLinter < Minitest::Test
-  def dir(kind, value:, name: nil, line: 1, tag: "div", ref_id: "g0")
-    Grainet::CLI::Directive.new(
+  def dir(kind, value:, name: nil, line: 1, tag: "div", ref_id: "llc0")
+    Lilac::CLI::Directive.new(
       kind: kind, name: name, value: value, ref_id: ref_id,
       line: line, element_tag: tag, scope_id: nil,
     )
   end
 
-  def lint(script:, directives:, component: "Counter", file: "x.gnt", refs_map: {})
+  def lint(script:, directives:, component: "Counter", file: "x.llc", refs_map: {})
     io = StringIO.new
-    count = Grainet::CLI::CrossRefLinter.lint(
+    count = Lilac::CLI::CrossRefLinter.lint(
       script_text: script, directives: directives, refs_map: refs_map,
       component_name: component, file: file, out: io,
     )
@@ -45,7 +45,7 @@ class TestCrossRefLinter < Minitest::Test
       ],
     )
     assert_equal 1, count
-    assert_includes out, "grainet: lint warning in x.gnt:7"
+    assert_includes out, "lilac: lint warning in x.llc:7"
     assert_includes out, "Signal @missing is not declared"
     assert_includes out, "in Counter"
     assert_includes out, "Declared signals: @count, @total."
@@ -77,17 +77,17 @@ class TestCrossRefLinter < Minitest::Test
     # separate "it outside data-each" warning — see below.)
     # Reference @items in the outer data-each so the dead-signal
     # lint doesn't fire on it either.
-    each_dir = Grainet::CLI::Directive.new(
-      kind: :each, name: nil, value: "@items", ref_id: "g0",
+    each_dir = Lilac::CLI::Directive.new(
+      kind: :each, name: nil, value: "@items", ref_id: "llc0",
       line: 1, element_tag: "ul", scope_id: nil,
     )
-    key_dir = Grainet::CLI::Directive.new(
-      kind: :key, name: nil, value: "id", ref_id: "g0",
+    key_dir = Lilac::CLI::Directive.new(
+      kind: :key, name: nil, value: "id", ref_id: "llc0",
       line: 1, element_tag: "ul", scope_id: nil,
     )
-    inside_each = Grainet::CLI::Directive.new(
-      kind: :text, name: nil, value: "it.title", ref_id: "g1",
-      line: 1, element_tag: "span", scope_id: "g0",
+    inside_each = Lilac::CLI::Directive.new(
+      kind: :text, name: nil, value: "it.title", ref_id: "llc1",
+      line: 1, element_tag: "span", scope_id: "llc0",
     )
     count, = lint(
       script: "@items = signal([])",
@@ -181,14 +181,14 @@ class TestCrossRefLinter < Minitest::Test
       script: "",
       directives: [dir(:text, value: "it.title", line: 3)],
     )
-    assert_includes out, "x.gnt:3"
+    assert_includes out, "x.llc:3"
     assert_includes out, "`it` referenced outside a data-each"
   end
 
   def test_it_path_inside_data_each_scope_is_fine
-    each_scope_dir = Grainet::CLI::Directive.new(
-      kind: :text, name: nil, value: "it.title", ref_id: "g1",
-      line: 4, element_tag: "span", scope_id: "g0",
+    each_scope_dir = Lilac::CLI::Directive.new(
+      kind: :text, name: nil, value: "it.title", ref_id: "llc1",
+      line: 4, element_tag: "span", scope_id: "llc0",
     )
     count, = lint(script: "", directives: [each_scope_dir])
     assert_equal 0, count
@@ -201,14 +201,14 @@ class TestCrossRefLinter < Minitest::Test
       script: "@items = signal([])",
       directives: [dir(:each, value: "@items", line: 6, tag: "ul")],
     )
-    assert_includes out, "x.gnt:6"
+    assert_includes out, "x.llc:6"
     assert_includes out, "data-each without data-key"
     assert_includes out, "object_id"
   end
 
   def test_data_each_with_matching_key_emits_no_warning
     each_dir = dir(:each, value: "@items", line: 6, tag: "ul", ref_id: "gE")
-    key_dir = Grainet::CLI::Directive.new(
+    key_dir = Lilac::CLI::Directive.new(
       kind: :key, name: nil, value: "id", ref_id: "gE",
       line: 6, element_tag: "ul", scope_id: nil,
     )
@@ -226,8 +226,8 @@ class TestCrossRefLinter < Minitest::Test
     )
     assert_includes out, "data-ref \"p\" collides"
     assert_includes out, "data-ref \"class\" collides"
-    assert_includes out, "x.gnt:4"
-    assert_includes out, "x.gnt:5"
+    assert_includes out, "x.llc:4"
+    assert_includes out, "x.llc:5"
   end
 
   def test_non_kernel_ref_name_does_not_trigger

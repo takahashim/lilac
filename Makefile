@@ -1,13 +1,13 @@
-# grainet — build orchestration for the Grainet wasm bundles.
+# lilac — build orchestration for the Lilac wasm bundles.
 #
 # Reuses the mruby clone and wasi-sdk installed by mruby-wasm-runtime:
 # point MRUBY_WASM_RUNTIME_PATH at a local clone of that repo and this
 # Makefile picks up `mruby/` and `vendor/wasi-sdk/` from there.
 #
 # Targets:
-#   make js-grainet-full     Build → build/mruby-js-grainet-full.wasm
-#   make js-grainet-small    Build → build/mruby-js-grainet-small.wasm
-#   make js-grainet-min      Build → build/mruby-js-grainet-min.wasm
+#   make js-lilac-full     Build → build/mruby-js-lilac-full.wasm
+#   make js-lilac-small    Build → build/mruby-js-lilac-small.wasm
+#   make js-lilac-min      Build → build/mruby-js-lilac-min.wasm
 #   make test                Run wasm_spec against the full bundle
 #   make clean               Remove this repo's build/ artifacts
 
@@ -41,52 +41,52 @@ TARGET  := wasm32-wasip1
 
 JS_WASM_RELEASE_LDFLAGS := -Wl,--strip-debug
 
-MRUBY_CONFIG_GRAINET_FULL  := $(CURDIR)/build_config/wasi-js-grainet-full.rb
-MRUBY_CONFIG_GRAINET_SMALL := $(CURDIR)/build_config/wasi-js-grainet-small.rb
-MRUBY_CONFIG_GRAINET_MIN   := $(CURDIR)/build_config/wasi-js-grainet-min.rb
+MRUBY_CONFIG_LILAC_FULL  := $(CURDIR)/build_config/wasi-js-lilac-full.rb
+MRUBY_CONFIG_LILAC_SMALL := $(CURDIR)/build_config/wasi-js-lilac-small.rb
+MRUBY_CONFIG_LILAC_MIN   := $(CURDIR)/build_config/wasi-js-lilac-min.rb
 
-LIBMRUBY_GRAINET_FULL          := $(MRUBY_DIR)/build/wasi-js-grainet-full/lib/libmruby.a
-LIBMRUBY_GRAINET_FULL_RELEASE  := $(MRUBY_DIR)/build/wasi-js-grainet-full-release/lib/libmruby.a
-LIBMRUBY_GRAINET_SMALL         := $(MRUBY_DIR)/build/wasi-js-grainet-small/lib/libmruby.a
-LIBMRUBY_GRAINET_SMALL_RELEASE := $(MRUBY_DIR)/build/wasi-js-grainet-small-release/lib/libmruby.a
-LIBMRUBY_GRAINET_MIN           := $(MRUBY_DIR)/build/wasi-js-grainet-min/lib/libmruby.a
-LIBMRUBY_GRAINET_MIN_RELEASE   := $(MRUBY_DIR)/build/wasi-js-grainet-min-release/lib/libmruby.a
+LIBMRUBY_LILAC_FULL          := $(MRUBY_DIR)/build/wasi-js-lilac-full/lib/libmruby.a
+LIBMRUBY_LILAC_FULL_RELEASE  := $(MRUBY_DIR)/build/wasi-js-lilac-full-release/lib/libmruby.a
+LIBMRUBY_LILAC_SMALL         := $(MRUBY_DIR)/build/wasi-js-lilac-small/lib/libmruby.a
+LIBMRUBY_LILAC_SMALL_RELEASE := $(MRUBY_DIR)/build/wasi-js-lilac-small-release/lib/libmruby.a
+LIBMRUBY_LILAC_MIN           := $(MRUBY_DIR)/build/wasi-js-lilac-min/lib/libmruby.a
+LIBMRUBY_LILAC_MIN_RELEASE   := $(MRUBY_DIR)/build/wasi-js-lilac-min-release/lib/libmruby.a
 
 BUILD_DIR := $(CURDIR)/build
-BUILD_WASM_GRAINET_FULL          := $(BUILD_DIR)/mruby-js-grainet-full.wasm
-BUILD_WASM_GRAINET_FULL_RELEASE  := $(BUILD_DIR)/mruby-js-grainet-full.release.wasm
-BUILD_WASM_GRAINET_SMALL         := $(BUILD_DIR)/mruby-js-grainet-small.wasm
-BUILD_WASM_GRAINET_SMALL_RELEASE := $(BUILD_DIR)/mruby-js-grainet-small.release.wasm
-BUILD_WASM_GRAINET_MIN           := $(BUILD_DIR)/mruby-js-grainet-min.wasm
-BUILD_WASM_GRAINET_MIN_RELEASE   := $(BUILD_DIR)/mruby-js-grainet-min.release.wasm
+BUILD_WASM_LILAC_FULL          := $(BUILD_DIR)/mruby-js-lilac-full.wasm
+BUILD_WASM_LILAC_FULL_RELEASE  := $(BUILD_DIR)/mruby-js-lilac-full.release.wasm
+BUILD_WASM_LILAC_SMALL         := $(BUILD_DIR)/mruby-js-lilac-small.wasm
+BUILD_WASM_LILAC_SMALL_RELEASE := $(BUILD_DIR)/mruby-js-lilac-small.release.wasm
+BUILD_WASM_LILAC_MIN           := $(BUILD_DIR)/mruby-js-lilac-min.wasm
+BUILD_WASM_LILAC_MIN_RELEASE   := $(BUILD_DIR)/mruby-js-lilac-min.release.wasm
 
 .PHONY: all \
-        js-grainet-full js-grainet-full-release \
-        js-grainet-small js-grainet-small-release \
-        js-grainet-min js-grainet-min-release \
+        js-lilac-full js-lilac-full-release \
+        js-lilac-small js-lilac-small-release \
+        js-lilac-min js-lilac-min-release \
         js-all js-all-release \
         test node-deps clean
 
-all: js-grainet-full
+all: js-lilac-full
 
 # ── libmruby.a builds (one per build_config × release) ──────────────────
-$(LIBMRUBY_GRAINET_FULL):
-	cd $(MRUBY_DIR) && rake MRUBY_CONFIG=$(MRUBY_CONFIG_GRAINET_FULL)
+$(LIBMRUBY_LILAC_FULL):
+	cd $(MRUBY_DIR) && rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_FULL)
 
-$(LIBMRUBY_GRAINET_FULL_RELEASE):
-	cd $(MRUBY_DIR) && MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_GRAINET_FULL)
+$(LIBMRUBY_LILAC_FULL_RELEASE):
+	cd $(MRUBY_DIR) && MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_FULL)
 
-$(LIBMRUBY_GRAINET_SMALL):
-	cd $(MRUBY_DIR) && rake MRUBY_CONFIG=$(MRUBY_CONFIG_GRAINET_SMALL)
+$(LIBMRUBY_LILAC_SMALL):
+	cd $(MRUBY_DIR) && rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_SMALL)
 
-$(LIBMRUBY_GRAINET_SMALL_RELEASE):
-	cd $(MRUBY_DIR) && MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_GRAINET_SMALL)
+$(LIBMRUBY_LILAC_SMALL_RELEASE):
+	cd $(MRUBY_DIR) && MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_SMALL)
 
-$(LIBMRUBY_GRAINET_MIN):
-	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_GRAINET_MIN)
+$(LIBMRUBY_LILAC_MIN):
+	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_MIN)
 
-$(LIBMRUBY_GRAINET_MIN_RELEASE):
-	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_GRAINET_MIN)
+$(LIBMRUBY_LILAC_MIN_RELEASE):
+	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_MIN)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -107,43 +107,44 @@ $(CLANG) --target=$(TARGET) --sysroot=$(SYSROOT) \
 @echo "Built $(4) ($$(du -h $(4) | cut -f1))"
 endef
 
-js-grainet-full: $(BUILD_WASM_GRAINET_FULL)
-js-grainet-full-release: $(BUILD_WASM_GRAINET_FULL_RELEASE)
-js-grainet-small: $(BUILD_WASM_GRAINET_SMALL)
-js-grainet-small-release: $(BUILD_WASM_GRAINET_SMALL_RELEASE)
-js-grainet-min: $(BUILD_WASM_GRAINET_MIN)
-js-grainet-min-release: $(BUILD_WASM_GRAINET_MIN_RELEASE)
-js-all: js-grainet-full js-grainet-small js-grainet-min
-js-all-release: js-grainet-full-release js-grainet-small-release js-grainet-min-release
+js-lilac-full: $(BUILD_WASM_LILAC_FULL)
+js-lilac-full-release: $(BUILD_WASM_LILAC_FULL_RELEASE)
+js-lilac-small: $(BUILD_WASM_LILAC_SMALL)
+js-lilac-small-release: $(BUILD_WASM_LILAC_SMALL_RELEASE)
+js-lilac-min: $(BUILD_WASM_LILAC_MIN)
+js-lilac-min-release: $(BUILD_WASM_LILAC_MIN_RELEASE)
+js-all: js-lilac-full js-lilac-small js-lilac-min
+js-all-release: js-lilac-full-release js-lilac-small-release js-lilac-min-release
 
-$(BUILD_WASM_GRAINET_FULL): $(LIBMRUBY_GRAINET_FULL) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,,,$(LIBMRUBY_GRAINET_FULL),$(BUILD_WASM_GRAINET_FULL))
+$(BUILD_WASM_LILAC_FULL): $(LIBMRUBY_LILAC_FULL) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_FULL),$(BUILD_WASM_LILAC_FULL))
 
-$(BUILD_WASM_GRAINET_FULL_RELEASE): $(LIBMRUBY_GRAINET_FULL_RELEASE) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_GRAINET_FULL_RELEASE),$(BUILD_WASM_GRAINET_FULL_RELEASE))
+$(BUILD_WASM_LILAC_FULL_RELEASE): $(LIBMRUBY_LILAC_FULL_RELEASE) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_FULL_RELEASE),$(BUILD_WASM_LILAC_FULL_RELEASE))
 
-$(BUILD_WASM_GRAINET_SMALL): $(LIBMRUBY_GRAINET_SMALL) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,,,$(LIBMRUBY_GRAINET_SMALL),$(BUILD_WASM_GRAINET_SMALL))
+$(BUILD_WASM_LILAC_SMALL): $(LIBMRUBY_LILAC_SMALL) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_SMALL),$(BUILD_WASM_LILAC_SMALL))
 
-$(BUILD_WASM_GRAINET_SMALL_RELEASE): $(LIBMRUBY_GRAINET_SMALL_RELEASE) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_GRAINET_SMALL_RELEASE),$(BUILD_WASM_GRAINET_SMALL_RELEASE))
+$(BUILD_WASM_LILAC_SMALL_RELEASE): $(LIBMRUBY_LILAC_SMALL_RELEASE) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_SMALL_RELEASE),$(BUILD_WASM_LILAC_SMALL_RELEASE))
 
-$(BUILD_WASM_GRAINET_MIN): $(LIBMRUBY_GRAINET_MIN) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,,,$(LIBMRUBY_GRAINET_MIN),$(BUILD_WASM_GRAINET_MIN))
+$(BUILD_WASM_LILAC_MIN): $(LIBMRUBY_LILAC_MIN) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_MIN),$(BUILD_WASM_LILAC_MIN))
 
-$(BUILD_WASM_GRAINET_MIN_RELEASE): $(LIBMRUBY_GRAINET_MIN_RELEASE) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_GRAINET_MIN_RELEASE),$(BUILD_WASM_GRAINET_MIN_RELEASE))
+$(BUILD_WASM_LILAC_MIN_RELEASE): $(LIBMRUBY_LILAC_MIN_RELEASE) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_MIN_RELEASE),$(BUILD_WASM_LILAC_MIN_RELEASE))
 
 # ── test ────────────────────────────────────────────────────────────────
 node_modules: package.json
 	npm install --no-audit --no-fund --silent
 	@touch node_modules
 
-test: js-grainet-full node_modules
-	MRUBY_WASM_PATH=$(BUILD_WASM_GRAINET_FULL) \
-	  node $(MRUBY_WASM_RUNTIME)/mrbgem/mruby-wasm-js/wasm_spec/runner.mjs
+test: js-lilac-full node_modules
+	MRUBY_WASM_PATH=$(BUILD_WASM_LILAC_FULL) \
+	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
+	  node test/runner.mjs
 
 # ── clean ───────────────────────────────────────────────────────────────
 clean:
-	rm -rf $(MRUBY_DIR)/build/wasi-js-grainet-*
+	rm -rf $(MRUBY_DIR)/build/wasi-js-lilac-*
 	rm -rf $(BUILD_DIR)

@@ -10,16 +10,16 @@ class TestSFC < Minitest::Test
       </template>
 
       <script type="text/ruby">
-        class Counter < Grainet::Component
+        class Counter < Lilac::Component
         end
       </script>
     GNT
 
-    comp = Grainet::CLI::SFC.parse(source)
+    comp = Lilac::CLI::SFC.parse(source)
     assert_equal 1, comp.templates.length
     assert_nil comp.templates.first.name
     assert_includes comp.templates.first.body, 'data-ref="count"'
-    assert_includes comp.script, "class Counter < Grainet::Component"
+    assert_includes comp.script, "class Counter < Lilac::Component"
   end
 
   def test_named_template
@@ -29,12 +29,12 @@ class TestSFC < Minitest::Test
       </template>
 
       <script type="text/ruby">
-        class TodoList < Grainet::Component
+        class TodoList < Lilac::Component
         end
       </script>
     GNT
 
-    comp = Grainet::CLI::SFC.parse(source)
+    comp = Lilac::CLI::SFC.parse(source)
     assert_equal "row", comp.templates.first.name
     assert_equal 0, comp.default_templates.length
     assert_equal 1, comp.named_templates.length
@@ -55,11 +55,11 @@ class TestSFC < Minitest::Test
       </template>
 
       <script type="text/ruby">
-        class X < Grainet::Component; end
+        class X < Lilac::Component; end
       </script>
     GNT
 
-    comp = Grainet::CLI::SFC.parse(source)
+    comp = Lilac::CLI::SFC.parse(source)
     assert_equal 3, comp.templates.length
     assert_nil comp.templates[0].name
     assert_equal "row", comp.templates[1].name
@@ -72,17 +72,17 @@ class TestSFC < Minitest::Test
   def test_multiple_script_blocks_concatenated
     source = <<~GNT
       <script type="text/ruby">
-        class A < Grainet::Component; end
+        class A < Lilac::Component; end
       </script>
 
       <template></template>
 
       <script type="text/ruby">
-        class B < Grainet::Component; end
+        class B < Lilac::Component; end
       </script>
     GNT
 
-    comp = Grainet::CLI::SFC.parse(source)
+    comp = Lilac::CLI::SFC.parse(source)
     assert_includes comp.script, "class A"
     assert_includes comp.script, "class B"
   end
@@ -90,26 +90,26 @@ class TestSFC < Minitest::Test
   def test_preserves_inner_html_verbatim
     body = "  <div>\n    <span>hi</span>\n  </div>\n"
     source = "<template>#{body}</template><script type=\"text/ruby\">x = 1</script>"
-    comp = Grainet::CLI::SFC.parse(source)
+    comp = Lilac::CLI::SFC.parse(source)
     assert_equal body, comp.templates.first.body
   end
 
   def test_unterminated_template_raises
-    err = assert_raises(Grainet::CLI::SFC::ParseError) do
-      Grainet::CLI::SFC.parse("<template>oops")
+    err = assert_raises(Lilac::CLI::SFC::ParseError) do
+      Lilac::CLI::SFC.parse("<template>oops")
     end
     assert_match(/Unterminated <template>/, err.message)
   end
 
   def test_unterminated_script_raises
-    err = assert_raises(Grainet::CLI::SFC::ParseError) do
-      Grainet::CLI::SFC.parse('<script type="text/ruby">oops')
+    err = assert_raises(Lilac::CLI::SFC::ParseError) do
+      Lilac::CLI::SFC.parse('<script type="text/ruby">oops')
     end
     assert_match(/Unterminated <script/, err.message)
   end
 
   def test_empty_source_yields_empty_component
-    comp = Grainet::CLI::SFC.parse("")
+    comp = Lilac::CLI::SFC.parse("")
     assert_empty comp.templates
     assert_equal "", comp.script
   end
@@ -120,7 +120,7 @@ class TestSFC < Minitest::Test
       <template>X</template>
       <script type="text/ruby">y = 1</script>
     GNT
-    comp = Grainet::CLI::SFC.parse(source)
+    comp = Lilac::CLI::SFC.parse(source)
     assert_equal "X", comp.templates.first.body
     assert_includes comp.script, "y = 1"
   end
@@ -132,7 +132,7 @@ class TestSFC < Minitest::Test
       <template>X</template>
       <script type="text/ruby">y = 1</script>
     GNT
-    comp = Grainet::CLI::SFC.parse(source)
+    comp = Lilac::CLI::SFC.parse(source)
     assert_equal "X", comp.templates.first.body
     assert_includes comp.script, "y = 1"
     refute_includes comp.script, "console.log"
