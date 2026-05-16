@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative "../lib/grainet/cli"
+require_relative "../lib/lilac/cli"
 
-exit Grainet::CLI::Command.new(ARGV).run
+exit Lilac::CLI::Command.new(ARGV).run
