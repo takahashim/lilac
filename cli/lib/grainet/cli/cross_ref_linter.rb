@@ -2,6 +2,7 @@
 
 require_relative "script_scanner"
 require_relative "hash_literal_parser"
+require_relative "lint_warning"
 
 module Grainet
   module CLI
@@ -83,30 +84,29 @@ module Grainet
       end
 
       def self.emit_signal_warning(out, directive, ivar, declared, component_name, file)
-        lines = [
-          "grainet: lint warning in #{file}:#{directive.line}",
-          "  Signal #{ivar} is not declared via signal/computed/resource/persistent_signal " \
-          "in #{component_name}. Possible typo or dynamic declaration.",
-        ]
-        lines << "  Declared signals: #{declared.join(', ')}." if declared.any?
-        if (suggestion = nearest(ivar, declared))
-          lines << "  Did you mean: #{suggestion}?"
-        end
-        out.puts(lines.join("\n"))
-        out.puts
+        emit(out, LintWarning.new(
+          file: file, line: directive.line,
+          body: "Signal #{ivar} is not declared via signal/computed/resource/persistent_signal " \
+                "in #{component_name}. Possible typo or dynamic declaration.",
+          declared_label: "Declared signals", declared: declared,
+          suggestion: nearest(ivar, declared),
+        ))
       end
 
       def self.emit_method_warning(out, directive, method, declared, component_name, file)
-        lines = [
-          "grainet: lint warning in #{file}:#{directive.line}",
-          "  Method `#{method}` (referenced by data-on-#{directive.name}) is not defined " \
-          "in #{component_name}. Possible typo or external delegation.",
-        ]
-        lines << "  Declared methods: #{declared.join(', ')}." if declared.any?
-        if (suggestion = nearest(method, declared))
-          lines << "  Did you mean: #{suggestion}?"
-        end
-        out.puts(lines.join("\n"))
+        emit(out, LintWarning.new(
+          file: file, line: directive.line,
+          body: "Method `#{method}` (referenced by data-on-#{directive.name}) is not defined " \
+                "in #{component_name}. Possible typo or external delegation.",
+          declared_label: "Declared methods", declared: declared,
+          suggestion: nearest(method, declared),
+        ))
+      end
+
+      # Writes the warning followed by a blank line so consecutive
+      # warnings stay visually separated in stderr output.
+      def self.emit(out, warning)
+        out.puts(warning.to_s)
         out.puts
       end
 
