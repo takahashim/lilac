@@ -34,9 +34,15 @@ class TestCrossRefLinter < Minitest::Test
   # ---- undeclared signal: warning with context -----------------
 
   def test_undeclared_signal_emits_warning_with_declared_list
+    # Both @count and @total appear in template directives so the
+    # dead-signal lint stays quiet; only the @missing typo fires.
     count, out = lint(
       script: "@count = signal(0)\n@total = computed { @count.value }",
-      directives: [dir(:text, value: "@missing", line: 7)],
+      directives: [
+        dir(:text, value: "@count"),
+        dir(:text, value: "@total"),
+        dir(:text, value: "@missing", line: 7),
+      ],
     )
     assert_equal 1, count
     assert_includes out, "grainet: lint warning in x.gnt:7"
@@ -69,11 +75,24 @@ class TestCrossRefLinter < Minitest::Test
     # it_path is not a signal reference, so the script-vs-template
     # signal check doesn't fire. (At top level it would trigger the
     # separate "it outside data-each" warning — see below.)
+    # Reference @items in the outer data-each so the dead-signal
+    # lint doesn't fire on it either.
+    each_dir = Grainet::CLI::Directive.new(
+      kind: :each, name: nil, value: "@items", ref_id: "g0",
+      line: 1, element_tag: "ul", scope_id: nil,
+    )
+    key_dir = Grainet::CLI::Directive.new(
+      kind: :key, name: nil, value: "id", ref_id: "g0",
+      line: 1, element_tag: "ul", scope_id: nil,
+    )
     inside_each = Grainet::CLI::Directive.new(
       kind: :text, name: nil, value: "it.title", ref_id: "g1",
       line: 1, element_tag: "span", scope_id: "g0",
     )
-    count, = lint(script: "@items = signal([])", directives: [inside_each])
+    count, = lint(
+      script: "@items = signal([])",
+      directives: [each_dir, key_dir, inside_each],
+    )
     assert_equal 0, count
   end
 
@@ -216,6 +235,89 @@ class TestCrossRefLinter < Minitest::Test
       script: "",
       directives: [],
       refs_map: { "message" => { tag: "p", line: 2 }, "submit_btn" => { tag: "button", line: 3 } },
+    )
+    assert_equal 0, count
+  end
+
+  # ---- dead-code (lint, AST-based) ------------------------------
+
+  def test_declared_signal_used_only_in_computed_block_is_not_dead
+    # The AST walker sees `@count.value` inside the computed block,
+    # so @count is properly recognised as live even though no
+    # directive references it directly.
+    count, = lint(
+      script: <<~RUBY,
+        @count = signal(0)
+        @doubled = computed { @count.value * 2 }
+      RUBY
+      directives: [dir(:text, value: "@doubled")],
+    )
+    assert_equal 0, count
+  end
+
+  def test_truly_unreferenced_signal_emits_dead_warning
+    _, out = lint(
+      script: <<~RUBY,
+        @used = signal(0)
+        @orphan = signal(1)
+      RUBY
+      directives: [dir(:text, value: "@used")],
+    )
+    assert_includes out, "Signal @orphan is declared"
+    assert_includes out, "never read"
+    refute_includes out, "@used is declared"
+  end
+
+  def test_helper_method_called_from_setup_is_not_dead
+    # The AST walker sees the `make_counter` call inside `setup`, so
+    # the dead-method lint correctly leaves it alone.
+    count, = lint(
+      script: <<~RUBY,
+        def setup
+          @count = make_counter
+        end
+        def make_counter; signal(0); end
+      RUBY
+      directives: [dir(:text, value: "@count")],
+    )
+    assert_equal 0, count
+  end
+
+  def test_truly_unreferenced_method_emits_dead_warning
+    _, out = lint(
+      script: <<~RUBY,
+        def used(_ev); end
+        def ghost(_ev); end
+      RUBY
+      directives: [dir(:on, name: "click", value: "used", tag: "button")],
+    )
+    assert_includes out, "Method `ghost` is defined"
+    refute_includes out, "Method `used`"
+  end
+
+  def test_lifecycle_methods_never_dead
+    count, = lint(
+      script: <<~RUBY,
+        def setup; end
+        def bind_template_hook; end
+      RUBY
+      directives: [],
+    )
+    assert_equal 0, count
+  end
+
+  def test_send_symbol_call_keeps_method_alive
+    # Dynamic dispatch via `send(:foo)` is statically recoverable
+    # when the argument is a symbol literal — the dead-method lint
+    # should treat the target as called.
+    count, = lint(
+      script: <<~RUBY,
+        def setup
+          send(:foo)
+        end
+        def foo; end
+      RUBY
+      directives: [],
     )
     assert_equal 0, count
   end

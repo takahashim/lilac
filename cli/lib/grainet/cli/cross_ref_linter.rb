@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "script_scanner"
+require_relative "script_analyzer"
 require_relative "hash_literal_parser"
 require_relative "lint_warning"
 require_relative "source_location"
@@ -10,9 +10,10 @@ module Grainet
     # Build-time cross-reference linter. Compares identifiers used in
     # template directives (ivars in `data-text`, methods in
     # `data-on-X`, etc.) against the declarations extracted from
-    # `<script type="text/ruby">` by ScriptScanner. Undeclared
-    # references emit a warning to stderr (or any caller-provided IO);
-    # warnings are non-fatal — the build still succeeds.
+    # `<script type="text/ruby">` by ScriptAnalyzer (AST-based).
+    # Undeclared references emit a warning to stderr (or any
+    # caller-provided IO); warnings are non-fatal — the build still
+    # succeeds.
     #
     # Pure scan: never raises. Returns the count of warnings emitted so
     # callers (e.g. a future `--strict` mode) can decide to exit with
@@ -23,11 +24,17 @@ module Grainet
       # surfacing unrelated names.
       SUGGESTION_MAX_DISTANCE = 2
 
+      # Methods the framework calls without an explicit `def name` →
+      # `data-on-X` wiring; never flag them as dead even if no
+      # template directive references them.
+      LIFECYCLE_METHODS = %w[
+        setup initialize bind_template_hook prepare_setup
+      ].freeze
+
       # `data-ref` names that collide with Object / Kernel methods —
       # `refs.X` then dispatches to the Ruby method instead of
       # `Refs#method_missing`, producing a confusing NoMethodError or
-      # silent wrong behaviour. List is conservative (spec Section 9
-      # "data-ref 名と Ruby 標準 method の衝突").
+      # silent wrong behaviour.
       RESERVED_REF_NAMES = %w[
         p puts print pp format sprintf printf
         gets getc
@@ -38,35 +45,37 @@ module Grainet
       ].freeze
 
       def self.lint(script_text:, directives:, component_name:, file:, refs_map: {}, out: $stderr)
-        scan = ScriptScanner.scan(script_text)
+        analysis = ScriptAnalyzer.analyze(script_text)
         warnings = 0
 
-        warnings += lint_per_directive(scan, directives, component_name, file, out)
+        warnings += lint_per_directive(analysis, directives, component_name, file, out)
         warnings += lint_each_without_key(directives, file, out)
         warnings += lint_reserved_ref_names(refs_map, file, out)
-        # Note: dead-code (declared but never template-referenced) is
-        # deliberately not enforced — helper methods called from
-        # `setup` / other methods and signals consumed only by
-        # `computed { ... }` would produce false positives without a
-        # proper script-side reference scan.
+        warnings += lint_dead_signals(analysis, directives, component_name, file, out)
+        warnings += lint_dead_methods(analysis, directives, component_name, file, out)
 
         warnings
       end
 
       # Walks each directive once, surfacing undeclared signal/method
       # references and `it` used outside any `data-each`.
-      def self.lint_per_directive(scan, directives, component_name, file, out)
+      def self.lint_per_directive(analysis, directives, component_name, file, out)
         warnings = 0
         directives.each do |directive|
           ivars_in_directive(directive).each do |ivar|
-            next if scan.declares_signal?(ivar) || scan.assigns_ivar?(ivar)
+            next if analysis.declares_signal?(ivar)
+            # Soft fallback: any `@x = ...` somewhere in the script
+            # could be a helper-style signal init the static check
+            # can't see — suppress the warning rather than blame the
+            # user for a pattern Ruby allows.
+            next if analysis.assigns_ivar?(ivar)
 
-            emit_signal_warning(out, directive, ivar, scan.signals, component_name, file)
+            emit_signal_warning(out, directive, ivar, analysis.declared_signals.keys, component_name, file)
             warnings += 1
           end
           method = method_in_directive(directive)
-          if method && !scan.declares_method?(method)
-            emit_method_warning(out, directive, method, scan.methods, component_name, file)
+          if method && !analysis.declares_method?(method)
+            emit_method_warning(out, directive, method, analysis.declared_methods.keys, component_name, file)
             warnings += 1
           end
           if uses_it_path?(directive) && directive.scope_id.nil?
@@ -96,6 +105,40 @@ module Grainet
           next unless RESERVED_REF_NAMES.include?(name)
 
           emit_reserved_ref_warning(out, name, info[:line], file)
+          warnings += 1
+        end
+        warnings
+      end
+
+      # A signal is dead if it's declared but neither read anywhere in
+      # the script (e.g. inside `computed { @x.value }`, another
+      # method body, etc.) NOR referenced by any template directive.
+      def self.lint_dead_signals(analysis, directives, component_name, file, out)
+        template_refs = collect_referenced_ivars(directives)
+        warnings = 0
+        analysis.declared_signals.each do |ivar, line|
+          next if analysis.references_ivar?(ivar)
+          next if template_refs.include?(ivar)
+
+          emit_dead_signal_warning(out, ivar, line, component_name, file)
+          warnings += 1
+        end
+        warnings
+      end
+
+      # A method is dead if it's declared but neither called in the
+      # script (including `send(:name)`, `method(:name)`, helper
+      # delegation) NOR referenced by any `data-on-X` directive, and
+      # it isn't a framework-called lifecycle method.
+      def self.lint_dead_methods(analysis, directives, component_name, file, out)
+        template_refs = collect_referenced_methods(directives)
+        warnings = 0
+        analysis.declared_methods.each do |method, line|
+          next if LIFECYCLE_METHODS.include?(method)
+          next if analysis.calls_method?(method)
+          next if template_refs.include?(method)
+
+          emit_dead_method_warning(out, method, line, component_name, file)
           warnings += 1
         end
         warnings
@@ -159,6 +202,14 @@ module Grainet
         s == "it" || s.start_with?("it.")
       end
 
+      def self.collect_referenced_ivars(directives)
+        directives.flat_map { |d| ivars_in_directive(d) }.uniq
+      end
+
+      def self.collect_referenced_methods(directives)
+        directives.filter_map { |d| method_in_directive(d) }.uniq
+      end
+
       def self.emit_signal_warning(out, directive, ivar, declared, component_name, file)
         guess = nearest(ivar, declared)
         emit(out, LintWarning.new(
@@ -205,6 +256,24 @@ module Grainet
           body: "data-ref #{name.inspect} collides with a Ruby Kernel/Object method. " \
                 "`refs.#{name}` will dispatch to the built-in method instead of the ref lookup.",
           suggestion: "Rename the ref (e.g. `#{name}_el`) or access it via `refs[:#{name}]`.",
+        ))
+      end
+
+      def self.emit_dead_signal_warning(out, ivar, line, component_name, file)
+        emit(out, LintWarning.new(
+          at: SourceLocation.new(file: file, line: line),
+          body: "Signal #{ivar} is declared in #{component_name} but never read — " \
+                "no `#{ivar}` reference in the script and no template directive uses it.",
+          suggestion: "Remove the declaration if it's unused, or wire it into a directive.",
+        ))
+      end
+
+      def self.emit_dead_method_warning(out, method, line, component_name, file)
+        emit(out, LintWarning.new(
+          at: SourceLocation.new(file: file, line: line),
+          body: "Method `#{method}` is defined in #{component_name} but never called — " \
+                "no call in the script and no `data-on-X` directive references it.",
+          suggestion: "Remove if unused, or wire it via `data-on-<event>=\"#{method}\"`.",
         ))
       end
 

@@ -27,8 +27,14 @@ Gem::Specification.new do |spec|
   # listen handles file-watch for live reload.
   # nokogiri parses `.gnt` template bodies for directive extraction
   # (HTML5 fragment mode, attribute walking, source-line tracking).
+  # prism parses the user's Ruby `<script>` body into a real AST so
+  # the cross-reference linter can track signal/method declarations
+  # and references precisely (helper-method calls, `send(:foo)`,
+  # ivar reads inside `computed { ... }` blocks all resolve correctly).
+  # Bundled with Ruby 3.3+; explicit dep covers the 3.2 baseline.
   spec.add_dependency "listen", "~> 3.9"
   spec.add_dependency "nokogiri", "~> 1.16"
+  spec.add_dependency "prism", "~> 1.0"
   spec.add_dependency "wsv", "~> 0.10"
 
   spec.metadata["rubygems_mfa_required"] = "true"
