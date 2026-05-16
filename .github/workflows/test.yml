@@ -16,13 +16,15 @@ jobs:
           path: lilac
 
       # Lilac's build depends on mruby-wasm-runtime as a sibling repo
-      # (case Z: ENV override pointing at a local clone). Tracks main
-      # until mruby-wasm-runtime cuts a stable tag.
+      # (case Z: ENV override pointing at a local clone). Pinned to the
+      # latest mruby-wasm-runtime release tag so CI sees exactly what
+      # users get from `@takahashim/mruby-wasm-js` on npm — bump this
+      # ref when adopting a newer mruby-wasm-runtime release.
       - name: Checkout mruby-wasm-runtime
         uses: actions/checkout@v4
         with:
           repository: takahashim/mruby-wasm-runtime
-          ref: main
+          ref: v0.2.0
           path: mruby-wasm-runtime
 
       - name: Set up Node.js
