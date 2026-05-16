@@ -4,13 +4,12 @@ source "https://rubygems.org"
 
 gemspec
 
-# Use the local wsv checkout during development so changes flow through
-# without a rubygems publish cycle. When lilac-cli is released, the
-# gemspec dependency resolves the published gem instead.
-# Local wsv checkout during development so changes flow through without
-# a rubygems publish cycle. Path is relative to the repo root (one level
-# up from `cli/`), where wsv is expected as a sibling clone of lilac.
-gem "wsv", path: "../../wsv"
+# Use a local wsv checkout when present so changes flow without a
+# rubygems publish cycle. Falls through to the gemspec's ~> 0.10
+# dependency (resolved from rubygems) when the sibling clone is absent
+# — keeps CI builds working without cloning wsv too.
+wsv_local = File.expand_path("../../wsv", __dir__)
+gem "wsv", path: wsv_local if File.directory?(wsv_local)
 
 group :development do
   gem "minitest", "~> 5.0"

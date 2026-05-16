@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout lilac
+        uses: actions/checkout@v4
+        with:
+          path: lilac
+
+      # Lilac's build depends on mruby-wasm-runtime as a sibling repo
+      # (case Z: ENV override pointing at a local clone). Tracks main
+      # until mruby-wasm-runtime cuts a stable tag.
+      - name: Checkout mruby-wasm-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: takahashim/mruby-wasm-runtime
+          ref: main
+          path: mruby-wasm-runtime
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Matches mruby-wasm-runtime's CI — needed for stable
+          # --experimental-wasm-exnref support.
+          node-version: '24'
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: lilac/cli
+
+      # Bump cache key suffix when WASI_SDK_VERSION / MRUBY_TAG change
+      # in mruby-wasm-runtime/Makefile.
+      - name: Cache wasi-sdk tarball
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mruby-wasm-runtime
+          key: wasi-sdk-33.0-x86_64-linux
+
+      - name: Cache mruby clone
+        uses: actions/cache@v4
+        with:
+          path: mruby-wasm-runtime/mruby
+          key: mruby-4.0.0
+
+      # mruby-wasm-runtime's Makefile owns the wasi-sdk extraction +
+      # mruby clone. Lilac's Makefile reuses both from $(MRUBY_DIR) /
+      # $(WASI_SDK_DIR) but doesn't bootstrap them itself, so trigger
+      # them here before building lilac.
+      - name: Bootstrap wasi-sdk + mruby clone
+        working-directory: mruby-wasm-runtime
+        run: make wasi-sdk && make js
+
+      - name: Build js-lilac-full
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+        run: make js-lilac-full
+
+      - name: Run wasm_spec
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+        run: make test
+
+      - name: Run cli minitest
+        working-directory: lilac/cli
+        run: bundle exec rake test
