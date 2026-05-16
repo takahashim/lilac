@@ -62,9 +62,10 @@ module HTML
   # carry a `?` / `!` suffix and we want a uniform style across the
   # module's API.
   class << self
-    # Entity-escape a String. Replaces &, <, >, ", '. mruby's default
-    # build doesn't link a Regexp engine, so we walk the string with
-    # each_char and a case statement — slower than gsub, but portable.
+    # Entity-escape a String. Replaces &, <, >, ", '. Walks the
+    # string with each_char + a case statement; this is a hot path
+    # (called per text-binding update) so we avoid the per-call
+    # allocation and dispatch overhead of `gsub(/.../, MAP)`.
     def escape(value)
       out = String.new
       value.to_s.each_char do |c|

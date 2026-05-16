@@ -185,8 +185,8 @@ module Lilac
     # Comparison is case-insensitive on the attribute name.
     URL_ATTRIBUTES = %w[href src action formaction].freeze
     # Dangerous URL protocol prefixes (case-insensitive, leading
-    # whitespace tolerated). Default mruby has no Regexp engine, so
-    # we match by lstrip + downcase + start_with? rather than regex.
+    # whitespace tolerated). Matched via lstrip + downcase + start_with?
+    # because that's cleaner than a regex alternation for this short list.
     DANGEROUS_PROTOCOLS = %w[javascript: vbscript: data:text/html].freeze
 
     # bind(ref, prop: signal_or_computed)         # single property
@@ -326,9 +326,8 @@ module Lilac
       el.attr(name, str)
     end
 
-    # Spec Appendix B regex equivalent without a Regexp engine:
-    # leading whitespace, then a dangerous protocol prefix
-    # (case-insensitive).
+    # Spec Appendix B: leading whitespace, then a dangerous protocol
+    # prefix (case-insensitive).
     def dangerous_url?(str)
       head = str.lstrip.downcase
       DANGEROUS_PROTOCOLS.any? { |p| head.start_with?(p) }

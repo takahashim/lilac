@@ -1785,9 +1785,9 @@ mruby は `if x.nil?` を型タグチェックにインライン化し、`#nil?`
 
 ### `Regexp` の扱い
 
-`mruby-regexp-compat` (mruby master の `mruby-regexp` をベンダー) を `js-lilac-full` / `js-lilac-small` バンドルに同梱しているので、ユーザコードからは普通に Regexp / `=~` / `match?` が使える。`js-lilac-min` は意図的に同梱外。
+`mruby-regexp-compat` (mruby master の `mruby-regexp` をベンダー) を `js-lilac-full` / `js-lilac-small` バンドルに同梱しているので、ランタイム内部でもユーザコードからも普通に Regexp / `=~` / `match?` が使える。`js-lilac-min` は意図的に同梱外。
 
-ランタイム本体は hot path 上では Regexp を避けて `each_char` / `String#include?` ベースで実装する方針(`HTML.escape`、`update/mutate` の error 判定など)。バインド毎に走るコードでブリッジ越し Regexp 呼び出しを発生させないため。一方、Lilac::Directives の文法バリデータなど one-shot な処理は Regexp を使う。
+例外として、`HTML.escape` だけは hot path (text バインド毎に走る) なので Regexp / `gsub` の per-call allocation を避けて `each_char` + case で実装している。他のバリデータ (`AttrName`、`Lilac::Directives::Grammar` の文法 predicate など) は one-shot 呼び出しなので普通に Regexp を使う。
 
 ### Build size
 
