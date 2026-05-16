@@ -22,18 +22,13 @@ module Grainet
     # boolean attribute serialization. The HTML returned by `parse` is
     # round-tripped through Nokogiri::HTML5.
     #
-    # Phase A1 scope:
-    #
-    #   - Detect directives, assign synthetic refs, return Directive list.
-    #   - Do NOT validate directive values against the spec grammar yet
-    #     (Section 3 validation arrives with the per-directive phases).
-    #   - Do NOT strip directive attributes from the output HTML — keeping
-    #     them in place lets `data-component`/`data-ref` continue to flow
-    #     through to the runtime, and is harmless for the other
-    #     directives until codegen actually consumes them.
+    # Directive values are NOT validated against the value grammar here
+    # — that lives in the per-directive Codegen emitters. Directive
+    # attributes are left in the output HTML so `data-component` /
+    # `data-ref` continue to flow through to the runtime.
     class TemplateAST
-      # `synthetic_templates` carries Phase E `data-each` iteration
-      # bodies extracted out of the main template tree. Each entry is
+      # `synthetic_templates` carries `data-each` iteration bodies
+      # extracted out of the main template tree. Each entry is
       # `{ ref_id: "g0", html: "<li>...</li>" }`; the Builder turns
       # them into `<template data-template="gn-each-<component>-<ref>">`
       # elements injected before `</body>`, which the runtime

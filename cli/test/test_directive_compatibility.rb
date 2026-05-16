@@ -124,7 +124,7 @@ class TestDirectiveCompatibility < Minitest::Test
   def test_data_class_gn_hidden_without_show_or_hide_ok
     # No data-show / data-hide on element → no conflict, even with the
     # reserved key in data-class. The standalone reservation warning is
-    # a Phase H lint concern, not a build error.
+    # a lint concern handled by the cross-reference linter, not a build error.
     DC.check!([dir(:class_, value: "{ 'gn-hidden': @x }")], file: "x.gnt")
   end
 

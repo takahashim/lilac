@@ -2,8 +2,7 @@
 
 require "test_helper"
 
-# Per-directive emit behaviour for Codegen. Covers Phase B1 smoke set
-# (data-component / data-text / data-on-X).
+# Per-directive emit behaviour for Codegen.
 class TestDirectiveCodegen < Minitest::Test
   Directive = Grainet::CLI::Directive
 
@@ -162,9 +161,9 @@ class TestDirectiveCodegen < Minitest::Test
   end
 
   def test_data_value_rejects_it_path
-    # data-value is two-way and writes back to the signal, so
+    # data-value is two-way and writes back to the signal, so an
     # iteration item field (`it.x` — immutable Data attribute) is
-    # not a valid target. Per Section 6.2.
+    # not a valid target.
     err = assert_raises(Grainet::CLI::Codegen::Error) do
       gen([value_dir(value: "it.title", line: 3)], source_path: "form.gnt")
     end

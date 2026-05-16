@@ -11,9 +11,9 @@ module Grainet
     # non-X-family directives `name` is `nil`.
     #
     # `value` is the raw attribute value string (e.g. `"@count"` /
-    # `"increment"` / `"{ active: @s }"`). Parsing the value against the
-    # spec grammar (Section 3) happens in later phases; Phase A1 only
-    # collects the raw string.
+    # `"increment"` / `"{ active: @s }"`). Grammar validation happens
+    # per-directive at codegen time; TemplateAST only collects the raw
+    # string.
     #
     # `ref_id` is the synthetic or explicit ref name assigned by
     # `TemplateAST` so codegen can address the element via
@@ -22,8 +22,8 @@ module Grainet
     # `line` is the source line in the template body (1-based,
     # Nokogiri's `node.line`), used for error reporting.
     #
-    # `element_tag` is the HTML element name (e.g. "div", "button") used
-    # by later phases to enforce applicability rules from spec Section 9
+    # `element_tag` is the HTML element name (e.g. "div", "button"),
+    # consumed by DirectiveCompatibility to enforce applicability rules
     # (e.g. `data-value` requires a form control).
     # `scope_id` is the `ref_id` of the enclosing `data-each` element,
     # or `nil` for directives at the component's top level. Codegen

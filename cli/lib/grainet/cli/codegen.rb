@@ -35,7 +35,7 @@ module Grainet
 
       # `refs_expr` is the Ruby expression that resolves to the Refs
       # proxy in the current emit context. `in_iteration` toggles the
-      # `(it, ev)` vs `(ev)` event handler arity (spec Section 6.1).
+      # `(it, ev)` vs `(ev)` event handler arity.
       Context = Struct.new(:refs_expr, :in_iteration, keyword_init: true) do
         def self.top_level
           new(refs_expr: "refs", in_iteration: false)
@@ -72,7 +72,7 @@ module Grainet
       def run
         return "" if @directives.empty?
 
-        # Spec Sections 8 + 9 build-time checks. Run before key_map so
+        # Composition + applicability checks. Run before key_map so
         # composition violations are reported with their own messages
         # rather than getting masked by a downstream parse/emit error.
         DirectiveCompatibility.check!(@directives, file: @file)
@@ -162,7 +162,7 @@ module Grainet
 
       # data-text="@s" → `bind refs.gN, text: @s`. Value must be
       # ivar or it_path (read-only); arbitrary expressions are rejected
-      # at build time per Section 3 of the spec.
+      # at build time.
       def emit_text(directive, context)
         value = read_value_or_raise(directive, "data-text")
         [
@@ -185,7 +185,7 @@ module Grainet
       # data-value="@s" → `bind_input refs.gN, @s`. ivar-only because
       # bind_input writes back to the signal on input events; an
       # immutable iteration item field (`it.x`) couldn't accept the
-      # write. Per Section 6.2.
+      # write.
       def emit_value(directive, context)
         value = ivar_or_raise(directive, "data-value")
         [
@@ -266,8 +266,8 @@ module Grainet
 
       # data-on-X="m" → `refs.gN.on(:X) { |ev| m(ev) }` at the top
       # level, or `t.refs.gN.on(:X) { |ev| m(it, ev) }` inside a
-      # data-each body (spec Section 6.1: handlers in iteration scope
-      # receive `(item, event)` so the method can act on the row).
+      # data-each body — iteration handlers receive `(item, event)` so
+      # the method can act on the row.
       def emit_on(directive, context)
         method_name = directive.value.to_s.strip
         unless ValueGrammar.method_ident?(method_name)
@@ -286,9 +286,9 @@ module Grainet
       end
 
       # data-attr-X="@s" → `bind refs.gN, attr: { "X" => @s }`. Goes
-      # through Bindable#bind_attr (Phase C) which calls `source.value`
-      # in an effect, handles nil/false → removeAttribute, and runs
-      # URL sanitizer on href/src/action/formaction.
+      # through Bindable#bind_attr which calls `source.value` in an
+      # effect, handles nil/false → removeAttribute, and runs the URL
+      # sanitizer on href/src/action/formaction.
       def emit_attr(directive, context)
         name = directive.name.to_s
         if ValueGrammar.banned_attr?(name)
@@ -308,7 +308,7 @@ module Grainet
       # The framework auto-prepends `--`, so users write
       # `data-css-progress` (kebab) and get the CSS variable `--progress`.
       # RefElement#set_style maps nil/false → removeProperty so falsy
-      # signal values clear the CSS variable per spec Section 7.
+      # signal values clear the CSS variable.
       def emit_css(directive, context)
         name = directive.name.to_s
         unless ValueGrammar.kebab_name?(name)
@@ -368,9 +368,8 @@ module Grainet
           if key_field
             "->(it) { it.#{key_field} }"
           else
-            # Spec Section 6.3: fallback to object_id (Phase H will
-            # surface a lint warning). object_id is stable per item
-            # for the lifetime of a render cycle.
+            # No data-key specified — fall back to object_id, stable
+            # per item for the lifetime of a render cycle.
             "->(it) { it.object_id }"
           end
         tpl_name = self.class.each_template_name(@component_name, ref_id)
@@ -384,8 +383,8 @@ module Grainet
 
       # Walks the directive list once and returns `{ ref_id => "id" }`
       # for every valid `:key`. Raises if a data-key has no matching
-      # data-each on the same element, or if the value violates spec
-      # Section 6.3 (must be a bare ident, no `?` / `@` / `it.` / `.`).
+      # data-each on the same element, or if the value is not a bare
+      # ident (no `?` / `@` / `it.` / `.`).
       def build_key_map
         each_ref_ids = @directives.select { |d| d.kind == :each }.map(&:ref_id)
         map = {}

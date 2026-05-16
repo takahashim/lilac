@@ -2,12 +2,9 @@
 
 module Grainet
   module CLI
-    # Validators for directive value strings, derived from spec Appendix A.
-    # Each pattern is anchored (\A...\z) on its public predicate so callers
-    # always match the whole string.
-    #
-    # See docs/grainet-directive-spec.md Section 3 (値の文法) and
-    # Appendix A (Validator regexp) for the grammar this implements.
+    # Validators for directive value strings. Each pattern is anchored
+    # (\A...\z) on its public predicate so callers always match the
+    # whole string.
     module ValueGrammar
       # The base building block. `?` predicate suffix allowed; bang `!`
       # is rejected at the IDENT level (the regex below stops before any
@@ -26,15 +23,14 @@ module Grainet
       IT_PATH       = /\Ait(?:\.#{IDENT_INNER.source})?\z/
       READ_VALUE    = /\A(?:@#{IDENT_INNER.source}|it(?:\.#{IDENT_INNER.source})?)\z/
 
-      # `data-attr-X` / `data-css-X` / `data-arg-X` の X 部分.
-      # Per spec Sections 6.6 / 6.7 / 9: kebab-lowercase, letter-first,
-      # `--` prefix rejected to avoid clashing with CSS variable syntax
-      # that the framework prepends.
+      # X part of `data-attr-X` / `data-css-X` / `data-arg-X`:
+      # kebab-lowercase, letter-first. `--` prefix rejected to avoid
+      # clashing with the CSS variable `--` prefix the framework prepends.
       KEBAB_NAME    = /\A[a-z][a-z0-9-]*\z/
 
-      # Per spec Appendix B: inline event handlers (`on*`), `srcdoc`
-      # (iframe HTML injection vector), and `style` (use `data-css-X`
-      # or `RefElement#set_style` instead) are banned from `data-attr-X`.
+      # Inline event handlers (`on*`), `srcdoc` (iframe HTML injection
+      # vector), and `style` (use `data-css-X` or `RefElement#set_style`
+      # instead) are banned from `data-attr-X`.
       BANNED_ATTR   = /\Aon[a-z]+\z|\Asrcdoc\z|\Astyle\z/
 
       module_function
@@ -46,9 +42,9 @@ module Grainet
       # is rejected so the caller can choose to view-model the value.
       def it_path?(s) = IT_PATH.match?(s)
 
-      # Either an ivar or an it_path — the union spec calls READ_VALUE.
-      # Used by `data-text` / `data-unsafe-html` / `data-show` / `data-hide`
-      # / `data-attr-X` / `data-css-X` / `data-each`.
+      # Either an ivar or an it_path. Used by `data-text` /
+      # `data-unsafe-html` / `data-show` / `data-hide` / `data-attr-X` /
+      # `data-css-X` / `data-each`.
       def read_value?(s) = READ_VALUE.match?(s)
 
       # `increment` / `add_todo`. Event-handler method names — no `?`

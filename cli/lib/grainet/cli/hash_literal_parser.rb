@@ -2,7 +2,7 @@
 
 module Grainet
   module CLI
-    # Parser for the `data-class` hash literal grammar (spec Section 6.4).
+    # Parser for the `data-class` hash literal grammar.
     # Recognises Ruby Hash-literal style:
     #
     #   { active: @is_active, 'btn-primary': @primary, "hover:bg-blue": @h }

@@ -4,25 +4,24 @@ require_relative "hash_literal_parser"
 
 module Grainet
   module CLI
-    # Build-time validation of directive composition rules from spec
-    # Sections 8 (合成衝突) and 9 (適用対象). Called by Codegen.run after
-    # directive collection but before code emission so violations surface
-    # as a build error rather than a runtime failure on the user's page.
+    # Build-time validation of directive composition rules. Called by
+    # Codegen.run after directive collection but before code emission so
+    # violations surface as a build error rather than a runtime failure
+    # on the user's page.
     #
-    # Phase F scope: pair collisions detectable from the Directive list
-    # alone, plus tag-level element-type checks. NOT included (deferred
-    # to follow-up phases):
-    #   - data-component + data-each collision (TemplateAST does not
-    #     currently emit :component directives, so it is invisible here)
-    #   - <input type=text|email|...> vs <input type=checkbox> distinction
-    #     for data-value / data-checked — directives only carry the tag
+    # Currently checks pair collisions detectable from the Directive list
+    # alone, plus tag-level element-type checks. Not yet enforced:
+    #   - data-component + data-each collision — TemplateAST does not
+    #     emit :component directives, so it is invisible here
+    #   - <input type=text|email|...> vs <input type=checkbox> for
+    #     data-value / data-checked — Directive only carries the tag
     #     name, not the type attribute
-    #   - data-arg-X validations (data-arg has no emitter yet)
+    #   - data-arg-X validations — data-arg has no emitter yet
     module DirectiveCompatibility
       class Error < StandardError; end
 
-      # Per spec Section 8: directive pairs that may not coexist on the
-      # same element. Each row is [Array<kind>, message].
+      # Directive pairs that may not coexist on the same element. Each
+      # row is [Array<kind>, message].
       COLLISION_PAIRS = [
         [
           %i[text unsafe_html],
@@ -42,10 +41,10 @@ module Grainet
         ],
       ].freeze
 
-      # Per spec Section 9: element tags accepting data-value /
-      # data-checked. Tag-level only; the input `type` attribute check
-      # (text/email vs checkbox/radio) is out of scope for Phase F
-      # because Directive does not carry the full attribute set.
+      # Element tags accepting data-value / data-checked. Tag-level
+      # only; the input `type` attribute check (text/email vs
+      # checkbox/radio) is not yet enforced because Directive does not
+      # carry the full attribute set.
       VALUE_ELEMENTS   = %w[input textarea select].freeze
       CHECKED_ELEMENTS = %w[input].freeze
 
@@ -87,10 +86,10 @@ module Grainet
         end
       end
 
-      # Spec Section 8 / 6.5: `gn-hidden` is reserved by data-show /
-      # data-hide. If the user puts `'gn-hidden': @x` in data-class on
-      # the same element, three signals can race over the class — fail
-      # at build time and tell the user to drop the data-class entry.
+      # `gn-hidden` is reserved by data-show / data-hide. If the user
+      # puts `'gn-hidden': @x` in data-class on the same element, three
+      # signals can race over the class — fail at build time and tell
+      # the user to drop the data-class entry.
       def self.check_gn_hidden_conflict(dirs, file)
         return unless dirs.any? { |d| %i[show hide].include?(d.kind) }
 
