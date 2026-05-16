@@ -52,6 +52,12 @@ module Grainet
         [/\Adata-each\z/,        :each,        false],
         [/\Adata-key\z/,         :key,         false],
         [/\Adata-class\z/,       :class_,      false],
+        # data-component is detected only so collision checks can see
+        # it; it has no emit_* of its own (the runtime autoregister
+        # reads the HTML attribute directly) and `walk` skips Directive
+        # records when it appears alone, to keep the dist HTML and the
+        # linter input unchanged for the common case.
+        [/\Adata-component\z/,   :component,   false],
         [/\Adata-on-(.+)\z/,     :on,          true],
         [/\Adata-attr-(.+)\z/,   :attr,        true],
         [/\Adata-arg-(.+)\z/,    :arg,         true],
@@ -99,8 +105,17 @@ module Grainet
         node.element_children.to_a.each do |elem|
           element_directives = extract_directives(elem)
           has_each = element_directives.any? { |k, _, _| k == :each }
+          # A bare `data-component` element needs no ref_id (the
+          # runtime mounts via the data-component attribute) and
+          # produces no codegen, so we skip the Directive record
+          # entirely to keep the dist HTML byte-identical and the
+          # linter input clean. The :component record only matters
+          # when it coexists with another directive (e.g. `data-each`)
+          # so DirectiveCompatibility can flag the collision.
+          has_real_directive = element_directives.any? { |k, _, _| k != :component }
+          ref_id = nil
 
-          unless element_directives.empty?
+          if has_real_directive
             ref_id = ensure_ref_id(elem)
             element_directives.each do |kind, name, attr_value|
               directives << Directive.new(

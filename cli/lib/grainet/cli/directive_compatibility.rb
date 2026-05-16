@@ -10,10 +10,8 @@ module Grainet
     # violations surface as a build error rather than a runtime failure
     # on the user's page.
     #
-    # Currently checks pair collisions detectable from the Directive list
-    # alone, plus tag-level element-type checks. Not yet enforced:
-    #   - data-component + data-each collision — TemplateAST does not
-    #     emit :component directives, so it is invisible here
+    # Currently checks pair collisions and tag-level element-type
+    # constraints. Not yet enforced:
     #   - <input type=text|email|...> vs <input type=checkbox> for
     #     data-value / data-checked — Directive only carries the tag
     #     name, not the type attribute
@@ -39,6 +37,10 @@ module Grainet
         [
           %i[value checked],
           "data-value and data-checked cannot coexist (form control has a single primary state)",
+        ],
+        [
+          %i[component each],
+          "data-component and data-each cannot coexist (wrap with another element — put the child component inside the iteration body)",
         ],
       ].freeze
 

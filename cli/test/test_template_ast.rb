@@ -57,10 +57,10 @@ class TestTemplateAST < Minitest::Test
   end
 
   def test_arg_family_directive_carries_arg_name
-    d = parse(%(<div data-component="X" data-arg-id="it.id"></div>)).directives.first
-    assert_equal :arg, d.kind
-    assert_equal "id", d.name
-    assert_equal "it.id", d.value
+    directives = parse(%(<div data-component="X" data-arg-id="it.id"></div>)).directives
+    arg = directives.find { |x| x.kind == :arg }
+    assert_equal "id", arg.name
+    assert_equal "it.id", arg.value
   end
 
   def test_each_and_key_collected_together
@@ -186,6 +186,32 @@ class TestTemplateAST < Minitest::Test
     # the main HTML — the runtime bind_list repopulates per item.
     assert_includes result.html, "<ul"
     refute_match(/<li/, result.html, "iteration body should be stripped from main HTML")
+  end
+
+  # ---- data-component detection (collision check only) ----------
+
+  def test_pure_data_component_element_produces_no_directive_and_no_synthetic_ref
+    # Common case: bare `<div data-component="X">` — the runtime
+    # autoregister handles mount via the attribute, so we deliberately
+    # don't add a synthetic ref or a Directive record. dist HTML must
+    # stay byte-identical to what the user wrote.
+    html = %(<div data-component="X"></div>)
+    result = parse(html)
+    assert_empty result.directives
+    refute_match(/data-ref="g/, result.html)
+  end
+
+  def test_data_component_with_data_each_records_both_directives_on_same_ref
+    # When data-component coexists with another directive (here
+    # data-each), both records appear with a shared ref_id so the
+    # collision check in DirectiveCompatibility can see them together.
+    html = %(<ul data-component="X" data-each="@items"></ul>)
+    result = parse(html)
+    kinds = result.directives.map(&:kind)
+    assert_includes kinds, :component
+    assert_includes kinds, :each
+    refs = result.directives.map(&:ref_id).uniq
+    assert_equal 1, refs.length
   end
 
   def test_nested_data_each_produces_two_synthetic_templates_with_independent_scopes

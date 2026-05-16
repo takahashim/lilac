@@ -44,6 +44,20 @@ class TestDirectiveCompatibility < Minitest::Test
     assert_includes err.message, "data-value and data-checked"
   end
 
+  def test_component_and_each_on_same_element_raise
+    err = assert_raises(DC::Error) do
+      DC.check!(
+        [
+          dir(:component, value: "X", tag: "ul"),
+          dir(:each, value: "@items", tag: "ul", line: 6),
+        ],
+        file: "x.gnt",
+      )
+    end
+    assert_includes err.message, "x.gnt:6"
+    assert_includes err.message, "data-component and data-each"
+  end
+
   def test_collisions_on_different_elements_are_allowed
     # Same kinds, but on different refs — no collision.
     DC.check!(
