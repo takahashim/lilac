@@ -7,7 +7,10 @@ gemspec
 # Use the local wsv checkout during development so changes flow through
 # without a rubygems publish cycle. When grainet-cli is released, the
 # gemspec dependency resolves the published gem instead.
-gem "wsv", path: "../wsv"
+# Local wsv checkout during development so changes flow through without
+# a rubygems publish cycle. Path is relative to the repo root (one level
+# up from `cli/`), where wsv is expected as a sibling clone of grainet.
+gem "wsv", path: "../../wsv"
 
 group :development do
   gem "minitest", "~> 5.0"
