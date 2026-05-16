@@ -40,6 +40,11 @@ module Lilac
 
       def scan_and_bind
         root_js = @host.root.to_js
+        # Process the host root's own directives (e.g. `<div data-component
+        # data-class="...">`). The `data-component` attribute on the root
+        # is its mount marker — Compat / dispatch see it but ignore it
+        # via the :component no-op branch.
+        process_element(root_js, nil)
         walk(root_js, item: nil)
       end
 
@@ -185,11 +190,12 @@ module Lilac
             "data-each is not supported in Phase 1 runtime scanner (#{descriptor}); " \
             "use lilac-cli for now, or wait for Phase 3"
           )
-        when :value, :checked, :class_
-          Lilac.logger.warn(
-            "data-#{Compat.kind_label(kind)} arrives in Phase 2 runtime scanner (#{descriptor}); " \
-            "use lilac-cli for now"
-          )
+        when :value
+          dispatch_value(raw_value, el)
+        when :checked
+          dispatch_checked(raw_value, el)
+        when :class_
+          dispatch_class(raw_value, el, item)
         else
           # New directive added to DIRECTIVE_PATTERNS but no dispatcher —
           # signal loudly so the omission is caught in tests.
@@ -243,6 +249,46 @@ module Lilac
         end
       end
 
+      # data-value / data-checked are ivar-only (they write back to
+      # the signal on input events). Iteration item fields cannot be
+      # the target — they're frozen Data attributes.
+      def dispatch_value(raw_value, el)
+        sig = ivar_or_raise(raw_value, "data-value")
+        @host.bind_input(wrap_ref(el), sig)
+      end
+
+      def dispatch_checked(raw_value, el)
+        sig = ivar_or_raise(raw_value, "data-checked")
+        @host.bind_input(wrap_ref(el), sig, property: :checked)
+      end
+
+      # data-class hash literal: parse into pairs, validate each value
+      # as ivar/it_path, then bind via the existing class: hash form.
+      def dispatch_class(raw_value, el, item)
+        pairs =
+          begin
+            ClassParser.parse(raw_value)
+          rescue ClassParser::Error => e
+            raise Lilac::Error, "data-class: #{e.message}"
+          end
+        # Reserved-name check: `lil-hidden` is owned by data-show / data-hide.
+        # Bare ergonomics (warn-and-skip) would silently override the user's
+        # visibility intent, so we treat overlap as correctness and raise.
+        pairs.each do |key, _|
+          if key == "lil-hidden"
+            raise Lilac::Error,
+                  "data-class: `lil-hidden` is reserved for data-show / data-hide; " \
+                  "remove it from data-class or use a different class name"
+          end
+        end
+        bound = {}
+        pairs.each do |key, raw|
+          value = parse_value_or_raise(raw, "data-class[#{key.inspect}]")
+          bound[key] = @evaluator.bind_source(value, item)
+        end
+        @host.bind(wrap_ref(el), class: bound)
+      end
+
       def dispatch_on(name, raw_value, el, item)
         method_name = raw_value.to_s.strip
         unless Grammar.method_ident?(method_name)
@@ -262,9 +308,7 @@ module Lilac
         end
       end
 
-      # Phase 1 doesn't support `it.field` paths because they only
-      # become meaningful inside `data-each` (Phase 3). Reject early
-      # with a clear message rather than letting Evaluator NPE.
+      # Generic accept-anything (ivar or it.path) parse.
       def parse_value_or_raise(raw_value, attr_label)
         value = Value.parse(raw_value)
         unless value
@@ -273,6 +317,19 @@ module Lilac
                 "(expected `@ivar` or `it.path`)"
         end
         value
+      end
+
+      # data-value / data-checked require a writable Signal, which
+      # means the source must be `@ivar` (instance_variable_get
+      # returning a Signal) — not `it.field` (frozen Data attribute).
+      def ivar_or_raise(raw_value, attr_label)
+        value = Value.parse(raw_value)
+        unless value && value.ivar?
+          raise Lilac::Error,
+                "Invalid value for #{attr_label}: #{raw_value.inspect} " \
+                "(expected `@ivar` — writable signal only)"
+        end
+        @host.instance_variable_get(value.ivar_sym)
       end
 
       def wrap_ref(el_js)

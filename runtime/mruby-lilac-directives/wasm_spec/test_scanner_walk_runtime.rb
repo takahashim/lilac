@@ -62,6 +62,35 @@ Spec.describe "Scanner walk boundaries (runtime)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
+  Spec.assert "scanner processes directives on the component root element itself" do
+    # Root binding pattern (theme demo style): the component's own
+    # data-component element also carries data-class. The scanner must
+    # include the root in its dispatch loop, not only children.
+    body = JS.global[:document][:body]
+    body[:innerHTML] = %(<div data-component="root-bind-rt" data-class="{ active: @on }">child</div>)
+
+    klass = Class.new(Lilac::Component) do
+      attr_reader :on
+      define_method(:setup) { @on = signal(true) }
+    end
+
+    Lilac.register("root-bind-rt", klass)
+    Lilac.start
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+
+    root = body.call(:querySelector, "[data-component=\"root-bind-rt\"]")
+    Spec.assert_equal true, root[:classList].call(:contains, "active").js_bool
+
+    inst = Lilac.find_for_element(root)
+    inst.on.value = false
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Spec.assert_equal false, root[:classList].call(:contains, "active").js_bool
+
+    Lilac.reset!
+    body[:innerHTML] = ""
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+  end
+
   Spec.assert "CLI codegen path (Bindings module) is unaffected by runtime scanner" do
     # When a Lilac::Bindings::X module overrides bind_template_hook,
     # the override wins (Ruby method lookup) and the default runtime

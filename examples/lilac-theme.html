@@ -51,20 +51,20 @@
 
     <div data-component="theme-app">
       <div class="toolbar">
-        <button data-ref="toggle">Toggle theme</button>
-        <span class="status" data-ref="status"></span>
+        <button data-on-click="toggle_theme">Toggle theme</button>
+        <span class="status" data-text="@status_text"></span>
       </div>
 
-      <div data-component="theme-card" class="card">
+      <div data-component="theme-card" class="card" data-class="{ 'is-dark': @is_dark }">
         <h3>First card</h3>
         <p>This card updates together with the shared theme setting.
-           <span data-component="theme-badge" class="badge" data-ref="badge_root">
+           <span data-component="theme-badge" class="badge" data-text="@badge_text">
              status
            </span>
         </p>
       </div>
 
-      <div data-component="theme-card" class="card">
+      <div data-component="theme-card" class="card" data-class="{ 'is-dark': @is_dark }">
         <h3>Second card</h3>
         <p>Both cards reflect the current mode immediately.</p>
       </div>
@@ -82,33 +82,25 @@ class ThemeApp < Lilac::Component
   end
 
   def setup
-    refs.toggle.on(:click) do
-      @theme.update { |t| t == "dark" ? "light" : "dark" }
-    end
+    @status_text = computed { "current: #{@theme.value}" }
+  end
 
-    bind refs.status, :text do
-      "current: #{@theme.value}"
-    end
+  def toggle_theme(_ev)
+    @theme.update { |t| t == "dark" ? "light" : "dark" }
   end
 end
 
 class ThemeCard < Lilac::Component
   def setup
     @theme = lookup(:theme)
-
-    # bind on root: the component's own DOM root gets the .is-dark class
-    # whenever the inherited theme is "dark".
-    bind root, class: { "is-dark" => computed { @theme.value == "dark" } }
+    @is_dark = computed { @theme.value == "dark" }
   end
 end
 
 class ThemeBadge < Lilac::Component
   def setup
     @theme = lookup(:theme)
-
-    bind root, :text do
-      @theme.value == "dark" ? "🌙 dark" : "☀️ light"
-    end
+    @badge_text = computed { @theme.value == "dark" ? "🌙 dark" : "☀️ light" }
   end
 end
 
