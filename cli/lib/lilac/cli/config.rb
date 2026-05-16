@@ -24,15 +24,21 @@ module Lilac
       DEFAULT_PUBLIC_DIR = "public"
       DEFAULT_DEV_HOST = "127.0.0.1"
       DEFAULT_DEV_PORT = 5173
+      # Default is `:auto` — CLI pre-compiles directive bindings so
+      # mount-time skips the runtime scanner. Set to `:off` to force
+      # the runtime path (parity testing, "does it still work without
+      # the optimization" smoke runs).
+      DEFAULT_CODEGEN = :auto
+      CODEGEN_VALUES = %i[auto off].freeze
 
       attr_reader :root, :components_dir, :pages_dir, :output_dir, :public_dir,
-                  :dev_host, :dev_port
+                  :dev_host, :dev_port, :codegen
 
       # Three-way merge: CLI opts > lilac.config.rb > built-in defaults.
       # `opts` keys mirror the keyword args of `initialize`; nil values
       # mean "no CLI override given" and let the file/default win.
       def self.load(root: nil, components_dir: nil, pages_dir: nil, output_dir: nil,
-                    public_dir: nil, dev_host: nil, dev_port: nil)
+                    public_dir: nil, dev_host: nil, dev_port: nil, codegen: nil)
         resolved_root = File.expand_path(root || Dir.pwd)
         settings = ConfigLoader.load(resolved_root) || ConfigLoader::Settings.new
 
@@ -44,11 +50,12 @@ module Lilac
           public_dir:  public_dir  || settings.public_dir,
           dev_host:    dev_host    || settings.dev_host,
           dev_port:    dev_port    || settings.dev_port,
+          codegen:     codegen     || settings.codegen,
         )
       end
 
       def initialize(root: nil, components_dir: nil, pages_dir: nil, output_dir: nil,
-                     public_dir: nil, dev_host: nil, dev_port: nil)
+                     public_dir: nil, dev_host: nil, dev_port: nil, codegen: nil)
         # Use `|| Dir.pwd` rather than a default keyword so callers can
         # pass `root: opts[:root]` (often nil from un-set CLI flags)
         # without overriding the default to nil.
@@ -59,12 +66,22 @@ module Lilac
         @public_dir = expand(public_dir || DEFAULT_PUBLIC_DIR)
         @dev_host = dev_host || DEFAULT_DEV_HOST
         @dev_port = dev_port || DEFAULT_DEV_PORT
+        @codegen = normalize_codegen(codegen || DEFAULT_CODEGEN)
       end
 
       private
 
       def expand(path)
         File.expand_path(path, @root)
+      end
+
+      def normalize_codegen(value)
+        sym = value.to_sym
+        unless CODEGEN_VALUES.include?(sym)
+          raise ArgumentError,
+                "codegen must be one of #{CODEGEN_VALUES.inspect}, got #{value.inspect}"
+        end
+        sym
       end
     end
   end

@@ -20,9 +20,21 @@ module Lilac
 
       # Fields here are the union of every value the CLI knows how to
       # configure. Keep in sync with Config defaults.
+      #
+      # `codegen` controls whether the CLI emits a
+      # `Lilac::Bindings::<Class>#bind_template_hook` module that
+      # pre-compiles directive bindings into Ruby. Values:
+      #   :auto — default; CLI emits codegen so mount-time has zero
+      #           directive-scanning overhead.
+      #   :off  — CLI skips codegen; the runtime scanner interprets
+      #           directives at mount time. Useful for parity-testing
+      #           the runtime path against the .lil source, and for
+      #           "I want to confirm my app works without the CLI
+      #           optimization" smoke runs.
       Settings = Struct.new(
         :components_dir, :pages_dir, :public_dir, :output_dir,
         :dev_host, :dev_port,
+        :codegen,
         keyword_init: true,
       )
 

@@ -62,7 +62,8 @@ module Lilac
         </script>
       HTML
 
-      def initialize(components_dir:, pages_dir:, output_dir:, public_dir: nil, live_reload: false)
+      def initialize(components_dir:, pages_dir:, output_dir:, public_dir: nil,
+                     live_reload: false, codegen: :auto)
         @components_dir = components_dir
         @pages_dir = pages_dir
         @output_dir = output_dir
@@ -72,6 +73,12 @@ module Lilac
         # creating the directory.
         @public_dir = public_dir
         @live_reload = live_reload
+        # `:auto` (default) — emit Lilac::Bindings::<Class>#bind_template_hook
+        # pre-compiled bindings; `:off` — skip codegen and let the
+        # runtime scanner interpret data-* directives at mount time
+        # (parity-test mode, validates the runtime path against the
+        # same .lil source).
+        @codegen = codegen
       end
 
       def build
@@ -209,11 +216,18 @@ module Lilac
             component_name: ComponentName.new(name).ruby_class,
             file: parsed[:source_path] ? File.basename(parsed[:source_path]) : "(template)",
           )
-          generated = Codegen.generate(
-            component_name: name,
-            directives: parsed[:default_directives],
-            source_path: parsed[:source_path],
-          ).strip
+          generated =
+            if @codegen == :off
+              # Runtime scanner mode: emit no bind_template_hook,
+              # leaving the runtime to interpret data-* at mount.
+              ""
+            else
+              Codegen.generate(
+                component_name: name,
+                directives: parsed[:default_directives],
+                source_path: parsed[:source_path],
+              ).strip
+            end
           [user_script, generated].reject(&:empty?).join("\n\n")
         }.reject(&:empty?)
 

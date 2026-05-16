@@ -42,6 +42,28 @@ class TestConfig < Minitest::Test
     assert_equal 5173, config.dev_port
   end
 
+  def test_default_codegen_is_auto
+    config = Lilac::CLI::Config.new
+    assert_equal :auto, config.codegen
+  end
+
+  def test_codegen_accepts_off
+    config = Lilac::CLI::Config.new(codegen: :off)
+    assert_equal :off, config.codegen
+  end
+
+  def test_codegen_normalizes_string_input
+    config = Lilac::CLI::Config.new(codegen: "off")
+    assert_equal :off, config.codegen
+  end
+
+  def test_codegen_rejects_unknown_value
+    err = assert_raises(ArgumentError) do
+      Lilac::CLI::Config.new(codegen: :unknown)
+    end
+    assert_match(/codegen/, err.message)
+  end
+
   # ---- Config.load: three-way merge tests ----
 
   def setup
@@ -97,5 +119,15 @@ class TestConfig < Minitest::Test
     assert_equal 4000, config.dev_port
     # components_dir not set anywhere — built-in default applies:
     assert_equal File.join(@tmp, "components"), config.components_dir
+  end
+
+  def test_load_picks_up_codegen_off_from_config_file
+    write_config <<~RB
+      Lilac::CLI.configure do |c|
+        c.codegen = :off
+      end
+    RB
+    config = Lilac::CLI::Config.load(root: @tmp)
+    assert_equal :off, config.codegen
   end
 end

@@ -61,6 +61,7 @@ module Lilac
           pages_dir: config.pages_dir,
           output_dir: config.output_dir,
           public_dir: config.public_dir,
+          codegen: config.codegen,
         )
         result = builder.build
         public_suffix = result[:public_files].positive? ? " + #{result[:public_files]} static file(s)" : ""

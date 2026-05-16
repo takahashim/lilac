@@ -58,6 +58,7 @@ module Lilac
           output_dir: @config.output_dir,
           public_dir: @config.public_dir,
           live_reload: true,
+          codegen: @config.codegen,
         ).build
       end
 

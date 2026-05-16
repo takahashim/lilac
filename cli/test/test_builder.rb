@@ -26,11 +26,12 @@ class TestBuilder < Minitest::Test
     File.write(File.join(@pages, "#{name}.html"), source)
   end
 
-  def build!
+  def build!(codegen: :auto)
     Lilac::CLI::Builder.new(
       components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
+      codegen: codegen,
     ).build
   end
 
@@ -378,5 +379,54 @@ class TestBuilder < Minitest::Test
     ).build
 
     assert_equal 2, result[:public_files]
+  end
+
+  # ---- codegen flag --------------------------------------------------
+
+  def test_codegen_auto_emits_bind_template_hook
+    write_widget "counter", <<~GNT
+      <template>
+        <div data-component="counter">
+          <span data-text="@count">0</span>
+        </div>
+      </template>
+      <script type="text/ruby">
+        class Counter < Lilac::Component
+          def setup; @count = signal(0); end
+        end
+      </script>
+    GNT
+    write_page "index", '<html><body><lilac-component name="counter"></lilac-component></body></html>'
+
+    build!(codegen: :auto)
+    out = read_output("index.html")
+    assert_includes out, "bind_template_hook",
+                    "codegen :auto should emit the bind_template_hook override"
+    assert_includes out, "Lilac::Bindings::Counter"
+  end
+
+  def test_codegen_off_skips_bind_template_hook
+    write_widget "counter", <<~GNT
+      <template>
+        <div data-component="counter">
+          <span data-text="@count">0</span>
+        </div>
+      </template>
+      <script type="text/ruby">
+        class Counter < Lilac::Component
+          def setup; @count = signal(0); end
+        end
+      </script>
+    GNT
+    write_page "index", '<html><body><lilac-component name="counter"></lilac-component></body></html>'
+
+    build!(codegen: :off)
+    out = read_output("index.html")
+    refute_includes out, "bind_template_hook",
+                    "codegen :off must not emit bind_template_hook; runtime takes over"
+    refute_includes out, "Lilac::Bindings::Counter"
+    # The declarative directive itself stays in the HTML so the runtime
+    # scanner can find and wire it at mount time.
+    assert_includes out, 'data-text="@count"'
   end
 end
