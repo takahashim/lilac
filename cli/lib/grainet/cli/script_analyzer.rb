@@ -62,21 +62,29 @@ module Grainet
         end
       end
 
-      EMPTY_RESULT = Result.new(
-        declared_signals: {}, declared_methods: {},
-        referenced_ivars: [], method_calls: [], assigned_ivars: [],
-      ).freeze
-
       def self.analyze(script_text)
         parse = Prism.parse(script_text.to_s)
-        # `failure?` covers hard syntax errors; on those, treat as
-        # empty so the linter doesn't fire spurious "undeclared"
-        # warnings on top of the user's actual parse error.
-        return EMPTY_RESULT if parse.failure?
+        # `failure?` covers hard syntax errors; on those, hand back a
+        # fresh empty result so the linter doesn't fire spurious
+        # "undeclared" warnings on top of the user's actual parse
+        # error.
+        return empty_result if parse.failure?
 
         visitor = Visitor.new
         parse.value.accept(visitor)
         visitor.to_result
+      end
+
+      # Fresh per call — `Struct.new(...).freeze` only freezes the
+      # struct, not its Hash/Array contents, so a shared constant
+      # would be mutable by any caller that called e.g.
+      # `result.referenced_ivars << x` and silently poison every
+      # later analyze call.
+      def self.empty_result
+        Result.new(
+          declared_signals: {}, declared_methods: {},
+          referenced_ivars: [], method_calls: [], assigned_ivars: [],
+        )
       end
 
       class Visitor < Prism::Visitor
@@ -140,21 +148,27 @@ module Grainet
         end
 
         def visit_call_node(node)
-          method_name = node.name.to_s
-          @method_calls << method_name
-          # send(:foo) / public_send(:foo) / method(:foo) with a symbol
-          # literal argument: record the referenced name so a method
-          # called only via metaprogramming isn't flagged dead.
-          if %w[send public_send method].include?(method_name)
-            first = node.arguments&.arguments&.first
-            if first.is_a?(Prism::SymbolNode)
-              @method_calls << first.unescaped
-            end
-          end
+          @method_calls << node.name.to_s
+          record_metaprogramming_target(node)
           super
         end
 
         private
+
+        # `send(:foo)` / `public_send(:foo)` / `method(:foo)` with a
+        # symbol-literal argument: record the named method as called
+        # so dead-method lint doesn't flag a method that's only
+        # reached via metaprogramming. User-defined `def method`
+        # would shadow `Object#method` here — a minor ambiguity we
+        # accept (component code rarely defines a `def method`).
+        METAPROGRAMMING_DISPATCH = %w[send public_send method].freeze
+
+        def record_metaprogramming_target(node)
+          return unless METAPROGRAMMING_DISPATCH.include?(node.name.to_s)
+
+          first = node.arguments&.arguments&.first
+          @method_calls << first.unescaped if first.is_a?(Prism::SymbolNode)
+        end
 
         def record_ivar_op_write(node)
           name = node.name.to_s

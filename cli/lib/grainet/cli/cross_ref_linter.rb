@@ -48,7 +48,9 @@ module Grainet
         analysis = ScriptAnalyzer.analyze(script_text)
         warnings = 0
 
-        warnings += lint_per_directive(analysis, directives, component_name, file, out)
+        warnings += lint_undeclared_signals(analysis, directives, component_name, file, out)
+        warnings += lint_undefined_methods(analysis, directives, component_name, file, out)
+        warnings += lint_it_outside_each(directives, file, out)
         warnings += lint_each_without_key(directives, file, out)
         warnings += lint_reserved_ref_names(refs_map, file, out)
         warnings += lint_dead_signals(analysis, directives, component_name, file, out)
@@ -57,9 +59,7 @@ module Grainet
         warnings
       end
 
-      # Walks each directive once, surfacing undeclared signal/method
-      # references and `it` used outside any `data-each`.
-      def self.lint_per_directive(analysis, directives, component_name, file, out)
+      def self.lint_undeclared_signals(analysis, directives, component_name, file, out)
         warnings = 0
         directives.each do |directive|
           ivars_in_directive(directive).each do |ivar|
@@ -73,15 +73,30 @@ module Grainet
             emit_signal_warning(out, directive, ivar, analysis.declared_signals.keys, component_name, file)
             warnings += 1
           end
+        end
+        warnings
+      end
+
+      def self.lint_undefined_methods(analysis, directives, component_name, file, out)
+        warnings = 0
+        directives.each do |directive|
           method = method_in_directive(directive)
-          if method && !analysis.declares_method?(method)
-            emit_method_warning(out, directive, method, analysis.declared_methods.keys, component_name, file)
-            warnings += 1
-          end
-          if uses_it_path?(directive) && directive.scope_id.nil?
-            emit_it_outside_each_warning(out, directive, file)
-            warnings += 1
-          end
+          next unless method
+          next if analysis.declares_method?(method)
+
+          emit_method_warning(out, directive, method, analysis.declared_methods.keys, component_name, file)
+          warnings += 1
+        end
+        warnings
+      end
+
+      def self.lint_it_outside_each(directives, file, out)
+        warnings = 0
+        directives.each do |directive|
+          next unless uses_it_path?(directive) && directive.scope_id.nil?
+
+          emit_it_outside_each_warning(out, directive, file)
+          warnings += 1
         end
         warnings
       end
