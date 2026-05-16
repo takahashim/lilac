@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "build_error"
 require_relative "hash_literal_parser"
 
 module Grainet
@@ -18,7 +19,7 @@ module Grainet
     #     name, not the type attribute
     #   - data-arg-X validations — data-arg has no emitter yet
     module DirectiveCompatibility
-      class Error < StandardError; end
+      class Error < BuildError; end
 
       # Directive pairs that may not coexist on the same element. Each
       # row is [Array<kind>, message].
@@ -64,8 +65,10 @@ module Grainet
           # Report at the line of the second (later) directive in the
           # pair so users see where the conflict was introduced.
           offenders = dirs.select { |d| pair.include?(d.kind) }
-          raise Error,
-                "Directive collision at #{file}:#{offenders.last.line}: #{message}"
+          raise Error.new(
+            "Directive collision: #{message}",
+            file: file, line: offenders.last.line,
+          )
         end
       end
 
@@ -74,15 +77,19 @@ module Grainet
         when :value
           return if VALUE_ELEMENTS.include?(directive.element_tag)
 
-          raise Error,
-                "data-value at #{file}:#{directive.line}: only valid on " \
-                "<input>, <textarea>, or <select> — found on <#{directive.element_tag}>"
+          raise Error.new(
+            "data-value: only valid on <input>, <textarea>, or <select> — " \
+            "found on <#{directive.element_tag}>",
+            file: file, line: directive.line,
+          )
         when :checked
           return if CHECKED_ELEMENTS.include?(directive.element_tag)
 
-          raise Error,
-                "data-checked at #{file}:#{directive.line}: only valid on " \
-                "<input type=\"checkbox\"> or <input type=\"radio\"> — found on <#{directive.element_tag}>"
+          raise Error.new(
+            "data-checked: only valid on <input type=\"checkbox\"> or " \
+            "<input type=\"radio\"> — found on <#{directive.element_tag}>",
+            file: file, line: directive.line,
+          )
         end
       end
 
@@ -109,10 +116,12 @@ module Grainet
           end
         return unless pairs.any? { |key, _| key == "gn-hidden" }
 
-        raise Error,
-              "data-class at #{file}:#{class_dir.line} uses the reserved class " \
-              "`gn-hidden` on an element that also has data-show / data-hide. " \
-              "Drop the `gn-hidden` key from data-class — data-show/data-hide manage it."
+        raise Error.new(
+          "data-class uses the reserved class `gn-hidden` on an element " \
+          "that also has data-show / data-hide.",
+          file: file, line: class_dir.line,
+          suggestion: "Drop the `gn-hidden` key from data-class — data-show/data-hide manage it.",
+        )
       end
     end
   end
