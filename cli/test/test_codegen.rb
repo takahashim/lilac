@@ -2,6 +2,8 @@
 
 require "test_helper"
 
+# Structural tests for Codegen.generate — empty/skeleton/naming concerns.
+# Per-directive emit behaviour lives in test_directive_codegen.rb.
 class TestCodegen < Minitest::Test
   Directive = Grainet::CLI::Directive
 
@@ -13,14 +15,14 @@ class TestCodegen < Minitest::Test
     )
   end
 
-  def directive(kind:, value:, ref_id: "g0", name: nil, line: 1, tag: "div")
+  def text_directive(value: "@count", ref_id: "g0", line: 1)
     Directive.new(
-      kind: kind,
-      name: name,
+      kind: :text,
+      name: nil,
       value: value,
       ref_id: ref_id,
       line: line,
-      element_tag: tag,
+      element_tag: "span",
     )
   end
 
@@ -28,68 +30,48 @@ class TestCodegen < Minitest::Test
     assert_equal "", gen("counter", [])
   end
 
+  def test_all_no_op_directives_yield_empty_output
+    # `data-component` alone has no codegen target — only the runtime
+    # autoregister consumes it. The emitter should suppress the module
+    # entirely instead of emitting an empty `bind_template_hook`.
+    component_directive = Directive.new(
+      kind: :component,
+      name: nil,
+      value: "Counter",
+      ref_id: "g0",
+      line: 1,
+      element_tag: "div",
+    )
+    assert_equal "", gen("counter", [component_directive])
+  end
+
   def test_emits_namespaced_module_and_include
-    out = gen("counter", [directive(kind: :text, value: "@count")])
+    out = gen("counter", [text_directive])
     assert_includes out, "module Grainet; module Bindings; module Counter"
     assert_includes out, "Counter.include(Grainet::Bindings::Counter)"
   end
 
   def test_emits_bind_template_hook_method
-    out = gen("counter", [directive(kind: :text, value: "@count")])
+    out = gen("counter", [text_directive])
     assert_includes out, "def bind_template_hook"
-    # Body has one comment per directive (Phase A1 placeholder).
-    assert_match(/data-text="@count".*g0/, out)
+    assert_includes out, "end"
   end
 
   def test_kebab_component_name_becomes_pascalcase
-    out = gen("user-profile", [directive(kind: :text, value: "@name")])
+    out = gen("user-profile", [text_directive(value: "@name")])
     assert_includes out, "Grainet::Bindings::UserProfile"
     assert_includes out, "UserProfile.include(Grainet::Bindings::UserProfile)"
   end
 
   def test_double_dash_creates_namespace
-    out = gen("admin--user-card", [directive(kind: :text, value: "@name")])
+    out = gen("admin--user-card", [text_directive(value: "@name")])
     assert_includes out, "module Admin; module UserCard"
     assert_includes out, "Admin::UserCard.include(Grainet::Bindings::Admin::UserCard)"
   end
 
-  def test_x_family_directive_in_comment
-    out = gen("counter", [directive(kind: :on, name: "click", value: "increment")])
-    assert_match(/data-on-click="increment"/, out)
-  end
-
-  def test_source_path_appears_in_comment
-    out = gen(
-      "counter",
-      [directive(kind: :text, value: "@count", line: 5)],
-      source_path: "/path/to/counter.gnt",
-    )
-    assert_match(/counter\.gnt:5/, out)
-  end
-
-  def test_source_path_falls_back_when_omitted
-    out = gen("counter", [directive(kind: :text, value: "@count", line: 5)])
-    assert_match(/\(template\):5/, out)
-  end
-
-  def test_multiple_directives_each_get_a_comment_line
-    out = gen("counter", [
-      directive(kind: :text, value: "@count", line: 1),
-      directive(kind: :on, name: "click", value: "increment", line: 2),
-    ])
-    body = out[/def bind_template_hook(.*)end/m, 1]
-    refute_nil body
-    assert_equal 2, body.scan(/^\s*#/).length
-  end
-
-  def test_class_kind_renders_as_data_class
-    out = gen("counter", [directive(kind: :class_, value: "{ a: @s }")])
-    assert_match(/data-class/, out)
-    refute_match(/data-class_/, out, "trailing _ must not leak")
-  end
-
   def test_invalid_component_name_raises
-    assert_raises(ArgumentError) { gen("--foo", [directive(kind: :text, value: "@x")]) }
-    assert_raises(ArgumentError) { gen("foo--", [directive(kind: :text, value: "@x")]) }
+    assert_raises(ArgumentError) { gen("--foo", [text_directive]) }
+    assert_raises(ArgumentError) { gen("foo--", [text_directive]) }
+    assert_raises(ArgumentError) { gen("foo---bar", [text_directive]) }
   end
 end

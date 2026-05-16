@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <title>{{name}}</title>
   <style>
+    /* Reserved class used by data-show / data-hide directives.
+       `!important` so user-side display rules can't override. */
+    .gn-hidden { display: none !important; }
+
     body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
     [data-component="counter"] { display: flex; gap: 0.5rem; align-items: center; }
     .count { font-size: 1.5rem; min-width: 2rem; text-align: center; }
