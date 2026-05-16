@@ -10,11 +10,8 @@ module Grainet
     # violations surface as a build error rather than a runtime failure
     # on the user's page.
     #
-    # Currently checks pair collisions and tag-level element-type
-    # constraints. Not yet enforced:
-    #   - <input type=text|email|...> vs <input type=checkbox> for
-    #     data-value / data-checked — Directive only carries the tag
-    #     name, not the type attribute
+    # Currently checks pair collisions, tag-level applicability, and
+    # `<input>` type-attribute constraints. Not yet enforced:
     #   - data-arg-X validations — data-arg has no emitter yet
     module DirectiveCompatibility
       class Error < BuildError; end
@@ -44,12 +41,24 @@ module Grainet
         ],
       ].freeze
 
-      # Element tags accepting data-value / data-checked. Tag-level
-      # only; the input `type` attribute check (text/email vs
-      # checkbox/radio) is not yet enforced because Directive does not
-      # carry the full attribute set.
+      # Tag-level applicability for data-value / data-checked. The
+      # input `type` attribute is further constrained by the two type
+      # sets below.
       VALUE_ELEMENTS   = %w[input textarea select].freeze
       CHECKED_ELEMENTS = %w[input].freeze
+
+      # `<input>` types that hold a typing-style value compatible with
+      # `data-value` (two-way `value` property binding). HTML defaults
+      # an `<input>` without an explicit type to `text`. Excluded:
+      # `checkbox`/`radio` (use data-checked) and `file`/`submit`/
+      # `button`/`reset`/`image` (no meaningful two-way value binding).
+      INPUT_TYPES_FOR_VALUE = %w[
+        text email url password search tel
+        number date datetime-local month week time
+        color range hidden
+      ].freeze
+
+      INPUT_TYPES_FOR_CHECKED = %w[checkbox radio].freeze
 
       def self.check!(directives, file:)
         directives.group_by(&:ref_id).each_value do |dirs_on_element|
@@ -77,22 +86,57 @@ module Grainet
       def self.check_element_type(directive, file)
         case directive.kind
         when :value
-          return if VALUE_ELEMENTS.include?(directive.element_tag)
-
-          raise Error.new(
-            "data-value: only valid on <input>, <textarea>, or <select> — " \
-            "found on <#{directive.element_tag}>",
-            file: file, line: directive.line,
-          )
+          check_value_target(directive, file)
         when :checked
-          return if CHECKED_ELEMENTS.include?(directive.element_tag)
+          check_checked_target(directive, file)
+        end
+      end
+
+      def self.check_value_target(directive, file)
+        tag = directive.element_tag
+        if tag == "input"
+          type = input_type(directive)
+          return if INPUT_TYPES_FOR_VALUE.include?(type)
 
           raise Error.new(
-            "data-checked: only valid on <input type=\"checkbox\"> or " \
-            "<input type=\"radio\"> — found on <#{directive.element_tag}>",
+            "data-value: <input type=\"#{type}\"> is not a text-style input — " \
+            "use data-checked for checkbox/radio.",
             file: file, line: directive.line,
           )
         end
+        return if VALUE_ELEMENTS.include?(tag)
+
+        raise Error.new(
+          "data-value: only valid on <input>, <textarea>, or <select> — " \
+          "found on <#{tag}>",
+          file: file, line: directive.line,
+        )
+      end
+
+      def self.check_checked_target(directive, file)
+        tag = directive.element_tag
+        if tag == "input"
+          type = input_type(directive)
+          return if INPUT_TYPES_FOR_CHECKED.include?(type)
+
+          raise Error.new(
+            "data-checked: <input type=\"#{type}\"> is not a checkbox or radio — " \
+            "use data-value for text-style inputs.",
+            file: file, line: directive.line,
+          )
+        end
+
+        raise Error.new(
+          "data-checked: only valid on <input type=\"checkbox\"> or " \
+          "<input type=\"radio\"> — found on <#{tag}>",
+          file: file, line: directive.line,
+        )
+      end
+
+      # HTML default for `<input>` with no type attribute is "text".
+      def self.input_type(directive)
+        attrs = directive.element_attrs || {}
+        (attrs["type"] || "text").downcase
       end
 
       # `gn-hidden` is reserved by data-show / data-hide. If the user

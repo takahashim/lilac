@@ -30,6 +30,14 @@ module Grainet
     # uses it to route the directive into either `bind_template_hook`
     # (top-level) or `bind_template_hook__each_<ref_id>` (iteration
     # body), and to address refs as `refs.X` vs `t.refs.X`.
+    #
+    # `element_attrs` is the snapshot of all HTML attributes on the
+    # source element, keyed by lowercase name. Shared by reference
+    # across every Directive on the same element so the cost is one
+    # Hash per element rather than per directive. Used by
+    # DirectiveCompatibility for checks that need attributes beyond
+    # the tag name (e.g. `data-value` requires that an `<input>`'s
+    # `type` be text-style).
     Directive = Struct.new(
       :kind,
       :name,
@@ -38,6 +46,7 @@ module Grainet
       :line,
       :element_tag,
       :scope_id,
+      :element_attrs,
       keyword_init: true,
     )
   end

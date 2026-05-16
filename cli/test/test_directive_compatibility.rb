@@ -5,10 +5,11 @@ require "test_helper"
 class TestDirectiveCompatibility < Minitest::Test
   DC = Grainet::CLI::DirectiveCompatibility
 
-  def dir(kind, ref_id: "g0", line: 1, tag: "div", value: "@x", name: nil, scope_id: nil)
+  def dir(kind, ref_id: "g0", line: 1, tag: "div", value: "@x", name: nil, scope_id: nil, element_attrs: nil)
     Grainet::CLI::Directive.new(
       kind: kind, name: name, value: value, ref_id: ref_id,
       line: line, element_tag: tag, scope_id: scope_id,
+      element_attrs: element_attrs,
     )
   end
 
@@ -38,8 +39,18 @@ class TestDirectiveCompatibility < Minitest::Test
   end
 
   def test_value_and_checked_on_same_element_raise
+    # Collision check fires before element-type check, so we use a
+    # type that's valid for the offending directive (text → fine for
+    # data-value) — the test isolates the collision rule.
     err = assert_raises(DC::Error) do
-      DC.check!([dir(:value, tag: "input"), dir(:checked, tag: "input", line: 4)], file: "x.gnt")
+      attrs = { "type" => "text" }
+      DC.check!(
+        [
+          dir(:value, tag: "input", element_attrs: attrs),
+          dir(:checked, tag: "input", line: 4, element_attrs: attrs),
+        ],
+        file: "x.gnt",
+      )
     end
     assert_includes err.message, "data-value and data-checked"
   end
@@ -72,9 +83,24 @@ class TestDirectiveCompatibility < Minitest::Test
   # ---- element type checks ---------------------------------------
 
   def test_data_value_on_form_controls_ok
+    # `<input>` without explicit type defaults to text (HTML default).
     DC.check!([dir(:value, tag: "input")], file: "x.gnt")
+    DC.check!([dir(:value, tag: "input", element_attrs: { "type" => "email" })], file: "x.gnt")
+    DC.check!([dir(:value, tag: "input", element_attrs: { "type" => "number" })], file: "x.gnt")
     DC.check!([dir(:value, tag: "textarea")], file: "x.gnt")
     DC.check!([dir(:value, tag: "select")], file: "x.gnt")
+  end
+
+  def test_data_value_on_input_type_checkbox_raises
+    err = assert_raises(DC::Error) do
+      DC.check!(
+        [dir(:value, tag: "input", line: 3, element_attrs: { "type" => "checkbox" })],
+        file: "form.gnt",
+      )
+    end
+    assert_includes err.message, "form.gnt:3"
+    assert_includes err.message, "checkbox"
+    assert_includes err.message, "data-checked"
   end
 
   def test_data_value_on_div_raises_with_tag_in_message
@@ -85,8 +111,28 @@ class TestDirectiveCompatibility < Minitest::Test
     assert_includes err.message, "<div>"
   end
 
-  def test_data_checked_on_input_ok
-    DC.check!([dir(:checked, tag: "input")], file: "x.gnt")
+  def test_data_checked_on_input_checkbox_or_radio_ok
+    DC.check!([dir(:checked, tag: "input", element_attrs: { "type" => "checkbox" })], file: "x.gnt")
+    DC.check!([dir(:checked, tag: "input", element_attrs: { "type" => "radio" })],    file: "x.gnt")
+  end
+
+  def test_data_checked_on_input_default_type_raises
+    # No explicit type → defaults to "text" → not checkbox/radio.
+    err = assert_raises(DC::Error) do
+      DC.check!([dir(:checked, tag: "input", line: 4)], file: "x.gnt")
+    end
+    assert_includes err.message, "x.gnt:4"
+    assert_includes err.message, "text"
+  end
+
+  def test_data_checked_on_input_type_text_raises
+    err = assert_raises(DC::Error) do
+      DC.check!(
+        [dir(:checked, tag: "input", line: 2, element_attrs: { "type" => "text" })],
+        file: "x.gnt",
+      )
+    end
+    assert_includes err.message, "data-value"
   end
 
   def test_data_checked_on_span_raises

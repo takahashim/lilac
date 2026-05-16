@@ -117,6 +117,10 @@ module Grainet
 
           if has_real_directive
             ref_id = ensure_ref_id(elem)
+            # Snapshot all attributes once per element and share the
+            # Hash across this element's directives — cheaper than
+            # re-walking the Nokogiri attr set per directive.
+            attrs = element_attrs_snapshot(elem)
             element_directives.each do |kind, name, attr_value|
               directives << Directive.new(
                 kind: kind,
@@ -126,6 +130,7 @@ module Grainet
                 line: elem.line,
                 element_tag: elem.name,
                 scope_id: scope_stack.last,
+                element_attrs: attrs,
               )
             end
             refs_map[ref_id] ||= { tag: elem.name, line: elem.line }
@@ -149,6 +154,15 @@ module Grainet
         body_html = elem.children.map(&:to_html).join
         synthetic_templates << { ref_id: ref_id, html: body_html }
         elem.children.unlink
+      end
+
+      # HTML attribute names are case-insensitive — normalise to
+      # lowercase keys so lookups like `attrs["type"]` work regardless
+      # of how the user typed the attribute name in the source.
+      def element_attrs_snapshot(elem)
+        elem.attributes.each_with_object({}) do |(name, attr), out|
+          out[name.downcase] = attr.value
+        end.freeze
       end
 
       # Returns Array<[kind, name, value]> for every directive on `elem`.

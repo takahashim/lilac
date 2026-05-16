@@ -175,7 +175,8 @@ class TestDirectiveCodegen < Minitest::Test
 
   def checked_dir(value:, ref_id: "g0", line: 1)
     Directive.new(kind: :checked, name: nil, value: value, ref_id: ref_id,
-                  line: line, element_tag: "input")
+                  line: line, element_tag: "input",
+                  element_attrs: { "type" => "checkbox" })
   end
 
   def test_data_checked_emits_bind_input_with_property
