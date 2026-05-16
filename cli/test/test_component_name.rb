@@ -5,29 +5,56 @@ require "test_helper"
 class TestComponentName < Minitest::Test
   CN = Grainet::CLI::ComponentName
 
+  # ---- ruby_class -------------------------------------------------
+
   def test_single_word
-    assert_equal "Counter", CN.to_ruby_class("counter")
+    assert_equal "Counter", CN.new("counter").ruby_class
   end
 
   def test_kebab_words_become_pascal_case
-    assert_equal "UserProfile", CN.to_ruby_class("user-profile")
-    assert_equal "ButtonGroup", CN.to_ruby_class("button-group")
+    assert_equal "UserProfile", CN.new("user-profile").ruby_class
+    assert_equal "ButtonGroup", CN.new("button-group").ruby_class
   end
 
   def test_double_dash_creates_namespace
-    assert_equal "Admin::UserCard", CN.to_ruby_class("admin--user-card")
-    assert_equal "Top::Mid::Leaf",  CN.to_ruby_class("top--mid--leaf")
+    assert_equal "Admin::UserCard", CN.new("admin--user-card").ruby_class
+    assert_equal "Top::Mid::Leaf",  CN.new("top--mid--leaf").ruby_class
   end
 
-  def test_leading_double_dash_raises
-    assert_raises(ArgumentError) { CN.to_ruby_class("--foo") }
+  def test_leading_double_dash_raises_at_construction
+    assert_raises(ArgumentError) { CN.new("--foo") }
   end
 
-  def test_trailing_double_dash_raises
-    assert_raises(ArgumentError) { CN.to_ruby_class("foo--") }
+  def test_trailing_double_dash_raises_at_construction
+    assert_raises(ArgumentError) { CN.new("foo--") }
   end
 
-  def test_empty_segment_raises
-    assert_raises(ArgumentError) { CN.to_ruby_class("foo---bar") }
+  def test_empty_segment_raises_at_construction
+    assert_raises(ArgumentError) { CN.new("foo---bar") }
+  end
+
+  # ---- each_template_name ---------------------------------------
+
+  def test_each_template_name_uses_kebab_form
+    assert_equal "gn-each-counter-g0", CN.new("counter").each_template_name("g0")
+    assert_equal "gn-each-admin--user-card-g3",
+                 CN.new("admin--user-card").each_template_name("g3")
+  end
+
+  # ---- value-object behaviour -----------------------------------
+
+  def test_to_s_returns_the_kebab_form
+    assert_equal "user-profile", CN.new("user-profile").to_s
+  end
+
+  def test_equality_by_kebab
+    assert_equal CN.new("counter"), CN.new("counter")
+    refute_equal CN.new("counter"), CN.new("ccounter")
+    refute_equal CN.new("counter"), "counter" # String != ComponentName
+  end
+
+  def test_hash_matches_kebab_hash_for_Hash_keys
+    h = { CN.new("counter") => :value }
+    assert_equal :value, h[CN.new("counter")]
   end
 end

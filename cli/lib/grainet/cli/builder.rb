@@ -90,12 +90,14 @@ module Grainet
       # for a component, caching the result.
       #
       # `data-each` iteration bodies extracted by TemplateAST are folded
-      # into `named` as synthetic templates using `Codegen.each_template_name`
+      # into `named` as synthetic templates using `ComponentName#each_template_name`
       # so they ride the same `<template data-template>` injection path
       # as user-defined named templates and the runtime can resolve them
       # via `bind_list ..., template: "gn-each-<component>-<ref>"`.
       def template_ast_for(name, component)
         @template_ast_cache[name] ||= begin
+          component_name = ComponentName.new(name)
+
           default_results = component.default_templates.map do |t|
             TemplateAST.new(t.body, source_path: component.path).parse
           end
@@ -106,7 +108,7 @@ module Grainet
           end
 
           synthetic = default_results.flat_map(&:synthetic_templates).map do |st|
-            { name: Codegen.each_template_name(name, st[:ref_id]), html: st[:html] }
+            { name: component_name.each_template_name(st[:ref_id]), html: st[:html] }
           end
 
           {
@@ -191,7 +193,7 @@ module Grainet
           CrossRefLinter.lint(
             script_text: user_script,
             directives: parsed[:default_directives],
-            component_name: ComponentName.to_ruby_class(name),
+            component_name: ComponentName.new(name).ruby_class,
             file: parsed[:source_path] ? File.basename(parsed[:source_path]) : "(template)",
           )
           generated = Codegen.generate(

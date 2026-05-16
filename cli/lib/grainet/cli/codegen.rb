@@ -58,15 +58,8 @@ module Grainet
         new(component_name: component_name, directives: directives, source_path: source_path).run
       end
 
-      # Per-component synthetic template name for a data-each body.
-      # Kept on the class because Builder calls it externally to render
-      # the matching `<template>` tag without re-deriving the convention.
-      def self.each_template_name(component_name, ref_id)
-        "gn-each-#{component_name}-#{ref_id}"
-      end
-
       def initialize(component_name:, directives:, source_path:)
-        @component_name = component_name
+        @component_name = ComponentName.new(component_name)
         @directives = directives
         @file = source_path ? File.basename(source_path) : "(template)"
       end
@@ -100,7 +93,7 @@ module Grainet
           method_bodies << each_method(scope_id, body)
         end
 
-        ruby_class = ComponentName.to_ruby_class(@component_name)
+        ruby_class = @component_name.ruby_class
         module_path = "Grainet::Bindings::#{ruby_class}"
 
         <<~RUBY
@@ -386,7 +379,7 @@ module Grainet
             # per item for the lifetime of a render cycle.
             "->(it) { it.object_id }"
           end
-        tpl_name = self.class.each_template_name(@component_name, ref_id)
+        tpl_name = @component_name.each_template_name(ref_id)
         [
           "# #{@file}:#{directive.line} — data-each=#{collection.inspect}#{key_field ? " data-key=#{key_field.inspect}" : ""}",
           %(bind_list #{context.refs_expr}.#{ref_id}, #{collection}, key: #{key_expr}, template: #{tpl_name.inspect} do |it, t|),
