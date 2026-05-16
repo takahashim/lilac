@@ -1,8 +1,12 @@
 # Lilac
 
-Reactive single-file component framework for [mruby-on-wasm][mwr].
-Templates use HTML5 `data-*` directives; build tool compiles `.lil`
-single-file components into static HTML + wasm.
+A lightweight frontend framework for Ruby developers who are at
+home with modern HTML and CSS, and would rather reach for Ruby
+than JavaScript when adding behavior.
+
+Templates stay as valid HTML5 with `data-*` directives; reactivity
+is driven by Signals and Effects; everything runs in the browser
+as mruby compiled to WebAssembly via [mruby-wasm-runtime][mwr].
 
 [mwr]: https://github.com/takahashim/mruby-wasm-runtime
 
@@ -11,11 +15,13 @@ single-file components into static HTML + wasm.
 ```
 lilac/
 ├── runtime/        # mrbgems compiled into the wasm bundle
-│   ├── mruby-lilac/         # Component / Signal / Effect / Bindable
-│   ├── mruby-lilac-async/   # Fetchy / Resource
+│   ├── mruby-lilac/             # Component / Signal / Effect / Bindable
+│   ├── mruby-lilac-directives/  # runtime data-* directive scanner
+│   ├── mruby-lilac-async/       # Fetchy / Resource
 │   ├── mruby-lilac-router/
-│   └── mruby-lilac-form/
-├── cli/            # Ruby gem (lilac-cli) — build / dev / scaffold / lint
+│   ├── mruby-lilac-form/
+│   └── mruby-regexp-compat/     # vendored Regexp engine
+├── cli/            # Ruby gem (lilac-cli) — optional build / dev / scaffold / lint
 │   ├── lib/lilac/cli/
 │   ├── exe/lilac
 │   └── lilac-cli.gemspec
@@ -54,6 +60,54 @@ cd ../lilac
 make js-lilac-full      # → build/mruby-js-lilac-full.wasm
 ```
 
+## Quick start: open and run
+
+Lilac runs in the browser with no build step. Author a single HTML
+file with `data-*` directives and an inline `<script type="text/ruby">`:
+
+```html
+<!DOCTYPE html>
+<html>
+  <body>
+    <div data-component="counter">
+      <button data-on-click="decrement">-</button>
+      <span data-text="@count">0</span>
+      <button data-on-click="increment">+</button>
+    </div>
+
+    <script type="text/ruby" id="ruby-source">
+      class Counter < Lilac::Component
+        def setup
+          @count = signal(0)
+        end
+        def increment(_ev) = @count.update { |n| n + 1 }
+        def decrement(_ev) = @count.update { |n| n - 1 }
+      end
+      Lilac.register "counter", Counter
+      Lilac.start
+    </script>
+
+    <script type="module">
+      import { createVM } from "../mruby-wasm-runtime/mrbgem/mruby-wasm-js/js/index.js";
+      const vm = await createVM({ wasm: "./build/mruby-js-lilac-full.wasm" });
+      vm.evalScript("#ruby-source");
+    </script>
+  </body>
+</html>
+```
+
+The runtime walks the DOM at mount time, parses each `data-*`
+directive, and wires the equivalent `bind` / `bind_input` /
+`bind_list` calls automatically. See `examples/` for fuller demos
+including `data-each` lists, forms, and shared theme state.
+
+To run the examples locally:
+
+```bash
+make serve   # builds the wasm bundle, symlinks mrbgem, starts wsv
+# then visit http://127.0.0.1:8000/examples/
+```
+
 ## Build variants
 
 | Variant | Compiler | Mrbgems | Use case |
@@ -65,7 +119,7 @@ make js-lilac-full      # → build/mruby-js-lilac-full.wasm
 Add `-release` to any target for the optimised (`-Os --strip-debug`)
 variant.
 
-## CLI
+## CLI (optional)
 
 ```bash
 cd cli
@@ -73,9 +127,25 @@ bundle install
 bundle exec exe/lilac --help
 ```
 
-The CLI lives in this repo at `cli/` (Ruby gem). It compiles `.lil`
-files into HTML + Ruby that the wasm runtime evaluates at component
-mount time. See `cli/README.md` for usage / scaffold guide.
+The CLI is an **optional optimization layer** for larger projects.
+The runtime is the canonical interpreter of `data-*` directives —
+you can ship a Lilac app as plain HTML (see Quick start above).
+
+What the CLI adds on top:
+
+- **Static lint** — undeclared signals, unused methods, banned
+  attributes, grammar errors caught at build time with source
+  positions (instead of at component mount time).
+- **`.lil` single-file components** + project structure
+  (`components/` + `pages/`) with `<lilac-component name="...">`
+  placeholder composition.
+- **Pre-compiled bindings** — directive interpretation moves from
+  mount time to build time; the generated `Lilac::Bindings::<Class>`
+  module's `bind_template_hook` takes precedence over the runtime
+  scanner, so there's no double-binding when both paths coexist.
+- **dev server** with live reload, `scaffold`, `doctor`.
+
+See `cli/README.md` for usage details.
 
 ## Tests
 

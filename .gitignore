@@ -2,6 +2,10 @@
 /build/
 /dist/
 
+# Copy created by `make serve` so wsv can resolve example imports of
+# `../mrbgem/...` from within the served root.
+/mrbgem
+
 # direnv local override
 .envrc.local
 

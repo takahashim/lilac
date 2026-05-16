@@ -144,6 +144,26 @@ test: js-lilac-full node_modules
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node test/runner.mjs
 
+# ── serve (examples in a browser) ──────────────────────────────────────
+# Examples reference `../mrbgem/mruby-wasm-js/js/index.js`, which lives
+# in the mruby-wasm-runtime sibling repo — not in lilac itself. We copy
+# the bridge into lilac/mrbgem/ so the path resolves under the served
+# root. (A symlink would be cheaper but wsv refuses to follow symlinks
+# pointing outside the served root, returning 403.)
+mrbgem:
+	@echo "Copying mrbgem from $(MRUBY_WASM_RUNTIME)/mrbgem"
+	@cp -R $(MRUBY_WASM_RUNTIME)/mrbgem mrbgem
+
+.PHONY: serve
+serve: js-lilac-full mrbgem
+	@command -v wsv >/dev/null 2>&1 || { \
+	  echo "wsv not installed. Run: gem install wsv"; \
+	  exit 1; \
+	}
+	@echo "Serving lilac/ at http://127.0.0.1:8000/"
+	@echo "Examples: http://127.0.0.1:8000/examples/"
+	@wsv .
+
 # ── clean ───────────────────────────────────────────────────────────────
 clean:
 	rm -rf $(MRUBY_DIR)/build/wasi-js-lilac-*
