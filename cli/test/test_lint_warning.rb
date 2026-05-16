@@ -35,11 +35,13 @@ class TestLintWarning < Minitest::Test
     refute_includes w.to_s, "Declared"
   end
 
-  def test_suggestion_rendered_with_did_you_mean
+  def test_suggestion_rendered_as_indented_line_verbatim
+    # The caller is responsible for adding any framing ("Did you mean:",
+    # "Use:", etc.) — LintWarning just prints what it's given.
     w = Grainet::CLI::LintWarning.new(
       at: loc("x.gnt", 5), body: "Signal @cont is not declared",
       declared_label: "Declared signals", declared: ["@count"],
-      suggestion: "@count",
+      suggestion: "Did you mean: @count?",
     )
     assert_equal <<~MSG.chomp, w.to_s
       grainet: lint warning in x.gnt:5
@@ -50,7 +52,19 @@ class TestLintWarning < Minitest::Test
   end
 
   def test_nil_suggestion_omits_the_line
-    w = Grainet::CLI::LintWarning.new(at: loc("x.gnt", 1), body: "...", suggestion: nil)
+    w = Grainet::CLI::LintWarning.new(at: loc("x.gnt", 1), body: "abc", suggestion: nil)
     refute_includes w.to_s, "Did you mean"
+  end
+
+  def test_multiline_body_is_indented_per_line
+    w = Grainet::CLI::LintWarning.new(
+      at: loc("x.gnt", 2),
+      body: "first line\nsecond line",
+    )
+    assert_equal <<~MSG.chomp, w.to_s
+      grainet: lint warning in x.gnt:2
+        first line
+        second line
+    MSG
   end
 end

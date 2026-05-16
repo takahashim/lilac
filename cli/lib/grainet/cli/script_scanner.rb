@@ -9,7 +9,11 @@ module Grainet
     # initialization, conditional declarations, and dynamic eval are
     # accepted false negatives — those simply don't trip warnings.
     module ScriptScanner
-      Result = Struct.new(:signals, :methods, :assigned_ivars, keyword_init: true) do
+      Result = Struct.new(
+        :signals, :methods, :assigned_ivars,
+        :signal_lines, :method_lines,
+        keyword_init: true,
+      ) do
         def declares_signal?(ivar)
           signals.include?(ivar)
         end
@@ -62,21 +66,29 @@ module Grainet
 
       def self.scan(script_text)
         cleaned = strip_comment_lines(script_text.to_s)
-        signals = cleaned.scan(SIGNAL_DECL).map { |m| "@#{m.first}" }
-        methods = cleaned.scan(METHOD_DECL).map(&:first)
-        assigned = cleaned.scan(IVAR_ASSIGN).map { |m| "@#{m.first}" }
+        signal_lines = {}
+        method_lines = {}
+        assigned = []
+        cleaned.each_line.with_index(1) do |line, i|
+          line.scan(SIGNAL_DECL) { |m| name = "@#{m.first}"; signal_lines[name] ||= i }
+          line.scan(METHOD_DECL) { |m| method_lines[m.first] ||= i }
+          line.scan(IVAR_ASSIGN) { |m| assigned << "@#{m.first}" }
+        end
         Result.new(
-          signals: signals.uniq,
-          methods: methods.uniq,
+          signals: signal_lines.keys,
+          methods: method_lines.keys,
           assigned_ivars: assigned.uniq,
+          signal_lines: signal_lines,
+          method_lines: method_lines,
         )
       end
 
-      # Skip whole lines that are comments. Inline `#` doesn't matter
-      # for signal/method extraction (the patterns anchor on the leading
-      # `@` / `def`, which precedes any `#`).
+      # Replace whole-line comments with blank lines (instead of
+      # removing them) so source line numbers stay aligned with the
+      # original script. The dead-code lint reports the declaration's
+      # line, so off-by-one here would mislead the user.
       def self.strip_comment_lines(src)
-        src.each_line.reject { |l| l.strip.start_with?("#") }.join
+        src.each_line.map { |l| l.strip.start_with?("#") ? "\n" : l }.join
       end
     end
   end

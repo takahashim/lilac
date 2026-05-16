@@ -11,10 +11,10 @@ class TestCrossRefLinter < Minitest::Test
     )
   end
 
-  def lint(script:, directives:, component: "Counter", file: "x.gnt")
+  def lint(script:, directives:, component: "Counter", file: "x.gnt", refs_map: {})
     io = StringIO.new
     count = Grainet::CLI::CrossRefLinter.lint(
-      script_text: script, directives: directives,
+      script_text: script, directives: directives, refs_map: refs_map,
       component_name: component, file: file, out: io,
     )
     [count, io.string]
@@ -65,11 +65,15 @@ class TestCrossRefLinter < Minitest::Test
 
   # ---- it_path is not checked against signals ------------------
 
-  def test_it_path_value_does_not_trigger_signal_warning
-    count, = lint(
-      script: "@items = signal([])",
-      directives: [dir(:text, value: "it.title")],
+  def test_it_path_value_inside_iteration_scope_does_not_trigger_signal_warning
+    # it_path is not a signal reference, so the script-vs-template
+    # signal check doesn't fire. (At top level it would trigger the
+    # separate "it outside data-each" warning — see below.)
+    inside_each = Grainet::CLI::Directive.new(
+      kind: :text, name: nil, value: "it.title", ref_id: "g1",
+      line: 1, element_tag: "span", scope_id: "g0",
     )
+    count, = lint(script: "@items = signal([])", directives: [inside_each])
     assert_equal 0, count
   end
 
@@ -147,5 +151,72 @@ class TestCrossRefLinter < Minitest::Test
     )
     assert_includes out, "Signal @coutn"
     assert_includes out, "Did you mean: @count?"
+  end
+
+  # ---- it outside data-each (lint) ------------------------------
+
+  def test_it_path_at_top_level_emits_warning
+    # `it` only binds inside a data-each iteration body; using it at
+    # top level (scope_id nil) means the generated code would crash.
+    _, out = lint(
+      script: "",
+      directives: [dir(:text, value: "it.title", line: 3)],
+    )
+    assert_includes out, "x.gnt:3"
+    assert_includes out, "`it` referenced outside a data-each"
+  end
+
+  def test_it_path_inside_data_each_scope_is_fine
+    each_scope_dir = Grainet::CLI::Directive.new(
+      kind: :text, name: nil, value: "it.title", ref_id: "g1",
+      line: 4, element_tag: "span", scope_id: "g0",
+    )
+    count, = lint(script: "", directives: [each_scope_dir])
+    assert_equal 0, count
+  end
+
+  # ---- data-each without data-key (lint) ------------------------
+
+  def test_data_each_without_key_emits_warning
+    _, out = lint(
+      script: "@items = signal([])",
+      directives: [dir(:each, value: "@items", line: 6, tag: "ul")],
+    )
+    assert_includes out, "x.gnt:6"
+    assert_includes out, "data-each without data-key"
+    assert_includes out, "object_id"
+  end
+
+  def test_data_each_with_matching_key_emits_no_warning
+    each_dir = dir(:each, value: "@items", line: 6, tag: "ul", ref_id: "gE")
+    key_dir = Grainet::CLI::Directive.new(
+      kind: :key, name: nil, value: "id", ref_id: "gE",
+      line: 6, element_tag: "ul", scope_id: nil,
+    )
+    count, = lint(script: "@items = signal([])", directives: [each_dir, key_dir])
+    assert_equal 0, count
+  end
+
+  # ---- reserved data-ref name (lint) ----------------------------
+
+  def test_data_ref_collides_with_kernel_method_emits_warning
+    _, out = lint(
+      script: "",
+      directives: [],
+      refs_map: { "p" => { tag: "p", line: 4 }, "class" => { tag: "span", line: 5 } },
+    )
+    assert_includes out, "data-ref \"p\" collides"
+    assert_includes out, "data-ref \"class\" collides"
+    assert_includes out, "x.gnt:4"
+    assert_includes out, "x.gnt:5"
+  end
+
+  def test_non_kernel_ref_name_does_not_trigger
+    count, = lint(
+      script: "",
+      directives: [],
+      refs_map: { "message" => { tag: "p", line: 2 }, "submit_btn" => { tag: "button", line: 3 } },
+    )
+    assert_equal 0, count
   end
 end

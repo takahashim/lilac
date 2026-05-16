@@ -125,6 +125,7 @@ module Grainet
           {
             default_html: default_results.map(&:html).join.strip,
             default_directives: default_results.flat_map(&:directives),
+            default_refs_map: default_results.map(&:refs_map).reduce({}, :merge),
             named: named + synthetic,
             source_path: component.path,
           }
@@ -204,6 +205,7 @@ module Grainet
           CrossRefLinter.lint(
             script_text: user_script,
             directives: parsed[:default_directives],
+            refs_map: parsed[:default_refs_map],
             component_name: ComponentName.new(name).ruby_class,
             file: parsed[:source_path] ? File.basename(parsed[:source_path]) : "(template)",
           )

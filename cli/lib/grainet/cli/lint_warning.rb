@@ -15,6 +15,11 @@ module Grainet
     # `declared` and `suggestion` are optional — when empty/nil the
     # corresponding lines are omitted so single-fact warnings stay
     # compact.
+    #
+    # `suggestion` is rendered verbatim as an indented bullet — callers
+    # add their own framing (`"Did you mean: ..."` / `"Use ..."` /
+    # etc.) so the same warning shape carries both typo hints and
+    # corrective advice.
     class LintWarning
       def initialize(at:, body:, declared_label: nil, declared: [], suggestion: nil)
         @at = at
@@ -25,9 +30,10 @@ module Grainet
       end
 
       def to_s
-        parts = ["grainet: lint warning in #{@at}", "  #{@body}"]
+        parts = ["grainet: lint warning in #{@at}"]
+        @body.to_s.each_line { |l| parts << "  #{l.chomp}" }
         parts << "  #{@declared_label}: #{@declared.join(', ')}." if @declared_label && !@declared.empty?
-        parts << "  Did you mean: #{@suggestion}?" if @suggestion
+        parts << "  #{@suggestion}" if @suggestion
         parts.join("\n")
       end
     end
