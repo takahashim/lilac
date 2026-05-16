@@ -1,8 +1,8 @@
 <template>
   <div data-component="counter">
-    <button data-ref="decrement" type="button">-</button>
-    <span data-ref="count" class="count">0</span>
-    <button data-ref="increment" type="button">+</button>
+    <button data-on-click="decrement" type="button">-</button>
+    <span data-text="@count" class="count">0</span>
+    <button data-on-click="increment" type="button">+</button>
   </div>
 </template>
 
@@ -10,9 +10,9 @@
 class Counter < Grainet::Component
   def setup
     @count = signal(0)
-    refs.increment.on(:click) { @count.update(&:succ) }
-    refs.decrement.on(:click) { @count.update(&:pred) }
-    bind refs.count, text: @count
   end
+
+  def increment(_ev) = @count.update(&:succ)
+  def decrement(_ev) = @count.update(&:pred)
 end
 </script>
