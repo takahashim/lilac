@@ -27,12 +27,13 @@ module Grainet
     # attributes are left in the output HTML so `data-component` /
     # `data-ref` continue to flow through to the runtime.
     class TemplateAST
-      # `synthetic_templates` carries `data-each` iteration bodies
-      # extracted out of the main template tree. Each entry is
-      # `{ ref_id: "g0", html: "<li>...</li>" }`; the Builder turns
-      # them into `<template data-template="gn-each-<component>-<ref>">`
-      # elements injected before `</body>`, which the runtime
-      # `bind_list ..., template: ...` clones per iteration item.
+      # One iteration body extracted from a `data-each` element. The
+      # Builder later turns each entry into a
+      # `<template data-template="gn-each-<component>-<ref>">` injected
+      # before `</body>`, which the runtime `bind_list ..., template: ...`
+      # clones per iteration item.
+      SyntheticBody = Struct.new(:ref_id, :html, keyword_init: true)
+
       Result = Struct.new(:html, :directives, :refs_map, :synthetic_templates, keyword_init: true)
 
       # Maps an attribute-name regex to its directive kind. Order matters:
@@ -152,7 +153,7 @@ module Grainet
       # container that bind_list populates per item at runtime.
       def extract_each_body(elem, ref_id, synthetic_templates)
         body_html = elem.children.map(&:to_html).join
-        synthetic_templates << { ref_id: ref_id, html: body_html }
+        synthetic_templates << SyntheticBody.new(ref_id: ref_id, html: body_html)
         elem.children.unlink
       end
 

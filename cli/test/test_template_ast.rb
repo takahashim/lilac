@@ -179,9 +179,9 @@ class TestTemplateAST < Minitest::Test
     assert_equal 1, result.synthetic_templates.length
     st = result.synthetic_templates.first
     each_dir = result.directives.find { |d| d.kind == :each }
-    assert_equal each_dir.ref_id, st[:ref_id]
-    assert_includes st[:html], "<li>"
-    assert_includes st[:html], %(data-text="it.label")
+    assert_equal each_dir.ref_id, st.ref_id
+    assert_includes st.html, "<li>"
+    assert_includes st.html, %(data-text="it.label")
     # Outer container survives, but the iteration body is stripped from
     # the main HTML — the runtime bind_list repopulates per item.
     assert_includes result.html, "<ul"
@@ -243,8 +243,8 @@ class TestTemplateAST < Minitest::Test
 
     # Outer synthetic template body includes the inner <ul> (now empty)
     # but not the inner <li> (extracted into its own template).
-    outer_st = result.synthetic_templates.find { |st| st[:ref_id] == outer.ref_id }
-    assert_includes outer_st[:html], "<ul"
-    refute_includes outer_st[:html], "data-text=\"it.title\""
+    outer_st = result.synthetic_templates.find { |st| st.ref_id == outer.ref_id }
+    assert_includes outer_st.html, "<ul"
+    refute_includes outer_st.html, "data-text=\"it.title\""
   end
 end

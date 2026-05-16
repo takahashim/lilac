@@ -25,6 +25,14 @@ module Grainet
     class Builder
       class Error < StandardError; end
 
+      # A template ready to be injected as `<template data-template="X">`
+      # into the page. Both user-defined named templates (from
+      # `<template data-template="...">` in `.gnt` source) and synthetic
+      # data-each iteration bodies extracted by TemplateAST end up as
+      # this single shape — the page-injection logic doesn't need to
+      # know which side they came from.
+      RenderedTemplate = Struct.new(:name, :html, keyword_init: true)
+
       # Accepted forms (all match the same component name in capture 1):
       #
       #   <grainet-component name="counter"></grainet-component>
@@ -86,7 +94,7 @@ module Grainet
 
       private
 
-      # Returns { default_html:, default_directives:, named: [{name:, html:, directives:}, ...] }
+      # Returns { default_html:, default_directives:, named: [RenderedTemplate, ...] }
       # for a component, caching the result.
       #
       # `data-each` iteration bodies extracted by TemplateAST are folded
@@ -104,11 +112,14 @@ module Grainet
 
           named = component.named_templates.map do |t|
             result = TemplateAST.new(t.body, source_path: component.path).parse
-            { name: t.name, html: result.html, directives: result.directives }
+            RenderedTemplate.new(name: t.name, html: result.html)
           end
 
           synthetic = default_results.flat_map(&:synthetic_templates).map do |st|
-            { name: component_name.each_template_name(st[:ref_id]), html: st[:html] }
+            RenderedTemplate.new(
+              name: component_name.each_template_name(st.ref_id),
+              html: st.html,
+            )
           end
 
           {
@@ -178,7 +189,7 @@ module Grainet
       def build_injection(used_names, components)
         named_templates = used_names.flat_map { |name|
           parsed = template_ast_for(name, components[name])
-          parsed[:named].map { |nt| render_named_template(nt[:name], nt[:html]) }
+          parsed[:named].map { |nt| render_named_template(nt.name, nt.html) }
         }
 
         scripts = used_names.map { |name|
