@@ -25,7 +25,10 @@ Gem::Specification.new do |spec|
 
   # wsv powers `grainet dev` (static serving + custom app DI + SSE).
   # listen handles file-watch for live reload.
+  # nokogiri parses `.gnt` template bodies for directive extraction
+  # (HTML5 fragment mode, attribute walking, source-line tracking).
   spec.add_dependency "listen", "~> 3.9"
+  spec.add_dependency "nokogiri", "~> 1.16"
   spec.add_dependency "wsv", "~> 0.10"
 
   spec.metadata["rubygems_mfa_required"] = "true"
