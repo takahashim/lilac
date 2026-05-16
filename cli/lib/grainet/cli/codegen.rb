@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "build_error"
+require_relative "component_name"
 require_relative "value_grammar"
 require_relative "hash_literal_parser"
 require_relative "directive_compatibility"
@@ -64,14 +65,6 @@ module Grainet
         "gn-each-#{component_name}-#{ref_id}"
       end
 
-      # Kebab-case `.gnt` basename to the Ruby class path the runtime's
-      # autoregister produces ("admin--user-card" → "Admin::UserCard").
-      # Exposed on the class for tools (like the cross-reference linter)
-      # that want the same display name without going through `run`.
-      def self.ruby_class_path(name)
-        new(component_name: name, directives: [], source_path: nil).send(:ruby_class_path, name)
-      end
-
       def initialize(component_name:, directives:, source_path:)
         @component_name = component_name
         @directives = directives
@@ -107,7 +100,7 @@ module Grainet
           method_bodies << each_method(scope_id, body)
         end
 
-        ruby_class = ruby_class_path(@component_name)
+        ruby_class = ComponentName.to_ruby_class(@component_name)
         module_path = "Grainet::Bindings::#{ruby_class}"
 
         <<~RUBY
@@ -463,24 +456,6 @@ module Grainet
       # with Ruby's reserved `class` in pattern contexts; strip it.
       def kind_to_attr(kind)
         kind.to_s.chomp("_").tr("_", "-")
-      end
-
-      # "admin--user-card" → "Admin::UserCard". Same convention used by
-      # mruby-grainet's autoregister, so the generated `Counter.include(
-      # Grainet::Bindings::Counter)` always matches the runtime's
-      # resolved class. `--` only between segments — leading / trailing
-      # `--` or `-` raise ArgumentError so misnamed files fail loudly
-      # rather than emitting `::Foo` / `Foo::`.
-      def ruby_class_path(name)
-        name.to_s.split("--", -1).map { |segment|
-          raise ArgumentError, "Invalid component name: #{name.inspect} (empty namespace segment)" if segment.empty?
-
-          segment.split("-").map { |word|
-            raise ArgumentError, "Invalid component name: #{name.inspect} (empty word segment)" if word.empty?
-
-            word[0].upcase + (word[1..] || "")
-          }.join
-        }.join("::")
       end
 
       # Open form is chosen over `module Grainet::Bindings::Counter`

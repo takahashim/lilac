@@ -5,6 +5,7 @@ require "pathname"
 require_relative "sfc"
 require_relative "template_ast"
 require_relative "codegen"
+require_relative "component_name"
 require_relative "cross_ref_linter"
 
 module Grainet
@@ -190,7 +191,7 @@ module Grainet
           CrossRefLinter.lint(
             script_text: user_script,
             directives: parsed[:default_directives],
-            component_name: Codegen.ruby_class_path(name),
+            component_name: ComponentName.to_ruby_class(name),
             file: parsed[:source_path] ? File.basename(parsed[:source_path]) : "(template)",
           )
           generated = Codegen.generate(
