@@ -25,6 +25,11 @@ module Grainet
     # `element_tag` is the HTML element name (e.g. "div", "button") used
     # by later phases to enforce applicability rules from spec Section 9
     # (e.g. `data-value` requires a form control).
+    # `scope_id` is the `ref_id` of the enclosing `data-each` element,
+    # or `nil` for directives at the component's top level. Codegen
+    # uses it to route the directive into either `bind_template_hook`
+    # (top-level) or `bind_template_hook__each_<ref_id>` (iteration
+    # body), and to address refs as `refs.X` vs `t.refs.X`.
     Directive = Struct.new(
       :kind,
       :name,
@@ -32,6 +37,7 @@ module Grainet
       :ref_id,
       :line,
       :element_tag,
+      :scope_id,
       keyword_init: true,
     )
   end

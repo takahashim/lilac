@@ -37,9 +37,13 @@ class TestDirectiveCodegen < Minitest::Test
     assert_includes out, "bind refs.g0, text: @count"
   end
 
-  def test_data_text_with_it_path
+  def test_data_text_with_it_path_wraps_in_computed
+    # `bind ref, text: source` calls `source.value` internally — fine for
+    # an ivar (Signal), broken for `it.title` (plain String). Wrapping
+    # in `computed { ... }` makes the value flow through a Computed
+    # whose `.value` returns the field.
     out = gen([text(value: "it.title")])
-    assert_includes out, "bind refs.g0, text: it.title"
+    assert_includes out, "bind refs.g0, text: computed { it.title }"
   end
 
   def test_data_text_strips_surrounding_whitespace
@@ -221,15 +225,287 @@ class TestDirectiveCodegen < Minitest::Test
     assert_raises(Grainet::CLI::Codegen::Error) { gen([show(value: "@user.active?")]) }
   end
 
+  # ---- data-attr-X ------------------------------------------------
+
+  def attr_dir(name:, value:, ref_id: "g0", line: 1)
+    Directive.new(kind: :attr, name: name, value: value, ref_id: ref_id,
+                  line: line, element_tag: "a")
+  end
+
+  def test_data_attr_emits_bind_attr_mapping
+    out = gen([attr_dir(name: "href", value: "@url")])
+    assert_includes out, %(bind refs.g0, attr: { "href" => @url })
+  end
+
+  def test_data_attr_supports_it_path_wraps_in_computed
+    out = gen([attr_dir(name: "data-id", value: "it.id")])
+    assert_includes out, %(bind refs.g0, attr: { "data-id" => computed { it.id } })
+  end
+
+  def test_data_attr_rejects_inline_event_handler
+    err = assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([attr_dir(name: "onclick", value: "@x", line: 5)], source_path: "ui.gnt")
+    end
+    assert_includes err.message, "ui.gnt:5"
+    assert_includes err.message, "banned attribute"
+  end
+
+  def test_data_attr_rejects_srcdoc_and_style
+    assert_raises(Grainet::CLI::Codegen::Error) { gen([attr_dir(name: "srcdoc", value: "@x")]) }
+    assert_raises(Grainet::CLI::Codegen::Error) { gen([attr_dir(name: "style",  value: "@x")]) }
+  end
+
+  def test_data_attr_rejects_invalid_value_shape
+    assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([attr_dir(name: "href", value: "@url.to_s")])
+    end
+  end
+
+  # ---- data-css-X -------------------------------------------------
+
+  def css(name:, value:, ref_id: "g0", line: 1)
+    Directive.new(kind: :css, name: name, value: value, ref_id: ref_id,
+                  line: line, element_tag: "div")
+  end
+
+  def test_data_css_emits_effect_set_style_with_double_dash_prefix
+    out = gen([css(name: "progress", value: "@percent")])
+    assert_includes out, %(effect { refs.g0.set_style("--progress", @percent.value) })
+  end
+
+  def test_data_css_with_hyphenated_name
+    out = gen([css(name: "theme-color", value: "@bg")])
+    assert_includes out, %(effect { refs.g0.set_style("--theme-color", @bg.value) })
+  end
+
+  def test_data_css_with_it_path_omits_dot_value
+    out = gen([css(name: "progress", value: "it.percent")])
+    assert_includes out, %(effect { refs.g0.set_style("--progress", it.percent) })
+  end
+
+  def test_data_css_rejects_uppercase_name
+    err = assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([css(name: "Color", value: "@bg", line: 4)], source_path: "x.gnt")
+    end
+    assert_includes err.message, "x.gnt:4"
+    assert_includes err.message, "kebab-lowercase"
+  end
+
+  def test_data_css_rejects_digit_start
+    assert_raises(Grainet::CLI::Codegen::Error) { gen([css(name: "3d-effect", value: "@x")]) }
+  end
+
+  def test_data_css_rejects_leading_hyphen
+    # `data-css--theme-color` would produce `----theme-color` after auto-prepend.
+    assert_raises(Grainet::CLI::Codegen::Error) { gen([css(name: "-theme", value: "@x")]) }
+  end
+
+  def test_data_css_rejects_invalid_value_shape
+    assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([css(name: "progress", value: "@percent.to_s")])
+    end
+  end
+
+  # ---- data-class -------------------------------------------------
+
+  def class_dir(value:, ref_id: "g0", line: 1)
+    Directive.new(kind: :class_, name: nil, value: value, ref_id: ref_id,
+                  line: line, element_tag: "div")
+  end
+
+  def test_data_class_single_bare_pair
+    out = gen([class_dir(value: "{ active: @on }")])
+    assert_includes out, %(bind refs.g0, class: { "active" => @on })
+  end
+
+  def test_data_class_multiple_pairs
+    out = gen([class_dir(value: "{ active: @a, error: @e }")])
+    assert_includes out, %(bind refs.g0, class: { "active" => @a, "error" => @e })
+  end
+
+  def test_data_class_quoted_kebab_key
+    out = gen([class_dir(value: "{ 'btn-primary': @primary }")])
+    assert_includes out, %(bind refs.g0, class: { "btn-primary" => @primary })
+  end
+
+  def test_data_class_tailwind_variant_key
+    out = gen([class_dir(value: "{ 'hover:bg-blue-500': @h, 'md:text-lg': @d }")])
+    assert_includes out, %("hover:bg-blue-500" => @h, "md:text-lg" => @d)
+  end
+
+  def test_data_class_mixed_bare_and_quoted
+    out = gen([class_dir(value: "{ active: @a, 'btn-primary': @p }")])
+    assert_includes out, %("active" => @a, "btn-primary" => @p)
+  end
+
+  def test_data_class_it_path_value_wraps_in_computed
+    out = gen([class_dir(value: "{ done: it.done }")])
+    assert_includes out, %("done" => computed { it.done })
+  end
+
+  def test_data_class_invalid_value_raises_with_location
+    err = assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([class_dir(value: "{ active: @user.name }", line: 6)], source_path: "x.gnt")
+    end
+    assert_includes err.message, "x.gnt:6"
+    assert_includes err.message, "invalid value"
+  end
+
+  def test_data_class_parse_error_is_wrapped_with_location
+    err = assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([class_dir(value: "{ btn-primary: @p }", line: 9)], source_path: "x.gnt")
+    end
+    assert_includes err.message, "x.gnt:9"
+  end
+
+  # ---- data-each / data-key --------------------------------------
+
+  def each_dir(value:, ref_id: "g0", line: 1, scope_id: nil)
+    Directive.new(kind: :each, name: nil, value: value, ref_id: ref_id,
+                  line: line, element_tag: "ul", scope_id: scope_id)
+  end
+
+  def key_dir(value:, ref_id: "g0", line: 1, scope_id: nil)
+    Directive.new(kind: :key, name: nil, value: value, ref_id: ref_id,
+                  line: line, element_tag: "ul", scope_id: scope_id)
+  end
+
+  def scoped_text(value:, ref_id: "g1", scope_id: "g0", line: 2)
+    Directive.new(kind: :text, name: nil, value: value, ref_id: ref_id,
+                  line: line, element_tag: "span", scope_id: scope_id)
+  end
+
+  def test_data_each_with_data_key_emits_bind_list_and_iteration_method
+    out = gen(
+      [
+        each_dir(value: "@todos", ref_id: "g0"),
+        key_dir(value: "id", ref_id: "g0"),
+        scoped_text(value: "it.title", ref_id: "g1", scope_id: "g0"),
+      ],
+    )
+    assert_includes out,
+                    %(bind_list refs.g0, @todos, key: ->(it) { it.id }, ) +
+                    %(template: "gn-each-counter-g0" do |it, t|)
+    assert_includes out, "bind_template_hook__each_g0(it, t)"
+    assert_includes out, "def bind_template_hook__each_g0(it, t)"
+    assert_includes out, "bind t.refs.g1, text: computed { it.title }"
+  end
+
+  def test_data_each_without_data_key_falls_back_to_object_id
+    out = gen([each_dir(value: "@items"), scoped_text(value: "it.label")])
+    assert_includes out, "key: ->(it) { it.object_id }"
+  end
+
+  def test_data_each_iteration_method_emits_even_without_top_level_directives
+    # `data-each` is itself a top-level directive (in nil scope), so
+    # `bind_template_hook` exists with just the bind_list call.
+    out = gen(
+      [
+        each_dir(value: "@items"),
+        scoped_text(value: "it.label"),
+      ],
+    )
+    assert_includes out, "def bind_template_hook"
+    assert_includes out, "def bind_template_hook__each_g0(it, t)"
+  end
+
+  def test_nested_data_each_generates_two_iteration_methods
+    out = gen(
+      [
+        each_dir(value: "@categories", ref_id: "g0"),
+        key_dir(value: "id", ref_id: "g0"),
+        # Inner each lives in outer's scope, addressed via t.refs
+        each_dir(value: "it.items", ref_id: "g3", scope_id: "g0"),
+        key_dir(value: "id", ref_id: "g3", scope_id: "g0"),
+        # Inner each body
+        scoped_text(value: "it.title", ref_id: "g4", scope_id: "g3"),
+      ],
+    )
+    assert_includes out, "def bind_template_hook__each_g0(it, t)"
+    assert_includes out, "def bind_template_hook__each_g3(it, t)"
+    assert_includes out,
+                    %(bind_list t.refs.g3, it.items, key: ->(it) { it.id }, ) +
+                    %(template: "gn-each-counter-g3" do |it, t|)
+    assert_includes out, "bind t.refs.g4, text: computed { it.title }"
+  end
+
+  def test_data_on_inside_data_each_passes_it_to_handler
+    out = gen(
+      [
+        each_dir(value: "@todos"),
+        Directive.new(kind: :on, name: "click", value: "remove",
+                      ref_id: "g1", line: 2, element_tag: "button", scope_id: "g0"),
+      ],
+    )
+    assert_includes out, "t.refs.g1.on(:click) { |ev| remove(it, ev) }"
+  end
+
+  def test_data_key_value_rejects_it_prefix
+    err = assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([each_dir(value: "@todos", line: 3), key_dir(value: "it.id", line: 3)],
+          source_path: "x.gnt")
+    end
+    assert_includes err.message, "x.gnt:3"
+    assert_includes err.message, "bare field name"
+  end
+
+  def test_data_key_value_rejects_at_prefix
+    assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([each_dir(value: "@todos"), key_dir(value: "@id")])
+    end
+  end
+
+  def test_data_key_value_rejects_dot_access
+    assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([each_dir(value: "@todos"), key_dir(value: "user.id")])
+    end
+  end
+
+  def test_data_key_value_rejects_predicate_suffix
+    assert_raises(Grainet::CLI::Codegen::Error) do
+      gen([each_dir(value: "@todos"), key_dir(value: "valid?")])
+    end
+  end
+
+  def test_data_key_without_data_each_on_same_element_raises
+    # data-key on g0, but data-each on g1 — wrong element.
+    err = assert_raises(Grainet::CLI::Codegen::Error) do
+      gen(
+        [
+          each_dir(value: "@todos", ref_id: "g1"),
+          key_dir(value: "id", ref_id: "g0", line: 4),
+        ],
+        source_path: "x.gnt",
+      )
+    end
+    assert_includes err.message, "x.gnt:4"
+    assert_includes err.message, "same element"
+  end
+
+  def test_top_level_and_iteration_directives_coexist
+    # Top-level data-text + data-each-bodied directive together.
+    out = gen(
+      [
+        Directive.new(kind: :text, name: nil, value: "@title",
+                      ref_id: "gT", line: 1, element_tag: "h1", scope_id: nil),
+        each_dir(value: "@todos"),
+        scoped_text(value: "it.title"),
+      ],
+    )
+    assert_includes out, "bind refs.gT, text: @title"
+    assert_includes out, "bind_list refs.g0, @todos"
+    assert_includes out, "bind t.refs.g1, text: computed { it.title }"
+  end
+
   # ---- unimplemented directive fallback ---------------------------
 
   def test_unimplemented_directive_falls_back_to_placeholder_comment
-    # `data-class` is implemented in a later phase; for now Codegen
-    # emits a comment placeholder so the build doesn't choke.
-    d = Directive.new(kind: :class_, name: nil, value: "{ active: @s }",
-                      ref_id: "g0", line: 1, element_tag: "div")
+    # `data-arg-X` is implemented in a follow-up; for now Codegen emits
+    # a comment placeholder so the build doesn't choke.
+    d = Directive.new(kind: :arg, name: "id", value: "it.id",
+                      ref_id: "g0", line: 1, element_tag: "li")
     out = gen([d])
-    assert_includes out, "data-class"
-    refute_match(/^\s+bind /, out, "no real binding should be emitted yet")
+    assert_includes out, "data-arg-id"
+    refute_match(/^\s+bind_list /, out, "no real binding should be emitted yet")
   end
 end

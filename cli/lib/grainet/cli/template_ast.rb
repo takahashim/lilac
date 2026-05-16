@@ -32,7 +32,13 @@ module Grainet
     #     through to the runtime, and is harmless for the other
     #     directives until codegen actually consumes them.
     class TemplateAST
-      Result = Struct.new(:html, :directives, :refs_map, keyword_init: true)
+      # `synthetic_templates` carries Phase E `data-each` iteration
+      # bodies extracted out of the main template tree. Each entry is
+      # `{ ref_id: "g0", html: "<li>...</li>" }`; the Builder turns
+      # them into `<template data-template="gn-each-<component>-<ref>">`
+      # elements injected before `</body>`, which the runtime
+      # `bind_list ..., template: ...` clones per iteration item.
+      Result = Struct.new(:html, :directives, :refs_map, :synthetic_templates, keyword_init: true)
 
       # Maps an attribute-name regex to its directive kind. Order matters:
       # the more specific X-family patterns (`data-on-X` etc.) must be
@@ -67,21 +73,37 @@ module Grainet
         fragment = Nokogiri::HTML5.fragment(@body_html)
         directives = []
         refs_map = {}
+        synthetic_templates = []
 
-        walk(fragment, directives, refs_map)
+        walk(fragment, directives, refs_map, [], synthetic_templates)
 
         Result.new(
           html: fragment.to_html,
           directives: directives,
           refs_map: refs_map,
+          synthetic_templates: synthetic_templates,
         )
       end
 
       private
 
-      def walk(node, directives, refs_map)
-        node.element_children.each do |elem|
+      # `scope_stack` holds the ref_ids of currently-open `data-each`
+      # elements (outermost first). Children of a `data-each` element are
+      # walked with that element's ref_id pushed onto the stack, so their
+      # directives carry `scope_id` pointing at the enclosing iteration.
+      #
+      # `synthetic_templates` accumulates extracted iteration bodies in
+      # post-order: when we leave a `data-each` element, its children's
+      # serialized HTML is captured and the children are unlinked from
+      # the main fragment. Post-order guarantees that nested iterations
+      # have already been extracted (with their children also cleared)
+      # before the outer extraction snapshots its body.
+      def walk(node, directives, refs_map, scope_stack, synthetic_templates)
+        # `to_a` so the iteration is stable even when `unlink` mutates
+        # the parent's child list during the extraction step below.
+        node.element_children.to_a.each do |elem|
           element_directives = extract_directives(elem)
+          has_each = element_directives.any? { |k, _, _| k == :each }
 
           unless element_directives.empty?
             ref_id = ensure_ref_id(elem)
@@ -93,13 +115,30 @@ module Grainet
                 ref_id: ref_id,
                 line: elem.line,
                 element_tag: elem.name,
+                scope_id: scope_stack.last,
               )
             end
             refs_map[ref_id] ||= { tag: elem.name, line: elem.line }
           end
 
-          walk(elem, directives, refs_map)
+          if has_each
+            inner_scope = scope_stack + [ref_id]
+            walk(elem, directives, refs_map, inner_scope, synthetic_templates)
+            extract_each_body(elem, ref_id, synthetic_templates)
+          else
+            walk(elem, directives, refs_map, scope_stack, synthetic_templates)
+          end
         end
+      end
+
+      # Capture the data-each element's body HTML (text + element
+      # children) into a synthetic template entry, then strip the body
+      # from the main fragment so the dist HTML renders an empty
+      # container that bind_list populates per item at runtime.
+      def extract_each_body(elem, ref_id, synthetic_templates)
+        body_html = elem.children.map(&:to_html).join
+        synthetic_templates << { ref_id: ref_id, html: body_html }
+        elem.children.unlink
       end
 
       # Returns Array<[kind, name, value]> for every directive on `elem`.

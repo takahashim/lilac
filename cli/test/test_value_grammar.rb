@@ -123,4 +123,58 @@ class TestValueGrammar < Minitest::Test
     assert VG.ref_ident?("submit_button")
     refute VG.ref_ident?("Canvas")
   end
+
+  # ---- kebab_name? -----------------------------------------------
+
+  def test_kebab_name_accepts_letter_only
+    assert VG.kebab_name?("href")
+    assert VG.kebab_name?("color")
+  end
+
+  def test_kebab_name_accepts_hyphenated
+    assert VG.kebab_name?("theme-color")
+    assert VG.kebab_name?("data-id")
+  end
+
+  def test_kebab_name_accepts_digit_in_middle
+    assert VG.kebab_name?("h1-size")
+  end
+
+  def test_kebab_name_rejects_uppercase
+    refute VG.kebab_name?("Color")
+    refute VG.kebab_name?("themeColor")
+  end
+
+  def test_kebab_name_rejects_digit_start
+    refute VG.kebab_name?("3d-effect")
+  end
+
+  def test_kebab_name_rejects_underscore
+    refute VG.kebab_name?("theme_color")
+  end
+
+  def test_kebab_name_rejects_leading_hyphen
+    refute VG.kebab_name?("-theme-color")
+    refute VG.kebab_name?("--theme")
+  end
+
+  # ---- banned_attr? ----------------------------------------------
+
+  def test_banned_attr_matches_on_handlers
+    assert VG.banned_attr?("onclick")
+    assert VG.banned_attr?("onload")
+    assert VG.banned_attr?("onmouseover")
+  end
+
+  def test_banned_attr_matches_srcdoc_and_style
+    assert VG.banned_attr?("srcdoc")
+    assert VG.banned_attr?("style")
+  end
+
+  def test_banned_attr_does_not_match_safe_names
+    refute VG.banned_attr?("href")
+    refute VG.banned_attr?("data-id")
+    refute VG.banned_attr?("on")             # missing trailing handler suffix
+    refute VG.banned_attr?("onclick-extra")  # not pure on[a-z]+
+  end
 end

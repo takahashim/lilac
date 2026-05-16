@@ -151,4 +151,74 @@ class TestTemplateAST < Minitest::Test
     assert_includes result.html, "<strong>world</strong>"
     assert_includes result.html, "!"
   end
+
+  # ---- data-each scope tracking + body extraction ----------------
+
+  def test_top_level_directives_have_nil_scope_id
+    result = parse(%(<span data-text="@count">0</span>))
+    assert_nil result.directives.first.scope_id
+  end
+
+  def test_directives_inside_data_each_carry_outer_ref_id_as_scope
+    html = <<~HTML
+      <ul data-each="@todos" data-key="id">
+        <li><span data-text="it.title"></span></li>
+      </ul>
+    HTML
+    result = parse(html)
+    each_dir = result.directives.find { |d| d.kind == :each }
+    text_dir = result.directives.find { |d| d.kind == :text }
+    assert_nil each_dir.scope_id, "data-each itself lives at the outer scope"
+    assert_equal each_dir.ref_id, text_dir.scope_id, "data-text under data-each scoped to its ref_id"
+  end
+
+  def test_data_each_body_is_extracted_into_synthetic_template
+    html = %(<ul data-each="@items"><li><span data-text="it.label"></span></li></ul>)
+    result = parse(html)
+
+    assert_equal 1, result.synthetic_templates.length
+    st = result.synthetic_templates.first
+    each_dir = result.directives.find { |d| d.kind == :each }
+    assert_equal each_dir.ref_id, st[:ref_id]
+    assert_includes st[:html], "<li>"
+    assert_includes st[:html], %(data-text="it.label")
+    # Outer container survives, but the iteration body is stripped from
+    # the main HTML — the runtime bind_list repopulates per item.
+    assert_includes result.html, "<ul"
+    refute_match(/<li/, result.html, "iteration body should be stripped from main HTML")
+  end
+
+  def test_nested_data_each_produces_two_synthetic_templates_with_independent_scopes
+    html = <<~HTML
+      <ul data-each="@categories" data-key="id">
+        <li>
+          <h3 data-text="it.name"></h3>
+          <ul data-each="it.items" data-key="id">
+            <li data-text="it.title"></li>
+          </ul>
+        </li>
+      </ul>
+    HTML
+    result = parse(html)
+
+    each_dirs = result.directives.select { |d| d.kind == :each }
+    outer, inner = each_dirs
+    assert_nil outer.scope_id
+    assert_equal outer.ref_id, inner.scope_id
+
+    # Both data-each bodies extracted.
+    assert_equal 2, result.synthetic_templates.length
+
+    text_dirs = result.directives.select { |d| d.kind == :text }
+    h3_dir = text_dirs.find { |d| d.value == "it.name" }
+    li_dir = text_dirs.find { |d| d.value == "it.title" }
+    assert_equal outer.ref_id, h3_dir.scope_id
+    assert_equal inner.ref_id, li_dir.scope_id
+
+    # Outer synthetic template body includes the inner <ul> (now empty)
+    # but not the inner <li> (extracted into its own template).
+    outer_st = result.synthetic_templates.find { |st| st[:ref_id] == outer.ref_id }
+    assert_includes outer_st[:html], "<ul"
+    refute_includes outer_st[:html], "data-text=\"it.title\""
+  end
 end

@@ -86,6 +86,12 @@ module Grainet
 
       # Returns { default_html:, default_directives:, named: [{name:, html:, directives:}, ...] }
       # for a component, caching the result.
+      #
+      # `data-each` iteration bodies extracted by TemplateAST are folded
+      # into `named` as synthetic templates using `Codegen.each_template_name`
+      # so they ride the same `<template data-template>` injection path
+      # as user-defined named templates and the runtime can resolve them
+      # via `bind_list ..., template: "gn-each-<component>-<ref>"`.
       def template_ast_for(name, component)
         @template_ast_cache[name] ||= begin
           default_results = component.default_templates.map do |t|
@@ -97,10 +103,14 @@ module Grainet
             { name: t.name, html: result.html, directives: result.directives }
           end
 
+          synthetic = default_results.flat_map(&:synthetic_templates).map do |st|
+            { name: Codegen.each_template_name(name, st[:ref_id]), html: st[:html] }
+          end
+
           {
             default_html: default_results.map(&:html).join.strip,
             default_directives: default_results.flat_map(&:directives),
-            named: named,
+            named: named + synthetic,
             source_path: component.path,
           }
         end
