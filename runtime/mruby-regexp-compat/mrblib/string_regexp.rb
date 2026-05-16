@@ -64,16 +64,32 @@ class String
     end
   end
 
-  # Regexp-aware split.  Falls back to the C-defined split (aliased as
-  # `__split` in mrb_mruby_regexp_gem_init before this override loads) for
-  # nil or simple-string patterns; converts string-with-backslash to a
-  # Regexp and handles regexp patterns in Ruby.
-  def split(pattern = nil, limit = -1)
-    return __split(pattern, limit) if pattern.nil?
-    if pattern.is_a?(String)
-      return __split(pattern, limit) if pattern.length == 1 || !pattern.include?('\\')
-      pattern = Regexp.new(Regexp.escape(pattern))
+  # Regexp-aware split. Falls back to the C-defined split (aliased as
+  # `__split` in mrb_mruby_regexp_compat_gem_init before this override
+  # loads) for nil or simple-string patterns; converts string-with-
+  # backslash to a Regexp and handles regexp patterns in Ruby.
+  #
+  # Uses `*args` (not `pattern = nil, limit = -1`) because the core
+  # `__split` distinguishes "limit omitted" (argc 0/1 → removes
+  # trailing empty fields, per MRI default) from "limit explicitly -1"
+  # (argc 2 → keeps trailing empty fields). A default of `limit = -1`
+  # collapses those two cases and silently breaks the common idiom
+  # `"a,b,,,".split(",")` (which should return `["a", "b"]`).
+  def split(*args)
+    raise ArgumentError, "wrong number of arguments (given #{args.length}, expected 0..2)" if args.length > 2
+
+    pattern = args[0]
+    limit_given = args.length >= 2
+    limit = limit_given ? args[1] : 0  # 0 = no-limit + remove-trailing (MRI default)
+
+    if pattern.nil? || (pattern.is_a?(String) && (pattern.length == 1 || !pattern.include?('\\')))
+      # Forward to core __split preserving the original argc so its
+      # "trailing empty" semantics match MRI exactly.
+      return limit_given ? __split(pattern, limit) : __split(pattern)
     end
+
+    pattern = Regexp.new(Regexp.escape(pattern)) if pattern.is_a?(String)
+
     result = []
     rest = self
     count = 0
@@ -98,8 +114,11 @@ class String
       end
     end
     result << rest
-    # remove trailing empty strings if no limit
-    if limit < 0
+    # MRI semantics: trailing empties are removed when limit is omitted
+    # (limit_given=false, internal default 0) or when limit == 0 was
+    # explicitly given. Negative limit keeps them; positive limit was
+    # already handled by the early return above.
+    if !limit_given || limit == 0
       while result.length > 0 && result[-1] == ""
         result.pop
       end
