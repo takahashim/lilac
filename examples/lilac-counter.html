@@ -41,12 +41,12 @@
     <div class="panel" data-component="counter">
       <h2>Counter</h2>
       <div class="row">
-        <button data-ref="decrement">-</button>
-        <span class="num" data-ref="count">0</span>
-        <button data-ref="increment">+</button>
-        <button data-ref="reset">reset</button>
+        <button data-on-click="decrement">-</button>
+        <span class="num" data-text="@count">0</span>
+        <button data-on-click="increment">+</button>
+        <button data-on-click="reset">reset</button>
       </div>
-      <p class="msg" data-ref="message"></p>
+      <p class="msg" data-text="@message"></p>
     </div>
 
     <p id="status">booting…</p>
@@ -55,14 +55,7 @@
 class Counter < Lilac::Component
   def setup
     @count = signal(0)
-
-    refs.increment.on(:click) { @count.update { |n| n + 1 } }
-    refs.decrement.on(:click) { @count.update { |n| n - 1 } }
-    refs.reset.on(:click)     { @count.value = 0 }
-
-    bind refs.count, text: @count
-
-    bind refs.message, :text do
+    @message = computed do
       case @count.value
       when 0
         "zero"
@@ -73,6 +66,10 @@ class Counter < Lilac::Component
       end
     end
   end
+
+  def increment(_ev) = @count.update { |n| n + 1 }
+  def decrement(_ev) = @count.update { |n| n - 1 }
+  def reset(_ev)     = @count.value = 0
 end
 
 Lilac.register "counter", Counter
