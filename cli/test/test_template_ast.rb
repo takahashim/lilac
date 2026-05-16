@@ -247,4 +247,72 @@ class TestTemplateAST < Minitest::Test
     assert_includes outer_st.html, "<ul"
     refute_includes outer_st.html, "data-text=\"it.title\""
   end
+
+  # ---- data-ref duplicate detection ------------------------------
+
+  def test_duplicate_explicit_data_ref_in_same_scope_raises
+    html = <<~HTML
+      <div>
+        <span data-ref="email" data-text="@a"></span>
+        <input data-ref="email" data-value="@b">
+      </div>
+    HTML
+    err = assert_raises(Grainet::CLI::TemplateAST::Error) do
+      Grainet::CLI::TemplateAST.new(html, source_path: "form.gnt").parse
+    end
+    assert_includes err.message, "form.gnt"
+    assert_includes err.message, "Duplicate data-ref \"email\""
+  end
+
+  def test_explicit_ref_without_other_directives_still_participates
+    # `data-ref` alone (no other directive) doesn't allocate a
+    # Directive, but the ref name must still be registered so a later
+    # duplicate trips the check.
+    html = <<~HTML
+      <div>
+        <input data-ref="email">
+        <input data-ref="email" data-value="@x">
+      </div>
+    HTML
+    assert_raises(Grainet::CLI::TemplateAST::Error) do
+      Grainet::CLI::TemplateAST.new(html, source_path: "x.gnt").parse
+    end
+  end
+
+  def test_synthetic_ref_skips_user_chosen_collision
+    # The user wrote data-ref="g0" — our auto-allocator must skip g0
+    # and pick g1 (or later) for the synthetic ref instead of stomping.
+    html = %(<div><span data-ref="g0">x</span><b data-text="@v"></b></div>)
+    result = Grainet::CLI::TemplateAST.new(html).parse
+    text_dir = result.directives.find { |d| d.kind == :text }
+    refute_equal "g0", text_dir.ref_id
+  end
+
+  def test_same_ref_name_across_data_each_scopes_does_not_collide
+    # Inner `<li data-ref="row">` opens a fresh ref scope, so the same
+    # name used at top level does not conflict.
+    html = <<~HTML
+      <div data-ref="row" data-text="@title">
+        <ul data-each="@items">
+          <li data-ref="row" data-text="it.label"></li>
+        </ul>
+      </div>
+    HTML
+    # No raise; both refs coexist.
+    Grainet::CLI::TemplateAST.new(html, source_path: "ok.gnt").parse
+  end
+
+  def test_same_ref_name_across_data_component_scopes_does_not_collide
+    # Per spec Section 9, `data-component` opens its own ref namespace
+    # at runtime — the parent's `data-ref="x"` and a nested child's
+    # `data-ref="x"` address different elements.
+    html = <<~HTML
+      <div data-ref="root" data-text="@title">
+        <div data-component="Child">
+          <span data-ref="root" data-text="@inner"></span>
+        </div>
+      </div>
+    HTML
+    Grainet::CLI::TemplateAST.new(html, source_path: "ok.gnt").parse
+  end
 end

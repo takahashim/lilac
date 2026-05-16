@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "nokogiri"
+require_relative "build_error"
 require_relative "directive"
 
 module Grainet
@@ -27,6 +28,10 @@ module Grainet
     # attributes are left in the output HTML so `data-component` /
     # `data-ref` continue to flow through to the runtime.
     class TemplateAST
+      # Subclass of BuildError so callers can `rescue BuildError` to
+      # catch every build-time failure uniformly, regardless of source.
+      class Error < BuildError; end
+
       # One iteration body extracted from a `data-each` element. The
       # Builder later turns each entry into a
       # `<template data-template="gn-each-<component>-<ref>">` injected
@@ -76,8 +81,14 @@ module Grainet
         directives = []
         refs_map = {}
         synthetic_templates = []
+        # Stack of `{ ref_name => first-declared line }` Hashes. One
+        # entry per active ref-scope (top-level, plus one per `data-each`
+        # and `data-component` element encountered while walking). New
+        # scopes are pushed as `walk` descends and popped on return so
+        # duplicate detection respects scope boundaries.
+        ref_scopes = [{}]
 
-        walk(fragment, directives, refs_map, [], synthetic_templates)
+        walk(fragment, directives, refs_map, [], ref_scopes, synthetic_templates)
 
         Result.new(
           html: fragment.to_html,
@@ -94,18 +105,28 @@ module Grainet
       # walked with that element's ref_id pushed onto the stack, so their
       # directives carry `scope_id` pointing at the enclosing iteration.
       #
+      # `ref_scopes` is a separate stack tracking the `data-ref`
+      # namespace per scope. `data-each` AND `data-component` both open
+      # a fresh ref scope (per spec): iteration bodies get a clean ref
+      # set per-item at runtime, and a nested component subtree is
+      # owned by a different runtime component instance so its refs
+      # don't collide with the parent's. The directive `scope_stack`
+      # is unaffected by `data-component` — its body's directives still
+      # belong to the parent component's bind_template_hook.
+      #
       # `synthetic_templates` accumulates extracted iteration bodies in
       # post-order: when we leave a `data-each` element, its children's
       # serialized HTML is captured and the children are unlinked from
       # the main fragment. Post-order guarantees that nested iterations
       # have already been extracted (with their children also cleared)
       # before the outer extraction snapshots its body.
-      def walk(node, directives, refs_map, scope_stack, synthetic_templates)
+      def walk(node, directives, refs_map, scope_stack, ref_scopes, synthetic_templates)
         # `to_a` so the iteration is stable even when `unlink` mutates
         # the parent's child list during the extraction step below.
         node.element_children.to_a.each do |elem|
           element_directives = extract_directives(elem)
           has_each = element_directives.any? { |k, _, _| k == :each }
+          has_component = element_directives.any? { |k, _, _| k == :component }
           # A bare `data-component` element needs no ref_id (the
           # runtime mounts via the data-component attribute) and
           # produces no codegen, so we skip the Directive record
@@ -117,7 +138,7 @@ module Grainet
           ref_id = nil
 
           if has_real_directive
-            ref_id = ensure_ref_id(elem)
+            ref_id = assign_or_reuse_ref(elem, ref_scopes.last)
             # Snapshot all attributes once per element and share the
             # Hash across this element's directives — cheaper than
             # re-walking the Nokogiri attr set per directive.
@@ -135,14 +156,22 @@ module Grainet
               )
             end
             refs_map[ref_id] ||= { tag: elem.name, line: elem.line }
+          elsif (explicit = elem["data-ref"]) && !explicit.empty?
+            # Ref declared on an element without any other directive
+            # (e.g. `<input data-ref="email">` used only by user-side
+            # `refs.email`). Still register so duplicates trip the
+            # check, but don't allocate a synthetic / Directive record.
+            register_ref!(explicit, elem.line, ref_scopes.last)
           end
+
+          child_ref_scopes = (has_each || has_component) ? ref_scopes + [{}] : ref_scopes
 
           if has_each
             inner_scope = scope_stack + [ref_id]
-            walk(elem, directives, refs_map, inner_scope, synthetic_templates)
+            walk(elem, directives, refs_map, inner_scope, child_ref_scopes, synthetic_templates)
             extract_each_body(elem, ref_id, synthetic_templates)
           else
-            walk(elem, directives, refs_map, scope_stack, synthetic_templates)
+            walk(elem, directives, refs_map, scope_stack, child_ref_scopes, synthetic_templates)
           end
         end
       end
@@ -183,17 +212,47 @@ module Grainet
         result
       end
 
-      # If the element already has an explicit `data-ref`, reuse that name
-      # as the ref_id so user-chosen refs remain stable across rebuilds.
-      # Otherwise allocate a fresh synthetic name `g0`, `g1`, ...
-      def ensure_ref_id(elem)
+      # If the element already has an explicit `data-ref`, reuse it
+      # (so user-chosen refs remain stable across rebuilds) but
+      # register it so a duplicate in the same scope raises. Otherwise
+      # allocate a fresh synthetic name, skipping any candidate that
+      # the user already used at the same scope level.
+      def assign_or_reuse_ref(elem, current_ref_scope)
         existing = elem["data-ref"]
-        return existing if existing && !existing.empty?
+        if existing && !existing.empty?
+          register_ref!(existing, elem.line, current_ref_scope)
+          return existing
+        end
 
-        ref = "g#{@ref_counter}"
-        @ref_counter += 1
-        elem["data-ref"] = ref
-        ref
+        # Auto-assign, skipping refs already used in this scope. The
+        # counter is monotonic per parse so we won't loop forever; the
+        # skip just handles `<div data-ref="g3">` collisions with our
+        # synthetic g3.
+        loop do
+          candidate = "g#{@ref_counter}"
+          @ref_counter += 1
+          next if current_ref_scope.key?(candidate)
+
+          current_ref_scope[candidate] = elem.line
+          elem["data-ref"] = candidate
+          return candidate
+        end
+      end
+
+      def register_ref!(ref, line, current_ref_scope)
+        previous = current_ref_scope[ref]
+        if previous
+          raise Error.new(
+            "Duplicate data-ref #{ref.inspect} — already declared at line #{previous} in the same template scope.",
+            at: SourceLocation.new(file: source_file, line: line),
+            suggestion: "Rename one of them; data-ref names must be unique within a top-level / data-each / data-component scope.",
+          )
+        end
+        current_ref_scope[ref] = line
+      end
+
+      def source_file
+        @source_path ? File.basename(@source_path) : "(template)"
       end
     end
   end
