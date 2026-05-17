@@ -153,25 +153,49 @@
       </div>
 
       <div class="board">
-        <div data-component="KanbanColumn" data-status="todo" class="column">
+        <div data-component="KanbanColumn" data-prop-status="todo" class="column">
           <h2>Todo <span data-ref="count" class="count">0</span></h2>
-          <ul data-ref="list" class="cards"></ul>
+          <ul data-ref="list" class="cards" data-each="@filtered" data-key="id">
+            <li data-component="KanbanCard"
+                draggable="true"
+                data-prop-id="it.id"
+                data-prop-title="it.title">
+              <span class="title" data-text="@title"></span>
+              <button class="dismiss" data-on-click="dismiss" type="button" aria-label="delete">×</button>
+            </li>
+          </ul>
           <form data-ref="add_form" class="add-form" onsubmit="return false">
             <input data-ref="add_input" type="text" placeholder="New card…">
             <button data-ref="add_button" type="button">Add</button>
           </form>
         </div>
-        <div data-component="KanbanColumn" data-status="doing" class="column">
+        <div data-component="KanbanColumn" data-prop-status="doing" class="column">
           <h2>Doing <span data-ref="count" class="count">0</span></h2>
-          <ul data-ref="list" class="cards"></ul>
+          <ul data-ref="list" class="cards" data-each="@filtered" data-key="id">
+            <li data-component="KanbanCard"
+                draggable="true"
+                data-prop-id="it.id"
+                data-prop-title="it.title">
+              <span class="title" data-text="@title"></span>
+              <button class="dismiss" data-on-click="dismiss" type="button" aria-label="delete">×</button>
+            </li>
+          </ul>
           <form data-ref="add_form" class="add-form" onsubmit="return false">
             <input data-ref="add_input" type="text">
             <button data-ref="add_button" type="button">Add</button>
           </form>
         </div>
-        <div data-component="KanbanColumn" data-status="done" class="column">
+        <div data-component="KanbanColumn" data-prop-status="done" class="column">
           <h2>Done <span data-ref="count" class="count">0</span></h2>
-          <ul data-ref="list" class="cards"></ul>
+          <ul data-ref="list" class="cards" data-each="@filtered" data-key="id">
+            <li data-component="KanbanCard"
+                draggable="true"
+                data-prop-id="it.id"
+                data-prop-title="it.title">
+              <span class="title" data-text="@title"></span>
+              <button class="dismiss" data-on-click="dismiss" type="button" aria-label="delete">×</button>
+            </li>
+          </ul>
           <form data-ref="add_form" class="add-form" onsubmit="return false">
             <input data-ref="add_input" type="text">
             <button data-ref="add_button" type="button">Add</button>
@@ -180,48 +204,38 @@
       </div>
     </div>
 
-    <template data-template="card-row">
-      <li data-component="KanbanCard" draggable="true">
-        <span data-ref="title"></span>
-        <button data-ref="delete" class="dismiss" type="button" aria-label="delete">×</button>
-      </li>
-    </template>
-
     <p id="boot">booting…</p>
 
     <script type="text/ruby" id="ruby-source">
-# Per-card component. Mounted by MO when bind_list inserts the cloned
-# template into a column. Auto-cleanup of dragstart / click listeners
-# on unmount (e.g. when status changes and the card moves to another
-# column → removed from one bind_list, inserted in another).
+# Per-card component. The id/title come in as props from the parent's
+# `data-prop-*` expressions, so the card body uses `@title` and the
+# drag handlers / dispatchers read `@id.value` — no `data-id` attribute
+# round-trip needed.
 class KanbanCard < Lilac::Component
+  prop :id, Integer
+  prop :title, String
+
   def setup
     root.on(:dragstart) do |event|
-      id = root.data(:id)
-      event[:dataTransfer].setData("text/plain", id)
+      event[:dataTransfer].setData("text/plain", id.to_s)
       event[:dataTransfer][:effectAllowed] = "move"
     end
+  end
 
-    refs.delete.on(:click) do
-      id = root.data(:id).to_i
-      root.dispatch("card:deleted", detail: { "id" => id }, bubbles: true)
-    end
+  def dismiss(_ev)
+    root.dispatch("card:deleted", detail: { "id" => id }, bubbles: true)
   end
 end
 
 class KanbanColumn < Lilac::Component
+  prop :status, String
+
   def setup
     @cards = lookup(:cards)
     @notice = lookup(:notice)
-    status = root.data(:status)
 
     @filtered = computed { @cards.value.select { |c| c["status"] == status } }
     bind refs.count, text: computed { @filtered.value.length }
-
-    bind_list refs.list, @filtered, key: "id", template: "card-row" do |card, t|
-      t.data(:id, card["id"])
-      t.refs.title.text = card["title"]
-    end
 
     # Drop target: any abort-allowed dragover defaults to "no drop", so
     # we must preventDefault explicitly to make the area droppable.
@@ -236,9 +250,9 @@ class KanbanColumn < Lilac::Component
     root.on(:drop) do |event|
       event.preventDefault
       root.toggle_class("drag-over", false)
-      id = event[:dataTransfer].getData("text/plain").to_s.to_i
+      src_id = event[:dataTransfer].getData("text/plain").to_s.to_i
       root.dispatch("card:moved",
-                    detail: { "id" => id, "status" => status },
+                    detail: { "id" => src_id, "status" => status },
                     bubbles: true)
     end
 
