@@ -81,13 +81,13 @@ Available directive families:
 | Directive | Purpose |
 |---|---|
 | `data-text="@x"` / `data-unsafe-html="@x"` | element body (escaped / raw) |
-| `data-value="@x"` / `data-checked="@x"` | two-way form-control binding |
 | `data-show="@x"` / `data-hide="@x"` | visibility (toggles `.lil-hidden`) |
 | `data-class="{ active: @x, 'btn-primary': @y }"` | class toggles (bare ident or quoted key) |
 | `data-attr-href="@x"` | reactive HTML attribute (URLs auto-sanitized) |
 | `data-css-color="@x"` | reactive CSS custom property (`--color`) |
 | `data-on-click="m"` / `data-on-<event>="m"` | event handler → method on the component |
 | `data-each="@items" data-key="id"` | keyed list iteration |
+| `data-field="name"` / `data-button="name"` | input two-way binding / button action (form gem) |
 
 Values must be `@ivar` (a signal) or, inside `data-each`, `it` /
 `it.field`. Arbitrary Ruby expressions are rejected at build time so

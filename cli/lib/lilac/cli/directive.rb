@@ -40,6 +40,15 @@ module Lilac
     # DirectiveCompatibility for checks that need attributes beyond
     # the tag name (e.g. `data-value` requires that an `<input>`'s
     # `type` be text-style).
+    # Form-directive-specific fields (filled only for :form / :field /
+    # :button kinds, nil otherwise):
+    # - `form_scope`: Symbol name of the enclosing <form>'s scope
+    #   (data-form attr value, or :default for bare <form>, or :default
+    #   when no <form> ancestor exists in the component subtree).
+    # - `field_input_ref`: for :field kind, the ref_id of the input /
+    #   textarea / select element bound to the field. Equals `ref_id` when
+    #   the data-field is on the form control itself; otherwise points at
+    #   a separately-allocated ref on the inner control.
     Directive = Struct.new(
       :kind,
       :name,
@@ -49,6 +58,8 @@ module Lilac
       :element_tag,
       :scope_id,
       :element_attrs,
+      :form_scope,
+      :field_input_ref,
       keyword_init: true,
     ) do
       # Pair the directive's line with the source file (which the

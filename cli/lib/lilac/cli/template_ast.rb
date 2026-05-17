@@ -51,8 +51,9 @@ module Lilac
       DIRECTIVE_PATTERNS = [
         [/\Adata-text\z/,        :text,        false],
         [/\Adata-unsafe-html\z/, :unsafe_html, false],
-        [/\Adata-value\z/,       :value,       false],
-        [/\Adata-checked\z/,     :checked,     false],
+        # data-value / data-checked were deprecated in favour of
+        # data-field + the form gem (form-spec §10.8). Removed in
+        # Phase D. Use `<input data-field="X">` instead.
         [/\Adata-show\z/,        :show,        false],
         [/\Adata-hide\z/,        :hide,        false],
         [/\Adata-each\z/,        :each,        false],
@@ -64,6 +65,13 @@ module Lilac
         # records when it appears alone, to keep the dist HTML and the
         # linter input unchanged for the common case.
         [/\Adata-component\z/,   :component,   false],
+        # Form directives (mruby-lilac-form gem). data-form is detected
+        # so scope validation can see it; emit_form is a no-op (the
+        # runtime resolves scope via ancestor walk). data-field /
+        # data-button get full codegen via emit_field / emit_button.
+        [/\Adata-form\z/,        :form,        false],
+        [/\Adata-field\z/,       :field,       false],
+        [/\Adata-button\z/,      :button,      false],
         [/\Adata-on-(.+)\z/,     :on,          true],
         [/\Adata-attr-(.+)\z/,   :attr,        true],
         [/\Adata-arg-(.+)\z/,    :arg,         true],
@@ -76,19 +84,65 @@ module Lilac
         @ref_counter = 0
       end
 
+      # Element tags treated as form controls by `data-field` (input /
+      # textarea / select). Mirrors runtime `Scanner#find_form_control`.
+      FORM_CONTROL_TAGS = %w[input textarea select].freeze
+
+      # Immutable per-frame walk state: the three stacks that get
+      # pushed/popped as the walker descends/ascends. Bundled so `walk`
+      # doesn't have to thread 7 individual args through recursion (the
+      # accumulators — directives / refs_map / synthetic_templates — are
+      # mutated in place and stay separate).
+      class WalkScopes
+        # each_scope: ref_ids of currently-open `data-each` elements;
+        #             children's directives carry `scope_id = each_scope.last`
+        # ref_scopes: Stack<{ ref_name => line }> for duplicate ref detection
+        #             per `data-each` / `data-component` scope
+        # form_scopes: Stack of form name Symbols opened by `<form>` elements
+        attr_reader :each_scope, :ref_scopes, :form_scopes
+
+        def initialize(each_scope: [], ref_scopes: [{}], form_scopes: [])
+          @each_scope = each_scope
+          @ref_scopes = ref_scopes
+          @form_scopes = form_scopes
+        end
+
+        # Push helpers return a NEW WalkScopes — frames are immutable so
+        # the recursive call doesn't accidentally mutate the parent's stack.
+        def push_each(ref_id)
+          self.class.new(each_scope: @each_scope + [ref_id],
+                         ref_scopes: @ref_scopes, form_scopes: @form_scopes)
+        end
+
+        def push_ref_scope
+          self.class.new(each_scope: @each_scope,
+                         ref_scopes: @ref_scopes + [{}], form_scopes: @form_scopes)
+        end
+
+        def push_form(scope_sym)
+          self.class.new(each_scope: @each_scope,
+                         ref_scopes: @ref_scopes, form_scopes: @form_scopes + [scope_sym])
+        end
+
+        def current_ref_scope
+          @ref_scopes.last
+        end
+
+        def current_each_ref
+          @each_scope.last
+        end
+
+        def current_form_scope
+          @form_scopes.last || :default
+        end
+      end
+
       def parse
         fragment = Nokogiri::HTML5.fragment(@body_html)
         directives = []
         refs_map = {}
         synthetic_templates = []
-        # Stack of `{ ref_name => first-declared line }` Hashes. One
-        # entry per active ref-scope (top-level, plus one per `data-each`
-        # and `data-component` element encountered while walking). New
-        # scopes are pushed as `walk` descends and popped on return so
-        # duplicate detection respects scope boundaries.
-        ref_scopes = [{}]
-
-        walk(fragment, directives, refs_map, [], ref_scopes, synthetic_templates)
+        walk(fragment, directives, refs_map, synthetic_templates, WalkScopes.new)
 
         Result.new(
           html: fragment.to_html,
@@ -100,19 +154,18 @@ module Lilac
 
       private
 
-      # `scope_stack` holds the ref_ids of currently-open `data-each`
-      # elements (outermost first). Children of a `data-each` element are
-      # walked with that element's ref_id pushed onto the stack, so their
-      # directives carry `scope_id` pointing at the enclosing iteration.
-      #
-      # `ref_scopes` is a separate stack tracking the `data-ref`
-      # namespace per scope. `data-each` AND `data-component` both open
-      # a fresh ref scope (per spec): iteration bodies get a clean ref
-      # set per-item at runtime, and a nested component subtree is
-      # owned by a different runtime component instance so its refs
-      # don't collide with the parent's. The directive `scope_stack`
-      # is unaffected by `data-component` — its body's directives still
-      # belong to the parent component's bind_template_hook.
+      # `scopes` is a WalkScopes carrying three immutable stacks:
+      #   - each_scope: ref_ids of currently-open `data-each` elements
+      #     (children carry `scope_id` pointing at the enclosing iteration).
+      #   - ref_scopes: per-scope `data-ref` namespace for duplicate detection.
+      #     `data-each` AND `data-component` both open a fresh ref scope —
+      #     iteration bodies and nested component subtrees each get clean
+      #     ref sets. The directive `each_scope` is unaffected by
+      #     `data-component` (its body's directives still belong to the
+      #     parent component's bind_template_hook).
+      #   - form_scopes: form name Symbols opened by `<form>` elements,
+      #     used to resolve `data-field` / `data-button` to their enclosing
+      #     form (mirrors runtime `Scanner#resolve_form_for`).
       #
       # `synthetic_templates` accumulates extracted iteration bodies in
       # post-order: when we leave a `data-each` element, its children's
@@ -120,13 +173,15 @@ module Lilac
       # the main fragment. Post-order guarantees that nested iterations
       # have already been extracted (with their children also cleared)
       # before the outer extraction snapshots its body.
-      def walk(node, directives, refs_map, scope_stack, ref_scopes, synthetic_templates)
+      def walk(node, directives, refs_map, synthetic_templates, scopes)
         # `to_a` so the iteration is stable even when `unlink` mutates
         # the parent's child list during the extraction step below.
         node.element_children.to_a.each do |elem|
-          element_directives = extract_directives(elem)
+          element_directives = collect_directives_with_synthesis(elem)
           has_each = element_directives.any? { |k, _, _| k == :each }
           has_component = element_directives.any? { |k, _, _| k == :component }
+          is_form_elem = elem.name == "form"
+
           # A bare `data-component` element needs no ref_id (the
           # runtime mounts via the data-component attribute) and
           # produces no codegen, so we skip the Directive record
@@ -137,12 +192,32 @@ module Lilac
           has_real_directive = element_directives.any? { |k, _, _| k != :component }
           ref_id = nil
 
+          # Form scope tracking: a <form> element opens a scope; nested
+          # data-field / data-button resolve to the innermost form name.
+          # Computed here so the per-directive form_scope assignment below
+          # sees the new value when looking at this element's own directives.
+          current_form_scope =
+            if is_form_elem
+              raw_form = element_directives.find { |k, _, _| k == :form }&.then { |_, _, v| v }
+              (raw_form && !raw_form.empty?) ? raw_form.to_sym : :default
+            else
+              scopes.current_form_scope
+            end
+
           if has_real_directive
-            ref_id = assign_or_reuse_ref(elem, ref_scopes.last)
+            ref_id = assign_or_reuse_ref(elem, scopes.current_ref_scope)
             # Snapshot all attributes once per element and share the
             # Hash across this element's directives — cheaper than
             # re-walking the Nokogiri attr set per directive.
             attrs = element_attrs_snapshot(elem)
+            # For :field directives, locate (and allocate a ref for) the
+            # inner form control. When the data-field element is itself
+            # the input, the field_input_ref equals the directive's own
+            # ref_id.
+            field_input_ref =
+              if element_directives.any? { |k, _, _| k == :field }
+                find_or_allocate_form_control_ref(elem, scopes.current_ref_scope)
+              end
             element_directives.each do |kind, name, attr_value|
               directives << Directive.new(
                 kind: kind,
@@ -151,8 +226,10 @@ module Lilac
                 ref_id: ref_id,
                 line: elem.line,
                 element_tag: elem.name,
-                scope_id: scope_stack.last,
+                scope_id: scopes.current_each_ref,
                 element_attrs: attrs,
+                form_scope: (%i[form field button].include?(kind) ? current_form_scope : nil),
+                field_input_ref: (kind == :field ? field_input_ref : nil),
               )
             end
             refs_map[ref_id] ||= { tag: elem.name, line: elem.line }
@@ -161,18 +238,46 @@ module Lilac
             # (e.g. `<input data-ref="email">` used only by user-side
             # `refs.email`). Still register so duplicates trip the
             # check, but don't allocate a synthetic / Directive record.
-            register_ref!(explicit, elem.line, ref_scopes.last)
+            register_ref!(explicit, elem.line, scopes.current_ref_scope)
           end
 
-          child_ref_scopes = (has_each || has_component) ? ref_scopes + [{}] : ref_scopes
+          child_scopes = scopes
+          child_scopes = child_scopes.push_ref_scope if has_each || has_component
+          child_scopes = child_scopes.push_form(current_form_scope) if is_form_elem
 
           if has_each
-            inner_scope = scope_stack + [ref_id]
-            walk(elem, directives, refs_map, inner_scope, child_ref_scopes, synthetic_templates)
+            walk(elem, directives, refs_map, synthetic_templates, child_scopes.push_each(ref_id))
             extract_each_body(elem, ref_id, synthetic_templates)
           else
-            walk(elem, directives, refs_map, scope_stack, child_ref_scopes, synthetic_templates)
+            walk(elem, directives, refs_map, synthetic_templates, child_scopes)
           end
+        end
+      end
+
+      # For a `data-field` element, return the ref_id of the form control
+      # it wraps. When the element itself is an input/textarea/select, that
+      # ref is its own (already allocated above). When it's a container,
+      # find the first nested form control via CSS selector and allocate a
+      # synthetic ref (with `data-ref="lilN"` injected on it) so codegen
+      # can address it directly.
+      def find_or_allocate_form_control_ref(elem, current_ref_scope)
+        if FORM_CONTROL_TAGS.include?(elem.name)
+          return elem["data-ref"]
+        end
+        control = elem.css(FORM_CONTROL_TAGS.join(", ")).first
+        return nil unless control
+        existing = control["data-ref"]
+        return existing if existing && !existing.empty?
+        # Assign the data-ref attribute but DON'T register in current_ref_scope
+        # — the walker will descend into this control and register the ref via
+        # the explicit-ref `elsif` branch, which would double-register if we
+        # did it here too.
+        loop do
+          candidate = "lil#{@ref_counter}"
+          @ref_counter += 1
+          next if current_ref_scope.key?(candidate)
+          control["data-ref"] = candidate
+          return candidate
         end
       end
 
@@ -210,6 +315,20 @@ module Lilac
           end
         end
         result
+      end
+
+      # Wraps `extract_directives` to inject a synthetic `:form` directive
+      # for bare `<form>` elements (no data-form attr). The empty value
+      # "" signals "bare form" — emit_form / scope tracking treat it as
+      # `:default`. Keeping this in one named helper makes the
+      # "directives can include things not in the HTML" surprise explicit
+      # rather than buried in `walk`.
+      def collect_directives_with_synthesis(elem)
+        directives = extract_directives(elem)
+        if elem.name == "form" && directives.none? { |k, _, _| k == :form }
+          directives << [:form, nil, ""]
+        end
+        directives
       end
 
       # If the element already has an explicit `data-ref`, reuse it

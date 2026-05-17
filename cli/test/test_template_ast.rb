@@ -254,7 +254,7 @@ class TestTemplateAST < Minitest::Test
     html = <<~HTML
       <div>
         <span data-ref="email" data-text="@a"></span>
-        <input data-ref="email" data-value="@b">
+        <input data-ref="email" data-field="b">
       </div>
     HTML
     err = assert_raises(Lilac::CLI::TemplateAST::Error) do
@@ -271,7 +271,7 @@ class TestTemplateAST < Minitest::Test
     html = <<~HTML
       <div>
         <input data-ref="email">
-        <input data-ref="email" data-value="@x">
+        <input data-ref="email" data-field="x">
       </div>
     HTML
     assert_raises(Lilac::CLI::TemplateAST::Error) do

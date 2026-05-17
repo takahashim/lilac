@@ -17,7 +17,8 @@ module Lilac
       class Error < BuildError; end
 
       # Directive pairs that may not coexist on the same element. Each
-      # row is [Array<kind>, message].
+      # row is [Array<kind>, message]. data-value / data-checked were
+      # removed in Phase D (see form-spec §10.8); use data-field instead.
       COLLISION_PAIRS = [
         [
           %i[text unsafe_html],
@@ -32,40 +33,52 @@ module Lilac
           "data-show and data-hide cannot coexist (use one; the inverse is implicit)",
         ],
         [
-          %i[value checked],
-          "data-value and data-checked cannot coexist (form control has a single primary state)",
-        ],
-        [
           %i[component each],
           "data-component and data-each cannot coexist (wrap with another element — put the child component inside the iteration body)",
         ],
       ].freeze
-
-      # Tag-level applicability for data-value / data-checked. The
-      # input `type` attribute is further constrained by the two type
-      # sets below.
-      VALUE_ELEMENTS   = %w[input textarea select].freeze
-      CHECKED_ELEMENTS = %w[input].freeze
-
-      # `<input>` types that hold a typing-style value compatible with
-      # `data-value` (two-way `value` property binding). HTML defaults
-      # an `<input>` without an explicit type to `text`. Excluded:
-      # `checkbox`/`radio` (use data-checked) and `file`/`submit`/
-      # `button`/`reset`/`image` (no meaningful two-way value binding).
-      INPUT_TYPES_FOR_VALUE = %w[
-        text email url password search tel
-        number date datetime-local month week time
-        color range hidden
-      ].freeze
-
-      INPUT_TYPES_FOR_CHECKED = %w[checkbox radio].freeze
 
       def self.check!(directives, file:)
         directives.group_by(&:ref_id).each_value do |dirs_on_element|
           check_collisions(dirs_on_element, file)
           check_gn_hidden_conflict(dirs_on_element, file)
         end
-        directives.each { |d| check_element_type(d, file) }
+        check_form_scope!(directives, file)
+      end
+
+      # Scope rules for the form gem (form-spec §8 / §10.2):
+      # - `data-form` is only allowed on `<form>` elements
+      # - multiple bare `<form>` (no data-form attr) within the same
+      #   component would collide on the `:default` scope, so flag the
+      #   second occurrence as an error
+      def self.check_form_scope!(directives, file)
+        seen_default_form = false
+        directives.each do |d|
+          next unless d.kind == :form
+
+          if d.element_tag != "form"
+            raise Error.new(
+              "data-form is only allowed on <form> elements " \
+              "(found on <#{d.element_tag}>).",
+              at: d.source_location(file),
+              suggestion: "Move data-form to a <form> element, or drop it if scope isn't needed.",
+            )
+          end
+
+          # `value == ""` is the synthetic marker injected by TemplateAST
+          # for bare <form>. Track the first; flag any second occurrence.
+          if d.value.to_s.empty?
+            if seen_default_form
+              raise Error.new(
+                "second bare <form> in the same component would collide on the " \
+                ":default scope.",
+                at: d.source_location(file),
+                suggestion: %(Add `data-form="..."` to one of them to distinguish.),
+              )
+            end
+            seen_default_form = true
+          end
+        end
       end
 
       def self.check_collisions(dirs, file)
@@ -81,62 +94,6 @@ module Lilac
             at: offenders.last.source_location(file),
           )
         end
-      end
-
-      def self.check_element_type(directive, file)
-        case directive.kind
-        when :value
-          check_value_target(directive, file)
-        when :checked
-          check_checked_target(directive, file)
-        end
-      end
-
-      def self.check_value_target(directive, file)
-        tag = directive.element_tag
-        if tag == "input"
-          type = input_type(directive)
-          return if INPUT_TYPES_FOR_VALUE.include?(type)
-
-          raise Error.new(
-            "data-value: <input type=\"#{type}\"> is not a text-style input — " \
-            "use data-checked for checkbox/radio.",
-            at: directive.source_location(file),
-          )
-        end
-        return if VALUE_ELEMENTS.include?(tag)
-
-        raise Error.new(
-          "data-value: only valid on <input>, <textarea>, or <select> — " \
-          "found on <#{tag}>",
-          at: directive.source_location(file),
-        )
-      end
-
-      def self.check_checked_target(directive, file)
-        tag = directive.element_tag
-        if tag == "input"
-          type = input_type(directive)
-          return if INPUT_TYPES_FOR_CHECKED.include?(type)
-
-          raise Error.new(
-            "data-checked: <input type=\"#{type}\"> is not a checkbox or radio — " \
-            "use data-value for text-style inputs.",
-            at: directive.source_location(file),
-          )
-        end
-
-        raise Error.new(
-          "data-checked: only valid on <input type=\"checkbox\"> or " \
-          "<input type=\"radio\"> — found on <#{tag}>",
-          at: directive.source_location(file),
-        )
-      end
-
-      # HTML default for `<input>` with no type attribute is "text".
-      def self.input_type(directive)
-        attrs = directive.element_attrs || {}
-        (attrs["type"] || "text").downcase
       end
 
       # `lil-hidden` is reserved by data-show / data-hide. If the user

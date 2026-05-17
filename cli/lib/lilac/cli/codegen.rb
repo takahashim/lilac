@@ -119,10 +119,6 @@ module Lilac
           emit_text(directive, context)
         when :unsafe_html
           emit_unsafe_html(directive, context)
-        when :value
-          emit_value(directive, context)
-        when :checked
-          emit_checked(directive, context)
         when :show
           emit_show(directive, context)
         when :hide
@@ -141,6 +137,12 @@ module Lilac
           # Paired with :each at the same ref_id and consumed by
           # emit_each via @key_map; nothing to emit here.
           nil
+        when :form
+          emit_form(directive, context)
+        when :field
+          emit_field(directive, context)
+        when :button
+          emit_button(directive, context)
         else
           # Fallback for directives not yet implemented in later
           # phases (data-arg-X). Emits a placeholder comment so the
@@ -178,30 +180,6 @@ module Lilac
         ]
       end
 
-      # data-value="@s" → `bind_input refs.lilN, @s`. ivar-only because
-      # bind_input writes back to the signal on input events; an
-      # immutable iteration item field (`it.x`) couldn't accept the
-      # write.
-      def emit_value(directive, context)
-        value = ivar_or_raise(directive, "data-value")
-        [
-          "# #{@file}:#{directive.line} — data-value=#{value.inspect}",
-          "bind_input #{context.refs_expr}.#{directive.ref_id}, #{value}",
-        ]
-      end
-
-      # data-checked="@s" → `bind_input refs.lilN, @s, property: :checked`.
-      # Same ivar-only constraint as data-value; the difference is the
-      # DOM property targeted (checkbox / radio `checked` instead of
-      # input `value`).
-      def emit_checked(directive, context)
-        value = ivar_or_raise(directive, "data-checked")
-        [
-          "# #{@file}:#{directive.line} — data-checked=#{value.inspect}",
-          "bind_input #{context.refs_expr}.#{directive.ref_id}, #{value}, property: :checked",
-        ]
-      end
-
       # data-show / data-hide → toggle the reserved `lil-hidden` class
       # based on the signal. `data-show` adds the class when falsy
       # (show on truthy); `data-hide` adds it when truthy. Always wraps
@@ -236,20 +214,6 @@ module Lilac
         raise Error.new(
           "Invalid value for #{attr_name}: #{directive.value.inspect} " \
           "(expected `@ivar` or `it.path`)",
-          at: directive.source_location(@file),
-        )
-      end
-
-      # Like `read_value_or_raise` but rejects it_path — used by
-      # `data-value` / `data-checked` which write back to a signal and
-      # therefore can't target an immutable iteration item field.
-      def ivar_or_raise(directive, attr_name)
-        value = DirectiveValue.parse(directive.value)
-        return value if value&.ivar?
-
-        raise Error.new(
-          "Invalid value for #{attr_name}: #{directive.value.inspect} " \
-          "(expected `@ivar` — writable signal only)",
           at: directive.source_location(@file),
         )
       end
@@ -350,6 +314,78 @@ module Lilac
           "# #{@file}:#{directive.line} — data-class=#{directive.value.inspect}",
           "bind #{context.refs_expr}.#{directive.ref_id}, class: { #{body} }",
         ]
+      end
+
+      # data-form on a <form> element → wire submit event to invoke_button(:submit).
+      # Triggered for both `<form data-form="X">` (named scope) and bare
+      # `<form>` (TemplateAST injects a synthetic :form directive with empty
+      # value to ensure we emit the wire). preventDefault + has_button?
+      # guard mirror the runtime scanner's `wire_form_submit`.
+      def emit_form(directive, context)
+        sym_literal = form_scope_literal(directive.form_scope)
+        [
+          "# #{@file}:#{directive.line} — <form> submit wire for form(#{sym_literal})",
+          "#{context.refs_expr}.#{directive.ref_id}.on(:submit) do |__ev|",
+          "  __ev.call(:preventDefault)",
+          "  __f = form(#{sym_literal})",
+          "  __f.invoke_button(:submit, __ev) if __f.has_button?(:submit)",
+          "end",
+        ]
+      end
+
+      # data-field="NAME" → resolve enclosing form, ensure field is
+      # registered (auto-register if Ruby didn't declare), bind_to the
+      # discovered form control. Mirrors runtime `Scanner#dispatch_field`
+      # minus the container-class / error-slot wiring (those land in a
+      # follow-up Phase C extension; runtime scanner remains the canonical
+      # source of those bindings).
+      def emit_field(directive, context)
+        sym = parse_form_ident!(directive, "data-field")
+        scope = form_scope_literal(directive.form_scope)
+        input_ref = directive.field_input_ref
+        unless input_ref
+          raise Error.new(
+            "data-field=#{directive.value.inspect}: no <input>, <textarea>, or " \
+            "<select> found inside the element.",
+            at: directive.source_location(@file),
+          )
+        end
+        [
+          "# #{@file}:#{directive.line} — data-field=#{directive.value.inspect} in form(#{scope})",
+          "form(#{scope}).field(#{sym.inspect}) unless form(#{scope}).has_field?(#{sym.inspect})",
+          "form(#{scope})[#{sym.inspect}].bind_to(#{context.refs_expr}.#{input_ref})",
+        ]
+      end
+
+      # data-button="NAME" → wire click event to invoke_button(:NAME).
+      # The handler raises at runtime if NAME isn't declared; CrossRefLinter
+      # also flags this at build time when the script is analyzable.
+      def emit_button(directive, context)
+        sym = parse_form_ident!(directive, "data-button")
+        scope = form_scope_literal(directive.form_scope)
+        [
+          "# #{@file}:#{directive.line} — data-button=#{directive.value.inspect} in form(#{scope})",
+          "#{context.refs_expr}.#{directive.ref_id}.on(:click) { |__ev| form(#{scope}).invoke_button(#{sym.inspect}, __ev) }",
+        ]
+      end
+
+      # Symbol literal for the emitted form name. `:default` for the
+      # implicit scope, `:NAME` otherwise.
+      def form_scope_literal(form_scope)
+        (form_scope || :default).inspect
+      end
+
+      # Validate + symbolize a bare identifier directive value for
+      # data-field / data-button.
+      def parse_form_ident!(directive, label)
+        name = directive.value.to_s.strip
+        unless ValueGrammar.method_ident?(name)
+          raise Error.new(
+            "#{label}=#{directive.value.inspect}: expected a bare identifier",
+            at: directive.source_location(@file),
+          )
+        end
+        name.to_sym
       end
 
       # data-each="@col" + (optional) data-key="id" →

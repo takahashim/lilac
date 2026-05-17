@@ -36,22 +36,8 @@ class TestDirectiveCompatibility < Minitest::Test
     assert_includes err.message, "data-show and data-hide"
   end
 
-  def test_value_and_checked_on_same_element_raise
-    # Collision check fires before element-type check, so we use a
-    # type that's valid for the offending directive (text → fine for
-    # data-value) — the test isolates the collision rule.
-    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      attrs = { "type" => "text" }
-      Lilac::CLI::DirectiveCompatibility.check!(
-        [
-          dir(:value, tag: "input", element_attrs: attrs),
-          dir(:checked, tag: "input", line: 4, element_attrs: attrs),
-        ],
-        file: "x.lil",
-      )
-    end
-    assert_includes err.message, "data-value and data-checked"
-  end
+  # data-value / data-checked collision pair removed in Phase D
+  # (form-spec §10.8) — both directives no longer exist.
 
   def test_component_and_each_on_same_element_raise
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
@@ -79,67 +65,9 @@ class TestDirectiveCompatibility < Minitest::Test
   end
 
   # ---- element type checks ---------------------------------------
-
-  def test_data_value_on_form_controls_ok
-    # `<input>` without explicit type defaults to text (HTML default).
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input")], file: "x.lil")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input", element_attrs: { "type" => "email" })], file: "x.lil")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "input", element_attrs: { "type" => "number" })], file: "x.lil")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "textarea")], file: "x.lil")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "select")], file: "x.lil")
-  end
-
-  def test_data_value_on_input_type_checkbox_raises
-    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!(
-        [dir(:value, tag: "input", line: 3, element_attrs: { "type" => "checkbox" })],
-        file: "form.lil",
-      )
-    end
-    assert_includes err.message, "form.lil:3"
-    assert_includes err.message, "checkbox"
-    assert_includes err.message, "data-checked"
-  end
-
-  def test_data_value_on_div_raises_with_tag_in_message
-    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:value, tag: "div", line: 7)], file: "form.lil")
-    end
-    assert_includes err.message, "form.lil:7"
-    assert_includes err.message, "<div>"
-  end
-
-  def test_data_checked_on_input_checkbox_or_radio_ok
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", element_attrs: { "type" => "checkbox" })], file: "x.lil")
-    Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", element_attrs: { "type" => "radio" })],    file: "x.lil")
-  end
-
-  def test_data_checked_on_input_default_type_raises
-    # No explicit type → defaults to "text" → not checkbox/radio.
-    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "input", line: 4)], file: "x.lil")
-    end
-    assert_includes err.message, "x.lil:4"
-    assert_includes err.message, "text"
-  end
-
-  def test_data_checked_on_input_type_text_raises
-    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!(
-        [dir(:checked, tag: "input", line: 2, element_attrs: { "type" => "text" })],
-        file: "x.lil",
-      )
-    end
-    assert_includes err.message, "data-value"
-  end
-
-  def test_data_checked_on_span_raises
-    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
-      Lilac::CLI::DirectiveCompatibility.check!([dir(:checked, tag: "span", line: 5)], file: "x.lil")
-    end
-    assert_includes err.message, "x.lil:5"
-    assert_includes err.message, "<span>"
-  end
+  # data-value / data-checked element-type rules removed in Phase D
+  # (form-spec §10.8); the runtime form gem owns form-control selection
+  # via data-field auto-detect.
 
   # ---- lil-hidden conflict ----------------------------------------
 
@@ -206,6 +134,63 @@ class TestDirectiveCompatibility < Minitest::Test
       [
         dir(:show, value: "@vis"),
         dir(:class_, value: "{ 'lil-hidden': }"),
+      ],
+      file: "x.lil",
+    )
+  end
+
+  # ---- form scope rules (Phase C) ---------------------------------
+
+  def test_data_form_on_non_form_element_raises
+    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
+      Lilac::CLI::DirectiveCompatibility.check!(
+        [dir(:form, value: "signup", tag: "div", line: 3)],
+        file: "x.lil",
+      )
+    end
+    assert_includes err.message, "x.lil:3"
+    assert_includes err.message, "<div>"
+    assert_includes err.message, "only allowed on <form>"
+  end
+
+  def test_data_form_on_form_element_ok
+    Lilac::CLI::DirectiveCompatibility.check!(
+      [dir(:form, value: "signup", tag: "form")],
+      file: "x.lil",
+    )
+  end
+
+  def test_multiple_bare_form_raises_default_collision
+    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
+      Lilac::CLI::DirectiveCompatibility.check!(
+        [
+          dir(:form, value: "", tag: "form", ref_id: "lil0", line: 2),
+          dir(:form, value: "", tag: "form", ref_id: "lil1", line: 5),
+        ],
+        file: "x.lil",
+      )
+    end
+    assert_includes err.message, "x.lil:5"
+    assert_includes err.message, ":default scope"
+  end
+
+  def test_bare_form_and_named_form_coexist_ok
+    # `data-form="signup"` has a name; the other bare form takes :default.
+    # No collision.
+    Lilac::CLI::DirectiveCompatibility.check!(
+      [
+        dir(:form, value: "", tag: "form", ref_id: "lil0"),
+        dir(:form, value: "signup", tag: "form", ref_id: "lil1"),
+      ],
+      file: "x.lil",
+    )
+  end
+
+  def test_multiple_named_forms_ok
+    Lilac::CLI::DirectiveCompatibility.check!(
+      [
+        dir(:form, value: "login",  tag: "form", ref_id: "lil0"),
+        dir(:form, value: "signup", tag: "form", ref_id: "lil1"),
       ],
       file: "x.lil",
     )

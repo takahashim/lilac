@@ -8,10 +8,10 @@ class TestBuildError < Minitest::Test
   end
 
   def test_structured_form_renders_header_and_body
-    err = Lilac::CLI::BuildError.new("data-value not allowed on <div>", at: loc("form.lil", 8))
+    err = Lilac::CLI::BuildError.new("data-field requires an inner <input>", at: loc("form.lil", 8))
     expected = <<~MSG.chomp
       lilac: build error in form.lil:8
-        data-value not allowed on <div>
+        data-field requires an inner <input>
     MSG
     assert_equal expected, err.message
   end

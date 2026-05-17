@@ -145,46 +145,8 @@ class TestDirectiveCodegen < Minitest::Test
     assert_raises(Lilac::CLI::Codegen::Error) { gen([unsafe_html(value: "it.body.html_safe")]) }
   end
 
-  # ---- data-value -------------------------------------------------
-
-  def value_dir(value:, ref_id: "lil0", line: 1)
-    Lilac::CLI::Directive.new(kind: :value, name: nil, value: value, ref_id: ref_id,
-                  line: line, element_tag: "input")
-  end
-
-  def test_data_value_emits_bind_input
-    out = gen([value_dir(value: "@title")])
-    assert_includes out, "bind_input refs.lil0, @title"
-    refute_includes out, "property: :checked"
-  end
-
-  def test_data_value_rejects_it_path
-    # data-value is two-way and writes back to the signal, so an
-    # iteration item field (`it.x` — immutable Data attribute) is
-    # not a valid target.
-    err = assert_raises(Lilac::CLI::Codegen::Error) do
-      gen([value_dir(value: "it.title", line: 3)], source_path: "form.lil")
-    end
-    assert_includes err.message, "form.lil:3"
-    assert_includes err.message, "writable signal only"
-  end
-
-  # ---- data-checked -----------------------------------------------
-
-  def checked_dir(value:, ref_id: "lil0", line: 1)
-    Lilac::CLI::Directive.new(kind: :checked, name: nil, value: value, ref_id: ref_id,
-                  line: line, element_tag: "input",
-                  element_attrs: { "type" => "checkbox" })
-  end
-
-  def test_data_checked_emits_bind_input_with_property
-    out = gen([checked_dir(value: "@is_done")])
-    assert_includes out, "bind_input refs.lil0, @is_done, property: :checked"
-  end
-
-  def test_data_checked_rejects_it_path
-    assert_raises(Lilac::CLI::Codegen::Error) { gen([checked_dir(value: "it.done")]) }
-  end
+  # data-value / data-checked were removed in Phase D (form-spec §10.8).
+  # Use `<input data-field="X">` + the form gem instead.
 
   # ---- data-show / data-hide --------------------------------------
 
@@ -513,14 +475,15 @@ class TestDirectiveCodegen < Minitest::Test
     assert_includes err.message, "data-text and data-unsafe-html"
   end
 
-  def test_codegen_propagates_element_type_check_failure
+  def test_codegen_propagates_form_scope_check_failure
+    # data-form on a non-<form> element is a scope violation; codegen
+    # surfaces the underlying DirectiveCompatibility::Error.
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
       gen(
-        [value_dir(value: "@s", line: 5)].tap do |dirs|
-          # value_dir helper uses tag: "input"; rebuild on div to trip the check.
-          dirs[0] = Lilac::CLI::Directive.new(kind: :value, name: nil, value: "@s",
-                                  ref_id: "lil0", line: 5, element_tag: "div")
-        end,
+        [
+          Lilac::CLI::Directive.new(kind: :form, name: nil, value: "signup",
+                                    ref_id: "lil0", line: 5, element_tag: "div"),
+        ],
         source_path: "form.lil",
       )
     end

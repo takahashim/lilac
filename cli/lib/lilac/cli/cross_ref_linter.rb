@@ -164,7 +164,7 @@ module Lilac
       # skip). For data-class, multiple ivars hide inside the hash.
       def self.ivars_in_directive(directive)
         case directive.kind
-        when :text, :unsafe_html, :value, :checked, :show, :hide, :each
+        when :text, :unsafe_html, :show, :hide, :each
           value = directive.value.to_s.strip
           value.start_with?("@") ? [value] : []
         when :attr, :css
