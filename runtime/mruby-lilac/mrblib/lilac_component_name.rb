@@ -1,9 +1,17 @@
 # Mapping between `data-component` attribute strings and Ruby constants.
 #
-# Naming rule (kebab-case ↔ CamelCase, `--` is the namespace separator):
-#   "counter"          ↔ Counter
-#   "user-profile"     ↔ UserProfile
-#   "admin--user-card" ↔ Admin::UserCard
+# Naming rule (PascalCase canonical; kebab-case も後方互換で受理。
+# `--` は namespace separator):
+#   "Counter"          → Counter        (canonical)
+#   "counter"          → Counter        (legacy kebab, auto-camelized)
+#   "UserProfile"      → UserProfile    (canonical)
+#   "user-profile"     → UserProfile    (legacy kebab)
+#   "Admin--UserCard"  → Admin::UserCard
+#   "admin--user-card" → Admin::UserCard
+#
+# 新規コードは PascalCase を使う(Ruby class 名と HTML attribute 値が
+# 1 対 1 で対応、grep / refactor しやすい)。kebab は既存 HTML との互換
+# のために受理を維持する。
 #
 # Empty segments (`--foo`, `foo--`, `foo----bar`) raise Lilac::Error.
 # Syntactically invalid constant names (e.g. starting
