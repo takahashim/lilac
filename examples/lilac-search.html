@@ -66,10 +66,10 @@
       Search and filter a list of countries by name and region.
     </p>
 
-    <div data-component="country-picker" class="panel">
+    <div data-component="CountryPicker" class="panel">
       <div class="row">
-        <input data-value="@query" type="text" placeholder="国名 (英語) を入力…">
-        <select data-value="@region">
+        <input data-field="query" type="text" placeholder="国名 (英語) を入力…">
+        <select data-field="region">
           <option value="">All regions</option>
           <option value="Asia">Asia</option>
           <option value="Americas">Americas</option>
@@ -93,18 +93,16 @@
     <script type="text/ruby" id="ruby-source">
 class CountryPicker < Lilac::Component
   def setup
-    @query  = signal("")
-    @region = signal("")
     @items  = resource(initial: []) do |r|
       Fetchy.json("./data/countries.json", timeout: 5000, signal: r.abort_signal)
     end
 
-    # Filter computed from @items + @query + @region. computed skips
-    # downstream notifies when the result is the same Array (== check),
-    # so typing characters that don't change the filter is a no-op.
+    # Filter computed from @items + form[:query] + form[:region]. The
+    # form fields are auto-registered from the HTML data-field attrs
+    # (no explicit `form do |f| f.field ... end` declaration needed).
     @filtered = computed do
-      q = @query.value.downcase.strip
-      r = @region.value
+      q = form[:query].value.downcase.strip
+      r = form[:region].value
       @items.value.select do |it|
         next false if !r.empty? && it["region"] != r
         next true  if q.empty?
@@ -128,7 +126,7 @@ class CountryPicker < Lilac::Component
   end
 end
 
-Lilac.register "country-picker", CountryPicker
+Lilac.register "CountryPicker", CountryPicker
 Lilac.start
 puts "search demo mounted"
     </script>

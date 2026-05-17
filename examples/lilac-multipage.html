@@ -82,7 +82,7 @@
       A small multipage app with client-side navigation and route-based views.
     </p>
 
-    <nav data-component="nav">
+    <nav data-component="Nav">
       <a href="/" data-ref="home">Home</a>
       <a href="/counter" data-ref="counter">Counter</a>
       <a href="/users" data-ref="users">Users</a>
@@ -100,7 +100,7 @@
     <!-- ============== Templates (route content) ============== -->
 
     <template id="page-home">
-      <div data-component="home-page">
+      <div data-component="HomePage">
         <h2>Home</h2>
         <p>A simple landing page for the demo app.</p>
         <p>Use the navigation above to move between pages.</p>
@@ -108,7 +108,7 @@
     </template>
 
     <template id="page-counter">
-      <div data-component="counter-page">
+      <div data-component="CounterPage">
         <h2>Counter</h2>
         <div class="row">
           <button data-ref="decrement">-</button>
@@ -121,7 +121,7 @@
     </template>
 
     <template id="page-users">
-      <div data-component="users-page">
+      <div data-component="UsersPage">
         <h2>Users</h2>
         <p>Select a user to open a detail page.</p>
         <ul class="users-list" data-ref="list"></ul>
@@ -129,7 +129,7 @@
     </template>
 
     <template id="page-user">
-      <div data-component="user-page">
+      <div data-component="UserPage">
         <h2 data-ref="title">User</h2>
         <p>route param: <code data-ref="id"></code></p>
         <p><a href="/users" data-ref="back">← back to Users</a></p>
@@ -137,7 +137,7 @@
     </template>
 
     <template id="page-about">
-      <div data-component="about-page">
+      <div data-component="AboutPage">
         <h2>About</h2>
         <p>A basic informational page inside the demo app.</p>
         <p>Example links: home → <code data-ref="home_link"></code>,
@@ -146,7 +146,7 @@
     </template>
 
     <template id="page-404">
-      <div data-component="not-found-page">
+      <div data-component="NotFoundPage">
         <h2>Not found</h2>
         <p>This page does not exist. <a href="/" data-ref="home">Go home</a></p>
       </div>
@@ -239,13 +239,13 @@ end
 
 # ---------------- Boot ----------------
 
-Lilac.register "nav",            Nav
-Lilac.register "home-page",      HomePage
-Lilac.register "counter-page",   CounterPage
-Lilac.register "users-page",     UsersPage
-Lilac.register "user-page",      UserPage
-Lilac.register "about-page",     AboutPage
-Lilac.register "not-found-page", NotFoundPage
+Lilac.register "Nav",            Nav
+Lilac.register "HomePage",      HomePage
+Lilac.register "CounterPage",   CounterPage
+Lilac.register "UsersPage",     UsersPage
+Lilac.register "UserPage",      UserPage
+Lilac.register "AboutPage",     AboutPage
+Lilac.register "NotFoundPage", NotFoundPage
 
 # Routes must be declared *before* `Lilac.start` mounts the components:
 # Nav#setup calls `router.home_path` etc., and those `*_path` methods

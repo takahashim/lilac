@@ -62,31 +62,31 @@
       activity log.
     </p>
 
-    <div data-component="activity-log">
+    <div data-component="ActivityLog">
       <div class="panel">
         <h2>Activity</h2>
-        <p class="status" data-ref="log">no submissions yet.</p>
+        <p class="status" data-text="@log_text">no submissions yet.</p>
       </div>
 
-      <form data-component="signup-form" class="panel" novalidate>
+      <form data-component="SignupForm" class="panel" novalidate>
         <h2>Sign up</h2>
 
-        <div class="field" data-ref="email_field">
+        <div class="field" data-class="{ 'is-invalid': @email_invalid, 'is-valid': @email_ok }">
           <label>Email</label>
           <input data-ref="email" type="email" placeholder="you@example.com">
-          <p class="error" data-ref="email_error" hidden>enter a valid address</p>
+          <p class="error" data-text="@email_error" data-attr-hidden="@email_hide">enter a valid address</p>
         </div>
 
-        <div class="field" data-ref="password_field">
+        <div class="field" data-class="{ 'is-invalid': @password_invalid, 'is-valid': @password_ok }">
           <label>Password</label>
           <input data-ref="password" type="password" placeholder="8+ characters">
-          <p class="error" data-ref="password_error" hidden>at least 8 characters</p>
+          <p class="error" data-text="@password_error" data-attr-hidden="@password_hide">at least 8 characters</p>
         </div>
 
-        <div class="field" data-ref="password_confirm_field">
+        <div class="field" data-class="{ 'is-invalid': @confirm_invalid, 'is-valid': @confirm_ok }">
           <label>Password (confirm)</label>
           <input data-ref="password_confirm" type="password" placeholder="re-enter password">
-          <p class="error" data-ref="password_confirm_error" hidden>passwords don't match</p>
+          <p class="error" data-text="@confirm_error" data-attr-hidden="@confirm_hide">passwords don't match</p>
         </div>
 
         <label class="checkbox">
@@ -94,11 +94,11 @@
           I accept the (imaginary) terms.
         </label>
 
-        <p class="base-error" data-ref="base_error" hidden>Could not sign up. Please try again.</p>
+        <p class="base-error" data-text="@base_error_text" data-attr-hidden="@base_error_hide">Could not sign up. Please try again.</p>
 
         <div class="row">
-          <button data-ref="submit" type="submit">Sign up</button>
-          <span class="status" data-ref="hint"></span>
+          <button type="submit" data-attr-disabled="@submit_disabled">Sign up</button>
+          <span class="status" data-text="@hint"></span>
         </div>
       </form>
     </div>
@@ -135,35 +135,35 @@ class SignupForm < Lilac::Component
       end
     end
 
-    email    = @form[:email]
+    email   = @form[:email]
     password = @form[:password]
-    confirm  = @form[:password_confirm]
-    terms    = @form[:terms]
+    confirm = @form[:password_confirm]
+    terms   = @form[:terms]
 
-    bind refs.email_field, class: {
-      "is-invalid" => computed { email.show_error? },
-      "is-valid"   => computed { email.touched? && email.valid? },
-    }
-    bind refs.password_field, class: {
-      "is-invalid" => computed { password.show_error? },
-      "is-valid"   => computed { password.touched? && password.valid? },
-    }
-    bind refs.password_confirm_field, class: {
-      "is-invalid" => computed { confirm.show_error? },
-      "is-valid"   => computed { confirm.touched? && confirm.valid? },
-    }
-    bind refs.email_error,            text: email.error_signal,
-                                      hidden: computed { !email.show_error? }
-    bind refs.password_error,         text: password.error_signal,
-                                      hidden: computed { !password.show_error? }
-    bind refs.password_confirm_error, text: confirm.error_signal,
-                                      hidden: computed { !confirm.show_error? }
-    bind refs.base_error, text: @form.base_error_signal,
-                          hidden: computed { @form.base_error.nil? }
+    # Field-level state exposed as computed signals so the HTML can
+    # bind to them declaratively via `data-class` / `data-text` /
+    # `data-attr-hidden`.
+    @email_invalid = computed { email.show_error? }
+    @email_ok      = computed { email.touched? && email.valid? }
+    @email_error   = email.error_signal
+    @email_hide    = computed { !email.show_error? }
 
-    bind refs.submit, disabled: computed { !@form.valid? }
+    @password_invalid = computed { password.show_error? }
+    @password_ok      = computed { password.touched? && password.valid? }
+    @password_error   = password.error_signal
+    @password_hide    = computed { !password.show_error? }
 
-    bind refs.hint, :text do
+    @confirm_invalid = computed { confirm.show_error? }
+    @confirm_ok      = computed { confirm.touched? && confirm.valid? }
+    @confirm_error   = confirm.error_signal
+    @confirm_hide    = computed { !confirm.show_error? }
+
+    @base_error_text = @form.base_error_signal
+    @base_error_hide = computed { @form.base_error.nil? }
+
+    @submit_disabled = computed { !@form.valid? }
+
+    @hint = computed do
       next "ready to submit" if @form.valid?
       next "please accept the terms" if !terms.value && email.value.length > 0
       ""
@@ -194,15 +194,7 @@ class ActivityLog < Lilac::Component
     @count = signal(0)
     @last_email = signal("")
 
-    # The form's :user_submitted event arrives here via DOM bubbling.
-    # We don't know — and don't need to know — the form's class.
-    root.on(:user_submitted) do |event|
-      detail = event[:detail]
-      @last_email.value = detail[:email].to_s
-      @count.update { |n| n + 1 }
-    end
-
-    bind refs.log, :text do
+    @log_text = computed do
       n = @count.value
       if n.zero?
         "no submissions yet."
@@ -210,11 +202,19 @@ class ActivityLog < Lilac::Component
         "submission ##{n} accepted (last: #{@last_email.value})"
       end
     end
+
+    # The form's :user_submitted event arrives here via DOM bubbling.
+    # We don't know — and don't need to know — the form's class.
+    root.on(:user_submitted) do |event|
+      detail = event[:detail]
+      @last_email.value = detail[:email].to_s
+      @count.update { |n| n + 1 }
+    end
   end
 end
 
-Lilac.register "signup-form",  SignupForm
-Lilac.register "activity-log", ActivityLog
+Lilac.register "SignupForm",  SignupForm
+Lilac.register "ActivityLog", ActivityLog
 Lilac.start
 puts "form demo mounted"
     </script>

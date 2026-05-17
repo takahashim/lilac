@@ -88,53 +88,50 @@
       A simple todo list with add, remove, and drag-to-reorder.
     </p>
 
-    <!-- The <ul> is empty in the seed HTML; bind_list owns its children. -->
-    <div data-component="todo-list" class="panel">
-      <div data-ref="notice_overlay" class="overlay" hidden>
+    <!-- The data-each `<ul>`'s inline `<li>` is captured as the row
+         template at mount time; bind_list owns rendering after that. -->
+    <div data-component="TodoList" class="panel">
+      <div class="overlay" data-attr-hidden="@notice_hidden">
         <div class="dialog" role="dialog" aria-labelledby="notice-title">
           <h3 id="notice-title">入力エラー</h3>
-          <p data-ref="notice_text"></p>
+          <p data-text="@notice_text"></p>
           <div class="actions">
-            <button data-ref="notice_dismiss" type="button">OK</button>
+            <button type="button" data-on-click="clear_notice">OK</button>
           </div>
         </div>
       </div>
       <form class="row" novalidate>
         <input data-ref="input" type="text" placeholder="What needs doing?">
-        <button data-ref="add" type="submit">Add</button>
+        <button type="submit">Add</button>
       </form>
-      <ul data-ref="list" class="todos"></ul>
-      <p class="status" data-ref="status"></p>
+      <ul data-ref="list" class="todos" data-each="@items" data-key="id">
+        <li data-component="TodoItem" draggable="true" data-attr-data-id="it.id">
+          <span class="handle" aria-hidden="true">⋮⋮</span>
+          <span class="title" data-text="it.title"></span>
+          <button class="dismiss" aria-label="delete" data-on-click="dismiss">×</button>
+        </li>
+      </ul>
+      <p class="status" data-text="@status_text"></p>
     </div>
-
-    <!-- Row markup lives here as inert template content. bind_list
-         clones it per item; setup_row fills in title + data-id. -->
-    <template data-template="todo-row">
-      <li data-component="todo-item" draggable="true">
-        <span class="handle" aria-hidden="true">⋮⋮</span>
-        <span class="title" data-ref="title"></span>
-        <button class="dismiss" data-ref="dismiss" aria-label="delete">×</button>
-      </li>
-    </template>
 
     <p id="boot">booting…</p>
 
     <script type="text/ruby" id="ruby-source">
 # Each <li> is its own component. lifecycle scoped to the row: when
-# bind_list removes the <li>, the MutationObserver unmounts this and
+# data-each removes the <li>, the MutationObserver unmounts this and
 # the click handler / cleanup is released.
 class TodoItem < Lilac::Component
   include Lilac::Sortable::Item
 
   def setup
     make_sortable
+  end
 
-    refs.dismiss.on(:click) do
-      # bubbles: true lets the event cross the data-component boundary up
-      # to the parent TodoList. event.target on the parent side is the
-      # <li> that fired, so the parent can read its data-id.
-      root.dispatch(:item_dismissed, bubbles: true)
-    end
+  # bubbles: true lets the event cross the data-component boundary up
+  # to the parent TodoList. event.target on the parent side is the
+  # <li> that fired, so the parent can read its data-id.
+  def dismiss(_ev)
+    root.dispatch(:item_dismissed, bubbles: true)
   end
 end
 
@@ -155,9 +152,19 @@ class TodoList < Lilac::Component
     end
 
     @notice = signal(nil)
-    bind refs.notice_overlay, hidden: computed { @notice.value.nil? }
-    bind refs.notice_text,    text:   computed { @notice.value.to_s }
-    refs.notice_dismiss.on(:click) { @notice.value = nil }
+    @notice_hidden = computed { @notice.value.nil? }
+    @notice_text   = computed { @notice.value.to_s }
+
+    @status_text = computed do
+      n = @items.value.length
+      case n
+      when 0 then "all done!"
+      when 1 then "1 item"
+      else        "#{n} items"
+      end
+    end
+
+    sortable_target refs.list, @items, key: "id"
 
     root.on(:submit) do |event|
       event.preventDefault
@@ -175,27 +182,9 @@ class TodoList < Lilac::Component
       id = wrap(event[:target]).data(:id).to_i
       @items.update { |arr| arr.reject { |it| it["id"] == id } }
     end
-
-    # The whole list rendering. The <template data-template="todo-row">
-    # in the page holds the row markup; bind_list clones it per item
-    # and fills the title slot. Returning the same JS node when prev
-    # is set keeps the row's todo-item component mounted across updates.
-    bind_list refs.list, @items, key: "id", template: "todo-row" do |it, t|
-      t.data(:id, it["id"])
-      t.refs.title.text = it["title"]
-    end
-
-    sortable_target refs.list, @items, key: "id"
-
-    bind refs.status, :text do
-      n = @items.value.length
-      case n
-      when 0 then "all done!"
-      when 1 then "1 item"
-      else        "#{n} items"
-      end
-    end
   end
+
+  def clear_notice(_ev) = @notice.value = nil
 
   private
 
@@ -206,8 +195,8 @@ class TodoList < Lilac::Component
   end
 end
 
-Lilac.register "todo-list", TodoList
-Lilac.register "todo-item", TodoItem
+Lilac.register "TodoList", TodoList
+Lilac.register "TodoItem", TodoItem
 Lilac.start
 puts "todo demo (bind_list) mounted"
     </script>

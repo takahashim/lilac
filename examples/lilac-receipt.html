@@ -55,7 +55,7 @@
       An editable receipt with line items, totals, and shareable state in the URL.
     </p>
 
-    <div data-component="receipt">
+    <div data-component="Receipt">
       <table class="receipt">
         <thead>
           <tr>
@@ -208,7 +208,7 @@ class Receipt < Lilac::Component
   end
 end
 
-Lilac.register "receipt", Receipt
+Lilac.register "Receipt", Receipt
 Lilac.start
 puts "receipt demo mounted"
     </script>

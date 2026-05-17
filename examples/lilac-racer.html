@@ -47,7 +47,7 @@
       A pseudo-3D driving demo with keyboard steering, speed, and distance.
     </p>
 
-    <div data-component="racer">
+    <div data-component="Racer">
       <div class="hud">
         <span>Speed: <b data-ref="speed">0 km/h</b></span>
         <span>Dist: <b data-ref="distance">0 m</b></span>
@@ -527,7 +527,7 @@ class Racer < Lilac::Component
   end
 end
 
-Lilac.register "racer", Racer
+Lilac.register "Racer", Racer
 Lilac.start
 puts "racer demo mounted"
     </script>

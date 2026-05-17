@@ -126,7 +126,7 @@
       A three-column Kanban board with drag-and-drop cards and saved state.
     </p>
 
-    <div data-component="kanban-board">
+    <div data-component="KanbanBoard">
       <!-- System error overlay: 想定外の例外を error_boundary 経由で表示。
            赤系の枠で「これはバグ / 異常」と分かる見せ方。 -->
       <div data-ref="error_overlay" class="overlay error-overlay" hidden>
@@ -153,7 +153,7 @@
       </div>
 
       <div class="board">
-        <div data-component="kanban-column" data-status="todo" class="column">
+        <div data-component="KanbanColumn" data-status="todo" class="column">
           <h2>Todo <span data-ref="count" class="count">0</span></h2>
           <ul data-ref="list" class="cards"></ul>
           <form data-ref="add_form" class="add-form" onsubmit="return false">
@@ -161,7 +161,7 @@
             <button data-ref="add_button" type="button">Add</button>
           </form>
         </div>
-        <div data-component="kanban-column" data-status="doing" class="column">
+        <div data-component="KanbanColumn" data-status="doing" class="column">
           <h2>Doing <span data-ref="count" class="count">0</span></h2>
           <ul data-ref="list" class="cards"></ul>
           <form data-ref="add_form" class="add-form" onsubmit="return false">
@@ -169,7 +169,7 @@
             <button data-ref="add_button" type="button">Add</button>
           </form>
         </div>
-        <div data-component="kanban-column" data-status="done" class="column">
+        <div data-component="KanbanColumn" data-status="done" class="column">
           <h2>Done <span data-ref="count" class="count">0</span></h2>
           <ul data-ref="list" class="cards"></ul>
           <form data-ref="add_form" class="add-form" onsubmit="return false">
@@ -181,7 +181,7 @@
     </div>
 
     <template data-template="card-row">
-      <li data-component="kanban-card" draggable="true">
+      <li data-component="KanbanCard" draggable="true">
         <span data-ref="title"></span>
         <button data-ref="delete" class="dismiss" type="button" aria-label="delete">×</button>
       </li>
@@ -352,9 +352,9 @@ class KanbanBoard < Lilac::Component
   end
 end
 
-Lilac.register "kanban-board",  KanbanBoard
-Lilac.register "kanban-column", KanbanColumn
-Lilac.register "kanban-card",   KanbanCard
+Lilac.register "KanbanBoard",  KanbanBoard
+Lilac.register "KanbanColumn", KanbanColumn
+Lilac.register "KanbanCard",   KanbanCard
 Lilac.start
 puts "kanban demo mounted"
     </script>

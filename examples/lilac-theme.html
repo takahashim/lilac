@@ -49,22 +49,22 @@
       A shared theme switcher that updates multiple cards at once.
     </p>
 
-    <div data-component="theme-app">
+    <div data-component="ThemeApp">
       <div class="toolbar">
         <button data-on-click="toggle_theme">Toggle theme</button>
         <span class="status" data-text="@status_text"></span>
       </div>
 
-      <div data-component="theme-card" class="card" data-class="{ 'is-dark': @is_dark }">
+      <div data-component="ThemeCard" class="card" data-class="{ 'is-dark': @is_dark }">
         <h3>First card</h3>
         <p>This card updates together with the shared theme setting.
-           <span data-component="theme-badge" class="badge" data-text="@badge_text">
+           <span data-component="ThemeBadge" class="badge" data-text="@badge_text">
              status
            </span>
         </p>
       </div>
 
-      <div data-component="theme-card" class="card" data-class="{ 'is-dark': @is_dark }">
+      <div data-component="ThemeCard" class="card" data-class="{ 'is-dark': @is_dark }">
         <h3>Second card</h3>
         <p>Both cards reflect the current mode immediately.</p>
       </div>
@@ -104,9 +104,9 @@ class ThemeBadge < Lilac::Component
   end
 end
 
-Lilac.register "theme-app",   ThemeApp
-Lilac.register "theme-card",  ThemeCard
-Lilac.register "theme-badge", ThemeBadge
+Lilac.register "ThemeApp",   ThemeApp
+Lilac.register "ThemeCard",  ThemeCard
+Lilac.register "ThemeBadge", ThemeBadge
 Lilac.start
 puts "theme demo mounted"
     </script>
