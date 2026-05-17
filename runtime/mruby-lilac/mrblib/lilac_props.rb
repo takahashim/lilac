@@ -1,12 +1,16 @@
 # lilac_props.rb — Component props mechanism.
 #
 # Read declarative configuration from `data-prop-*` HTML attributes and
-# expose them as `props.X` in component setup. See docs/lilac-props-spec.md.
+# expose them as `props.X` and `@X` Signal ivars. See docs/lilac-props-spec.md.
+#
+# `prop :title, String` declares both:
+#   - `props.title` read-through accessor (returns current scalar)
+#   - `@title` Signal ivar, auto-initialized at mount with the coerced value
 #
 # Types: String / Integer / Float / Lilac::Boolean.
 # Boolean rule: "true"/"false" + presence shortcut, others raise.
 # Defaults: optional via `default:`; absent default + missing attr → raise.
-# Attribute naming: `data-prop-max-length` → `props.max_length` (kebab→snake).
+# Attribute naming: `data-prop-max-length` → `@max_length` (kebab→snake).
 
 module Lilac
   # Sentinel module used as the `Boolean` type marker in `prop` declarations.
@@ -15,11 +19,20 @@ module Lilac
   module Boolean; end
 
   # Holds the resolved prop values for a single component instance. Provides
-  # `props.NAME` lookup via method_missing; raises NoMethodError on undeclared
-  # access so typos in `setup` surface immediately.
+  # `props.NAME` read-through lookup via method_missing that pulls the
+  # current value from the host's `@NAME` Signal ivar (so updates via
+  # `Component#update_prop` are reflected on next read).
   class Props
     NO_DEFAULT = Object.new.freeze
     ATTR_PREFIX = "data-prop-".freeze
+
+    # Names whose `prop :X` declaration would collide with a framework ivar
+    # set by Component#initialize / lifecycle. Rejected at declaration time.
+    RESERVED_NAMES = %i[
+      root refs parent props children exposed resources scope_stack
+      prepare_setup_phase_done mounted unmounted
+      error_handler abort_controller _prop_signals
+    ].freeze
 
     # Bundles error-message context (attr_key + component_name) so converters
     # don't have to thread two extra args through every helper. Created per
@@ -32,16 +45,20 @@ module Lilac
       end
     end
 
-    def initialize(values)
+    def initialize(values, host = nil)
       @values = values
+      @host = host
     end
 
     def has?(name)
       @values.key?(name)
     end
 
+    # Snapshot of all current prop values (scalars, not Signals).
     def to_h
-      @values.dup
+      out = {}
+      @values.each_key { |k| out[k] = current_value(k) }
+      out
     end
 
     def respond_to_missing?(name, _include_private = false)
@@ -50,18 +67,41 @@ module Lilac
 
     def method_missing(name, *args)
       if @values.key?(name) && args.empty?
-        @values[name]
+        current_value(name)
       else
         super
       end
+    end
+
+    private
+
+    # Pull from the host's auto-init Signal ivar if available (live value);
+    # fall back to the stored scalar when @host is nil (empty fallback Props
+    # used by prepare_setup_phase's rescue branch).
+    def current_value(name)
+      return @values[name] unless @host
+      sig = @host.instance_variable_get(:"@#{name}")
+      sig.is_a?(Signal) ? sig.value : @values[name]
     end
 
     class << self
       # Build a Props instance from declarations and the root element. Performs
       # type conversion, default application, missing-required raise, and
       # (dev_mode only) unknown `data-prop-*` warn.
-      def build(declarations, root_ref, component_name)
+      #
+      # Side effects on `host`:
+      #   - sets `@NAME` to a new `Signal.new(coerced_value)` for each prop
+      #   - stores the original Signal references in `@_prop_signals` so the
+      #     mount-time `validate_prop_ivars_not_overwritten!` can detect
+      #     user reassignment via object-identity comparison
+      def build(declarations, root_ref, component_name, host: nil)
         values = {}
+        signals = {}
+        # Install the signals Hash on the host BEFORE the loop so any raise
+        # mid-iteration still leaves `@_prop_signals` referencing the
+        # partial map — `validate_prop_ivars_not_overwritten!` then covers
+        # the props that did succeed.
+        host.instance_variable_set(:@_prop_signals, signals) if host
         declarations.each do |name, spec|
           attr_key = attr_key_for(name)
           raw = root_ref.attr(attr_key)
@@ -71,16 +111,22 @@ module Lilac
                     "required prop :#{name} is missing in component #{component_name} " \
                     "(declare default via `prop :#{name}, ..., default: ...`)"
             end
-            values[name] = spec[:default]
+            value = spec[:default]
           else
-            values[name] = convert(
+            value = convert(
               type: spec[:type], raw: raw, name: name,
               ctx: ConversionContext.new(attr_key, component_name)
             )
           end
+          values[name] = value
+          if host
+            sig = Signal.new(value)
+            host.instance_variable_set(:"@#{name}", sig)
+            signals[name] = sig
+          end
         end
         warn_unknown(declarations, root_ref, component_name) if Lilac.dev_mode
-        new(values)
+        new(values, host)
       end
 
       # Public so Component / tests can build attribute keys the same way as
@@ -91,6 +137,15 @@ module Lilac
 
       def name_from_attr_key(attr_key)
         attr_key.sub(ATTR_PREFIX, "").tr("-", "_").to_sym
+      end
+
+      # Public coercion entry point — same type rules as the per-prop
+      # conversion inside `build`, callable for runtime prop updates.
+      def coerce(raw, type, attr_key, component_name = "(unknown)", name: nil)
+        convert(
+          type: type, raw: raw, name: name,
+          ctx: ConversionContext.new(attr_key, component_name)
+        )
       end
 
       private

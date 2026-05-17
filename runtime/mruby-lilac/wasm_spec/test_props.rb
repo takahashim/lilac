@@ -3,10 +3,8 @@
 
 class PropsStringCounter < Lilac::Component
   prop :label, String
-
-  def setup
-    @label = signal(props.label)
-  end
+  # `prop :label` auto-initializes @label as a Signal at mount;
+  # no setup needed.
 end
 
 class PropsIntCounter < Lilac::Component
@@ -30,11 +28,7 @@ end
 class PropsBoolCounter < Lilac::Component
   prop :enabled,  Lilac::Boolean
   prop :disabled, Lilac::Boolean, default: false
-
-  def setup
-    @enabled  = props.enabled
-    @disabled = props.disabled
-  end
+  # @enabled / @disabled are auto-initialized as Signals at mount.
 end
 
 class PropsKebabName < Lilac::Component
@@ -95,11 +89,7 @@ end
 
 class PropsChild < PropsParentBase
   prop :own, Integer, default: 7
-
-  def setup
-    @inherited = props.inherited
-    @own = props.own
-  end
+  # @inherited (from parent) and @own are auto-initialized as Signals.
 end
 
 class PropsNoDecl < Lilac::Component

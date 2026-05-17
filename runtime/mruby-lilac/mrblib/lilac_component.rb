@@ -181,9 +181,21 @@ module Lilac
       # element. Type is one of: String / Integer / Float / Lilac::Boolean.
       # Without `default:` the prop is required (mount-time raise on missing).
       # See docs/lilac-props-spec.md.
+      #
+      # Side effect at mount: auto-initializes `@NAME` as a Signal containing
+      # the coerced attribute value. The template can therefore reference
+      # `@NAME` like any other ivar (`data-text="@title"`), and Ruby code
+      # can read `@NAME.value` / mutate via `@NAME.value = ...`. Reassigning
+      # `@NAME` itself in `setup` raises (override detection, see Component#mount).
       def prop(name, type, default: Lilac::Props::NO_DEFAULT)
+        sym = name.to_sym
+        if Lilac::Props::RESERVED_NAMES.include?(sym)
+          raise Lilac::Error,
+                "prop :#{sym} is a reserved framework name in #{self.name || "(anonymous)"} " \
+                "(would collide with a Component ivar). Choose another name."
+        end
         @prop_declarations ||= {}
-        @prop_declarations[name.to_sym] = { type: type, default: default }
+        @prop_declarations[sym] = { type: type, default: default }
         nil
       end
 
@@ -501,10 +513,10 @@ module Lilac
       # fall back to an empty Props so subsequent setup-time access becomes a
       # NoMethodError (also routed) instead of a NPE on @props.
       begin
-        @props = Props.build(self.class.prop_declarations, @root, self.class.name)
+        @props = Props.build(self.class.prop_declarations, @root, self.class.name, host: self)
       rescue => e
         Lilac.logger.error("#{self.class.name}#props", e, source: self)
-        @props = Props.new({})
+        @props = Props.new({}, self)
       end
       begin
         prepare_setup
@@ -521,6 +533,15 @@ module Lilac
       rescue => e
         Lilac.logger.error("#{self.class.name}#setup", e, source: self)
       end
+      # Detect user reassignment of `@NAME` ivars that `prop :NAME` auto-
+      # initialized — comparing Signal object identity. Runs between setup
+      # and bind_template_hook so the raise reaches the boundary before any
+      # binding closure captures the (now-broken) ivar reference.
+      begin
+        validate_prop_ivars_not_overwritten!
+      rescue => e
+        Lilac.logger.error("#{self.class.name}#prop_ivars", e, source: self)
+      end
       # Generated directive bindings (Section 11 of the spec). Same
       # error-routing shape as `setup` so a faulty generated `bind`
       # call surfaces through the existing logger / error_boundary path
@@ -531,6 +552,26 @@ module Lilac
         Lilac.logger.error("#{self.class.name}#bind_template_hook", e, source: self)
       end
       @mounted = true
+    end
+
+    # Update a prop's value from external code (typically the parent
+    # component's per-row scanner on row reuse). Mutates the existing
+    # auto-init Signal so its object identity stays stable (= override
+    # detection does not trigger) and downstream bindings re-fire.
+    def update_prop(name, raw_value)
+      decl = self.class.prop_declarations[name]
+      raise Lilac::Error, "update_prop(:#{name}): no such prop on #{self.class.name}" unless decl
+      value = Props.coerce(
+        raw_value, decl[:type],
+        Props.attr_key_for(name), self.class.name, name: name,
+      )
+      sig = instance_variable_get(:"@#{name}")
+      unless sig.is_a?(Signal)
+        raise Lilac::Error,
+              "update_prop(:#{name}): @#{name} is not a Signal " \
+              "(was it overwritten in setup?)"
+      end
+      sig.value = value
     end
 
     def unmount
@@ -550,6 +591,25 @@ module Lilac
     def current_owner
       stack = @scope_stack
       (stack && stack.last) || self
+    end
+
+    # Compare each prop ivar against the original Signal stored at mount
+    # time. If identity changed (= setup did `@title = signal("new")` or
+    # `@title = nil` or any other reassignment) raise — preserving the
+    # parent → child reactive link requires the auto-init Signal to stay
+    # in place. Mutation via `@title.value = ...` keeps identity intact.
+    def validate_prop_ivars_not_overwritten!
+      return unless @_prop_signals
+      @_prop_signals.each do |name, original|
+        current = instance_variable_get(:"@#{name}")
+        next if current.equal?(original)
+        raise Lilac::Error,
+              "#{self.class.name}: setup overwrote `@#{name}` which was auto-initialized " \
+              "by `prop :#{name}`. Use one of:\n" \
+              "  - mutate the prop's signal:  @#{name}.value = ...\n" \
+              "  - derive a new ivar:          @upper = computed { @#{name}.value.upcase }\n" \
+              "  - rename to avoid the clash"
+      end
     end
   end
 end

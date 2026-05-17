@@ -86,6 +86,11 @@ module Lilac
         records << rec if rec
         return if rec && rec[:directives].any? { |k, _, _| k == :each }
         if node_js != @host.root.to_js && node_js.call(:hasAttribute, "data-component").js_bool
+          # Pre-resolve `data-prop-*` expressions on the nested data-component
+          # element before it mounts. The child component's Props.build will
+          # then see static literal attribute values that already incorporate
+          # the parent's `it` / `@ivar` context.
+          resolve_props(node_js, item)
           return
         end
         collect_children(node_js, item: item, records: records)
@@ -100,7 +105,11 @@ module Lilac
           # Push in reverse so document order is preserved when popped.
           (length - 1).downto(0) do |i|
             child = children[i]
-            next if child.call(:hasAttribute, "data-component").js_bool
+            if child.call(:hasAttribute, "data-component").js_bool
+              # Same pre-resolution rationale as collect_subtree's guard.
+              resolve_props(child, current_item)
+              next
+            end
 
             rec = build_record(child, current_item)
             records << rec if rec
@@ -110,6 +119,32 @@ module Lilac
             stack.push([child, current_item])
           end
         end
+      end
+
+      # For each `data-prop-*` attribute whose value parses as `@ivar` or
+      # `it.field`, evaluate it against the current scope and write the
+      # resolved scalar back as the attribute value. Pure literals (parse
+      # failure) are left untouched. Called just before descent stops at
+      # a nested `data-component`, so the child's `Props.build` reads a
+      # fully-resolved literal.
+      def resolve_props(el, item)
+        names_js = el.call(:getAttributeNames)
+        n = names_js[:length].to_i
+        i = 0
+        while i < n
+          attr_name = names_js[i].to_s
+          if attr_name.start_with?("data-prop-")
+            raw = el.call(:getAttribute, attr_name).to_s
+            value = Value.parse(raw)
+            if value
+              resolved = @evaluator.read(value, item)
+              el.call(:setAttribute, attr_name, resolved.to_s)
+            end
+          end
+          i += 1
+        end
+      rescue Lilac::Error => e
+        Lilac.logger.error("data-prop-*", e, source: @host)
       end
 
       # Per-element record built during collection. Captures everything
@@ -263,6 +298,7 @@ module Lilac
 
       def dispatch_value_bind(raw_value, el, item, attr_label, prop)
         value = parse_value_or_raise(raw_value, attr_label)
+        return if item.nil? && value.is_a?(Value::ItPath)
         ref = wrap_ref(el)
         source = @evaluator.bind_source(value, item)
         @host.bind(ref, prop => source)
@@ -270,6 +306,7 @@ module Lilac
 
       def dispatch_visibility(raw_value, el, item, attr_label, negate:)
         value = parse_value_or_raise(raw_value, attr_label)
+        return if item.nil? && value.is_a?(Value::ItPath)
         evaluator = @evaluator
         ref = wrap_ref(el)
         cond = @host.computed do
@@ -288,6 +325,10 @@ module Lilac
                 "data-css-X / RefElement#set_style for style."
         end
         value = parse_value_or_raise(raw_value, "data-attr-#{attr_name}")
+        # Skip ItPath bindings when scanning without iteration context
+        # (= the child component is scanning its own root, but `it` was a
+        # parent-iteration concern already dispatched by the parent).
+        return if item.nil? && value.is_a?(Value::ItPath)
         ref = wrap_ref(el)
         @host.bind(ref, attr: { attr_name => @evaluator.bind_source(value, item) })
       end
@@ -300,6 +341,7 @@ module Lilac
                 "([a-z][a-z0-9-]*) and not start with `-`."
         end
         value = parse_value_or_raise(raw_value, "data-css-#{css_name}")
+        return if item.nil? && value.is_a?(Value::ItPath)
         ref = wrap_ref(el)
         evaluator = @evaluator
         @host.effect do
@@ -331,9 +373,16 @@ module Lilac
         tpl = doc.call(:createElement, "template")
         tpl[:innerHTML] = cached_html
 
+        # Extract `data-prop-*` expressions from the original template once.
+        # On clone the parent's `resolve_props` writes resolved scalars over
+        # these attributes, so reading from the template (not the live row)
+        # is the only way to recover the expressions on row reuse.
+        row_prop_exprs = extract_row_prop_exprs(tpl)
+
         source = @evaluator.bind_source(value, parent_item)
         ref = wrap_ref(el)
         host = @host
+        evaluator = @evaluator
 
         @host.bind_list(ref, source, key: key_proc) do |it, prev_t|
           row_node =
@@ -346,11 +395,60 @@ module Lilac
               frag = tpl[:content].call(:cloneNode, true)
               frag[:firstElementChild]
             end
+          # On row reuse, the child component is already mounted with its
+          # initial prop values baked in — push fresh values through
+          # `update_prop` so its prop Signals reflect the new item.
+          if prev_t && !row_prop_exprs.empty?
+            push_prop_updates(row_node, it, row_prop_exprs, evaluator)
+          end
           # Fresh Scanner per row keeps `@evaluator` bound to the same
           # host (so `@ivar` continues to resolve on the host) but
           # opens its own walk state.
           Scanner.new(host).scan_subtree(row_node, item: it)
           Lilac::Template.new(row_node, host)
+        end
+      end
+
+      # Scan the row template's first element for `data-prop-*` attributes
+      # whose value parses as `@ivar` / `it.field`. Returns
+      # `{attr_name => Value}`. Empty hash if the row is not a
+      # data-component or has no parseable prop expressions.
+      def extract_row_prop_exprs(tpl)
+        out = {}
+        row_tpl_el = tpl[:content][:firstElementChild]
+        return out if row_tpl_el.js_null?
+        return out unless row_tpl_el.call(:hasAttribute, "data-component").js_bool
+        names_js = row_tpl_el.call(:getAttributeNames)
+        n = names_js[:length].to_i
+        i = 0
+        while i < n
+          attr_name = names_js[i].to_s
+          if attr_name.start_with?("data-prop-")
+            raw = row_tpl_el.call(:getAttribute, attr_name).to_s
+            v = Value.parse(raw)
+            out[attr_name] = v if v
+          end
+          i += 1
+        end
+        out
+      end
+
+      # On row reuse: find the (already-mounted) child component and push
+      # fresh prop values into its Signal ivars. Errors are logged, not
+      # raised, so a single bad prop doesn't abort the whole reconcile.
+      def push_prop_updates(row_node, item, prop_exprs, evaluator)
+        child = Lilac.find_for_element(row_node)
+        return unless child
+        return unless child.respond_to?(:update_prop)
+        prop_exprs.each do |attr_name, expr|
+          prop_name = attr_name.sub("data-prop-", "").tr("-", "_").to_sym
+          next unless child.class.prop_declarations.key?(prop_name)
+          begin
+            resolved = evaluator.read(expr, item)
+            child.update_prop(prop_name, resolved.to_s)
+          rescue Lilac::Error => e
+            Lilac.logger.error("data-prop reuse #{attr_name}", e, source: @host)
+          end
         end
       end
 

@@ -130,6 +130,14 @@ module Lilac
         if node.call(:hasAttribute, "data-component").js_bool
           out << node
         end
+        # Do not descend into a `data-each` element's children: those
+        # children are the row template and live only as snapshot until
+        # dispatch_each clones them per item. Mounting them as standalone
+        # components would race against parent's bind_template_hook and
+        # leave them with unresolved `data-prop-X="it.field"` attribute
+        # values. The cloned rows are inserted by bind_list and picked
+        # up via MutationObserver, with `it`-resolved attributes.
+        next if node.call(:hasAttribute, "data-each").js_bool
         kids = node[:children]
         next if kids.js_null?
         kn = kids[:length].to_i
