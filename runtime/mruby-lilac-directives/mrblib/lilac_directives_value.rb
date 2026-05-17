@@ -6,9 +6,9 @@ module Lilac
     # item's attribute) — and the runtime evaluator treats them
     # differently:
     #
-    #   - `@ivar` resolves via `host.instance_variable_get` and feeds
-    #     directly into `bind ref, prop: signal` (the binder calls
-    #     `.value` internally inside an effect).
+    #   - `@ivar` resolves via `Evaluator#lookup_ivar` and feeds directly
+    #     into `bind ref, prop: signal` (the binder calls `.value`
+    #     internally inside an effect).
     #   - `it.field` requires per-iteration evaluation, so it gets
     #     wrapped in a `computed { ... }` block at bind time.
     #

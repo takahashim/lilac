@@ -23,7 +23,7 @@ module Lilac
       def bind_source(value, item)
         case value
         when Value::Ivar
-          @host.instance_variable_get(value.ivar_sym)
+          lookup_ivar(value)
         when Value::ItPath
           field = value.field
           @host.computed { field ? read_field(item, field) : item }
@@ -33,12 +33,20 @@ module Lilac
       def read(value, item)
         case value
         when Value::Ivar
-          sig = @host.instance_variable_get(value.ivar_sym)
-          sig.value
+          lookup_ivar(value).value
         when Value::ItPath
           field = value.field
           field ? read_field(item, field) : item
         end
+      end
+
+      # Resolve a Value::Ivar to the host's underlying object (typically a
+      # Signal / Computed). This is the single place in the directive
+      # subsystem that reaches into host instance-variable state via
+      # reflection — keep the metaprog surface contained here so other
+      # call sites only see `lookup_ivar(value)`.
+      def lookup_ivar(value)
+        @host.instance_variable_get(value.ivar_sym)
       end
 
       private

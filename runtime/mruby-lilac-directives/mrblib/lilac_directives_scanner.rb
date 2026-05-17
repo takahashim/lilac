@@ -17,6 +17,11 @@ module Lilac
     # `RefElement` per binding. This sidesteps the codegen's need for
     # a stable name to write into emitted Ruby.
     class Scanner
+      # FormWiring owns dispatch_field / dispatch_button / wire_form_submit
+      # and helpers. Included (not delegated) so methods share @host /
+      # @default_form_seen / @input_form_attr_warned / wrap_ref.
+      include FormWiring
+
       DIRECTIVE_PATTERNS = [
         [/\Adata-text\z/,        :text,        false],
         [/\Adata-unsafe-html\z/, :unsafe_html, false],
@@ -28,6 +33,9 @@ module Lilac
         [/\Adata-key\z/,         :key,         false],
         [/\Adata-class\z/,       :class_,      false],
         [/\Adata-component\z/,   :component,   false],
+        [/\Adata-form\z/,        :form,        false],
+        [/\Adata-field\z/,       :field,       false],
+        [/\Adata-button\z/,      :button,      false],
         [/\Adata-on-(.+)\z/,     :on,          true],
         [/\Adata-attr-(.+)\z/,   :attr,        true],
         [/\Adata-css-(.+)\z/,    :css,         true],
@@ -36,31 +44,54 @@ module Lilac
       def initialize(host)
         @host = host
         @evaluator = Evaluator.new(host)
+        # Tracks observed plain `<form>` (no data-form) elements within this
+        # component subtree. Used by `validate_form_element!` to raise on the
+        # second occurrence (`:default` scope collision, form-spec §10.2.1).
+        @default_form_seen = false
+        # Suppresses repeated <input form="..."> warns within a single scan
+        # (warn-once policy per spec §10.2.2).
+        @input_form_attr_warned = false
       end
 
       def scan_and_bind
         scan_subtree(@host.root.to_js, item: nil)
       end
 
-      # Process this element, then descend. Used both for the main
-      # component scan (entry: host root) and per-row scans inside a
-      # `data-each` body. Stops descent when:
-      #   - the element carries `data-each` (its body lives in the
-      #     bind_list template; the per-row scan owns descent),
-      #   - the element is a nested `data-component` other than the
-      #     host's own root (the nested component runs its own scan).
+      # Walk + dispatch a subtree using one-pass collection + two-phase
+      # dispatch (form-spec §17.4). Used both for the host's root scan and
+      # for per-row scans inside `data-each` bodies — each per-row scan
+      # gets its own 2-phase pass so derived state within a row also sees
+      # field/button registrations in the row first.
+      #
+      # Phase A processes :field / :button (and the `<form>` element's
+      # submit wire) so that all form-state registrations land before any
+      # phase-B effect (data-text / data-class / data-on / ...) runs its
+      # initial computation. Without this, a `<p data-text="@derived">`
+      # placed before the `<input data-field="x">` it depends on would
+      # raise on first effect run because form[:x] wouldn't exist yet.
       def scan_subtree(node_js, item:)
-        kinds = process_element(node_js, item)
-        return if kinds.include?(:each)
+        records = []
+        collect_subtree(node_js, item: item, records: records)
+        records.each { |rec| dispatch_record(rec, phase: :a) }
+        records.each { |rec| dispatch_record(rec, phase: :b) }
+      end
+
+      # Build records bottom-up via DFS. Stops descent at:
+      #   - data-each elements (their body lives in a snapshot template,
+      #     not the live DOM; dispatch_each in phase B handles per-row scan)
+      #   - nested `data-component` subtrees (other components run their
+      #     own Scanner pass)
+      def collect_subtree(node_js, item:, records:)
+        rec = build_record(node_js, item)
+        records << rec if rec
+        return if rec && rec[:directives].any? { |k, _, _| k == :each }
         if node_js != @host.root.to_js && node_js.call(:hasAttribute, "data-component").js_bool
           return
         end
-        walk_children(node_js, item: item)
+        collect_children(node_js, item: item, records: records)
       end
 
-      # Iterative DFS over `node_js`'s descendants. Does NOT process
-      # node_js itself — call scan_subtree for that.
-      def walk_children(node_js, item:)
+      def collect_children(node_js, item:, records:)
         stack = [[node_js, item]]
         until stack.empty?
           current, current_item = stack.pop
@@ -69,52 +100,81 @@ module Lilac
           # Push in reverse so document order is preserved when popped.
           (length - 1).downto(0) do |i|
             child = children[i]
-            # Nested component subtrees mount via their own component
-            # instance + their own Scanner pass; skip here.
             next if child.call(:hasAttribute, "data-component").js_bool
 
-            kinds_present = process_element(child, current_item)
+            rec = build_record(child, current_item)
+            records << rec if rec
 
-            # `data-each` owns the descent into its body (which lives
-            # in the bind_list template, not the live DOM here).
-            next if kinds_present.include?(:each)
-
+            # data-each owns descent into its body (template, not live DOM).
+            next if rec && rec[:directives].any? { |k, _, _| k == :each }
             stack.push([child, current_item])
           end
         end
       end
 
-      # Extract + dispatch all directives on a single element.
-      # Returns the set of directive kinds present (used by `walk` to
-      # decide whether to descend).
-      def process_element(el, item)
-        directives = extract_directives(el)
-        return [] if directives.empty?
-
+      # Per-element record built during collection. Captures everything
+      # dispatch needs so phase A / B don't have to re-extract attributes.
+      # Returns nil if the element has no directives AND isn't a `<form>`
+      # (form elements still need wire_form_submit in phase A even without
+      # any data-* directive).
+      def build_record(el, item)
         tag = el[:tagName].to_s.downcase
         attrs = attribute_snapshot(el)
         descriptor = element_descriptor(el, tag)
 
-        skip = Compat.check!(
+        # Immediate side-effect checks (raise / warn-once) — must happen
+        # during collection so we surface the error at the original DOM
+        # position rather than later out of context.
+        validate_form_element!(tag, attrs, descriptor) if tag == "form"
+        warn_on_form_attr(tag, attrs) if attrs.key?("form")
+
+        directives = extract_directives(el)
+        is_form = (tag == "form")
+        return nil if directives.empty? && !is_form
+
+        skip = directives.empty? ? [] : Compat.check!(
           directives,
           tag_name: tag,
           attrs: attrs,
           element_descriptor: descriptor,
         )
 
-        directives.each do |kind, name, raw_value|
-          next if skip.include?(kind)
-          dispatch(kind, name, raw_value, el, item, descriptor)
+        # data-form on non-<form> is a hard scope violation.
+        if directives.any? { |k, _, _| k == :form } && !is_form
+          raise Lilac::Error,
+                "data-form is only allowed on <form> elements (got <#{tag}>, #{descriptor})"
         end
 
-        directives.map { |k, _, _| k }
+        {
+          el: el, item: item, tag: tag, attrs: attrs,
+          descriptor: descriptor, directives: directives,
+          skip: skip, is_form: is_form,
+        }
       rescue Lilac::Error => e
-        # Raised by Compat or dispatchers for correctness/security
-        # violations. Route through the component logger so the
-        # nearest error_boundary catches it, then continue scanning
-        # the rest of the tree.
         Lilac.logger.error("directive", e, source: @host)
-        []
+        nil
+      end
+
+      # Phase A: :field, :button, plus wire_form_submit on <form> elements.
+      # Phase B: every other directive in DOM order.
+      def dispatch_record(rec, phase:)
+        return unless rec
+        rec[:directives].each do |kind, name, raw_value|
+          next if rec[:skip].include?(kind)
+          next unless phase_matches?(phase, kind)
+          dispatch(kind, name, raw_value, rec[:el], rec[:item], rec[:descriptor])
+        end
+        wire_form_submit(rec[:el], rec[:attrs]) if phase == :a && rec[:is_form]
+      rescue Lilac::Error => e
+        Lilac.logger.error("directive", e, source: @host)
+      end
+
+      def phase_matches?(phase, kind)
+        if phase == :a
+          kind == :field || kind == :button
+        else
+          kind != :field && kind != :button
+        end
       end
 
       def extract_directives(el)
@@ -165,9 +225,12 @@ module Lilac
 
       def dispatch(kind, name, raw_value, el, item, descriptor)
         case kind
-        when :component, :key
-          # data-component is handled by the Registry; orphan data-key
-          # was already filtered by Compat.
+        when :component, :key, :form
+          # data-component: handled by Registry.
+          # data-key:       orphan check filtered by Compat.
+          # data-form:      scope marker; consumed during dispatch_field/button
+          #                 ancestor walks. The <form> element's submit wire
+          #                 happens in wire_form_submit (post-dispatch).
           nil
         when :text
           dispatch_value_bind(raw_value, el, item, "data-text", :text)
@@ -191,6 +254,10 @@ module Lilac
           dispatch_checked(raw_value, el)
         when :class_
           dispatch_class(raw_value, el, item)
+        when :field
+          dispatch_field(raw_value, el)
+        when :button
+          dispatch_button(raw_value, el)
         else
           # New directive added to DIRECTIVE_PATTERNS but no dispatcher —
           # signal loudly so the omission is caught in tests.
@@ -383,9 +450,9 @@ module Lilac
         value
       end
 
-      # data-value / data-checked require a writable Signal, which
-      # means the source must be `@ivar` (instance_variable_get
-      # returning a Signal) — not `it.field` (frozen Data attribute).
+      # data-value / data-checked require a writable Signal, which means
+      # the source must be `@ivar` (resolved via Evaluator#lookup_ivar to
+      # the underlying Signal) — not `it.field` (frozen Data attribute).
       def ivar_or_raise(raw_value, attr_label)
         value = Value.parse(raw_value)
         unless value && value.ivar?
@@ -393,7 +460,7 @@ module Lilac
                 "Invalid value for #{attr_label}: #{raw_value.inspect} " \
                 "(expected `@ivar` — writable signal only)"
         end
-        @host.instance_variable_get(value.ivar_sym)
+        @evaluator.lookup_ivar(value)
       end
 
       def wrap_ref(el_js)

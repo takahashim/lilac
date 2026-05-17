@@ -22,42 +22,58 @@ module Lilac
     class Field
       attr_reader :name
       attr_reader :value_signal, :dirty_signal, :touched_signal, :error_signal
+      attr_reader :source_component
 
-      def initialize(name:, ref:, initial:, component:, type: :text, validator: nil, form: nil)
+      # ref: / initial: are now both optional. Resolution rules:
+      #   - source: given        → use external Signal / FieldComponent.value
+      #                            as the value_signal (no bind_input)
+      #   - ref:    given        → component.bind_input(ref, signal) immediately
+      #   - neither              → deferred binding; scanner calls bind_to(ref) later
+      #
+      # source: polymorphic dispatch — FieldComponent gets reset propagation;
+      # raw Signal/Computed gets used as-is (no reset propagation).
+      def initialize(name:, component:,
+                     ref: nil, initial: nil, source: nil,
+                     type: :text, validator: nil, form: nil)
+        raise ArgumentError, "source: and initial: cannot both be given" if source && !initial.nil?
+
         @name = name
-        @initial = initial
         @component = component
         @validator = validator
         @form = form
-        property = TYPE_TO_PROPERTY[type] || :value
+        @type = type
+        @bound = false
 
-        @value_signal = component.signal(initial)
-        component.bind_input(ref, @value_signal, property: property)
+        setup_value_signal(source: source, initial: initial, ref: ref)
+        setup_dirty_tracking
+        setup_meta_signals
+        setup_error_signals
+      end
 
-        # dirty: latches true once value diverges from initial.
-        @dirty_signal = component.signal(false)
-        component.effect(label: "form:#{name}:dirty") do
-          v = @value_signal.value
-          @dirty_signal.value = true if !@dirty_signal.value && v != @initial
+      # Whether this field's value signal is externally owned (source: was
+      # given). Form#reset uses this to decide between full reset and
+      # meta-only reset.
+      def external_value?
+        @external_value
+      end
+
+      # Deferred binding from scanner: wires bind_input + blur listener to
+      # the discovered <input>. Idempotent-with-raise: a second call signals
+      # a logic bug (double-bind would leak listeners).
+      def bind_to(ref)
+        raise Lilac::Error, "field :#{@name} already bound" if @bound
+        if @external_value
+          # Source-backed fields don't bind their own input. blur tracking
+          # still useful for touched semantics if the source component
+          # exposes an <input>, but that's source-side responsibility.
+          @bound = true
+          return
         end
-
-        # touched: flips on blur; also set for all fields by Form#submit.
-        @touched_signal = component.signal(false)
+        property = TYPE_TO_PROPERTY[@type] || :value
+        @component.bind_input(ref, @value_signal, property: property)
         ref.on(:blur) { @touched_signal.value = true }
-
-        # error precedence: server_error → field validator → form-level validator.
-        @server_error_signal = component.signal(nil)
-        @validator_error_computed = component.computed do
-          # Validator receives (field, form); extra arg is ignored by Proc
-          # when the block only declares one parameter.
-          msg = @validator ? @validator.call(self, @form) : nil
-          (msg.is_a?(String) && !msg.empty?) ? msg : nil
-        end
-        @error_signal = component.computed do
-          @server_error_signal.value ||
-            @validator_error_computed.value ||
-            (@form && @form.form_error_for(@name).value)
-        end
+        @bound = true
+        nil
       end
 
       def value
@@ -119,18 +135,108 @@ module Lilac
         nil
       end
 
+      # Full reset for owned-signal fields. Source-backed fields use
+      # reset_meta_only and let Form#reset delegate value reset to the
+      # source component.
       def reset
-        @value_signal.value = @initial
+        @value_signal.value = @initial if @value_signal.respond_to?(:value=) && !@external_value
+        reset_meta_only
+      end
+
+      # Reset dirty/touched/server_error without touching @value_signal.
+      # Form#reset uses this for source-backed fields where the source
+      # component owns value resetting.
+      def reset_meta_only
         @dirty_signal.value = false
         @touched_signal.value = false
         @server_error_signal.value = nil
         nil
+      end
+
+      private
+
+      # Choose value_signal source: external (source: kwarg) vs internal
+      # signal owned by this field. Sets @value_signal / @source_component /
+      # @external_value / @initial as a coherent group.
+      def setup_value_signal(source:, initial:, ref:)
+        if source
+          setup_external_value_signal(source)
+        else
+          setup_internal_value_signal(initial, ref)
+        end
+      end
+
+      def setup_external_value_signal(source)
+        if source.is_a?(Lilac::FieldComponent) ||
+           (source.respond_to?(:value) && source.respond_to?(:reset))
+          @value_signal = source.value
+          @source_component = source
+        else
+          # Raw Signal / Computed — no reset propagation possible.
+          @value_signal = source
+          @source_component = nil
+          Lilac.logger.warn(
+            "field :#{@name} source is a raw signal; form.reset will not propagate"
+          ) if Lilac.dev_mode?
+        end
+        @initial = nil   # source-backed fields are not reset by Form#reset directly
+        @external_value = true
+      end
+
+      def setup_internal_value_signal(initial, ref)
+        @initial = initial.nil? ? default_initial_for(@type) : initial
+        @value_signal = @component.signal(@initial)
+        @source_component = nil
+        @external_value = false
+        bind_to(ref) if ref
+      end
+
+      # Latches `@dirty_signal` to true once value diverges from the baseline
+      # captured at init time. For source-backed fields the baseline is the
+      # source's current value at field declaration time.
+      def setup_dirty_tracking
+        @dirty_baseline = @value_signal.value
+        @dirty_signal = @component.signal(false)
+        @component.effect(label: "form:#{@name}:dirty") do
+          v = @value_signal.value
+          @dirty_signal.value = true if !@dirty_signal.value && v != @dirty_baseline
+        end
+      end
+
+      # `@touched_signal` flips on blur (wired in bind_to) and on submit.
+      def setup_meta_signals
+        @touched_signal = @component.signal(false)
+      end
+
+      # Error precedence: server_error → field validator → form-level
+      # validator. All three layers participate so a single field can have
+      # an SSR error AND a re-validated client error AND a cross-field
+      # form-level error without state collision.
+      def setup_error_signals
+        @server_error_signal = @component.signal(nil)
+        @validator_error_computed = @component.computed do
+          msg = @validator ? @validator.call(self, @form) : nil
+          (msg.is_a?(String) && !msg.empty?) ? msg : nil
+        end
+        @error_signal = @component.computed do
+          @server_error_signal.value ||
+            @validator_error_computed.value ||
+            (@form && @form.form_error_for(@name).value)
+        end
+      end
+
+      def default_initial_for(type)
+        case type
+        when :checkbox then false
+        else                ""
+        end
       end
     end
 
     def initialize(component)
       @component                = component
       @fields                = {}
+      @buttons               = {}   # name(Symbol) → { handler:, validate: }
       @base_error_signal     = component.signal(nil)
       @submit_attempted_signal  = component.signal(false)
       @form_validator_signal        = component.signal(nil)
@@ -143,13 +249,73 @@ module Lilac
       @fields.fetch(name.to_sym)
     end
 
+    # Predicates kept as public API so callers (notably the directive
+    # scanner) don't have to reach into `@fields` / `@buttons` ivars.
+    def has_field?(name)
+      @fields.key?(name.to_sym)
+    end
+
+    def has_button?(name)
+      @buttons.key?(name.to_sym)
+    end
+
     # Declare a field. The optional block is the field-level validator.
     # It receives (field) or (field, form); Proc ignores extra args.
-    def field(name, ref:, initial:, type: :text, &validator)
+    #
+    # All of ref: / initial: / source: are optional:
+    #   - source: takes a FieldComponent (or any Signal) as the value backing
+    #   - ref:    immediately wires bind_input (legacy direct API)
+    #   - neither → deferred binding via scanner-driven Field#bind_to(ref)
+    #
+    # source: and initial: are mutually exclusive (raises ArgumentError).
+    # Same-name re-registration raises Lilac::Error (typo detection).
+    def field(name, ref: nil, initial: nil, source: nil, type: :text, &validator)
       sym = name.to_sym
+      if @fields.key?(sym)
+        raise Lilac::Error, "field :#{sym} is already declared on this form"
+      end
       @fields[sym] = Field.new(
-        name: sym, ref: ref, initial: initial,
+        name: sym, ref: ref, initial: initial, source: source,
         validator: validator, component: @component, type: type, form: self)
+    end
+
+    # Named action button declaration. Scanner wires `<button data-button="X">`
+    # click → `invoke_button(:X)`. The special name `:submit` is wired to the
+    # `<form>` element's submit event (so Enter and `<button type="submit">`
+    # both fire it). validate: false skips touch-all + validity check.
+    #
+    # Same-name re-registration raises (parallels Form#field) — typos like
+    # `f.button :submitt` followed by the intended `:submit` would otherwise
+    # silently shadow the earlier handler.
+    def button(name, validate: true, &handler)
+      raise ArgumentError, "block required" unless handler
+      sym = name.to_sym
+      if @buttons.key?(sym)
+        raise Lilac::Error, "button :#{sym} is already declared on this form"
+      end
+      @buttons[sym] = { handler: handler, validate: validate }
+      nil
+    end
+
+    # Fire a declared button by name. Used by scanner click/submit handlers
+    # and by user code (e.g. test harnesses, programmatic submit). The
+    # optional event arg is ignored — handlers see only the values snapshot.
+    def invoke_button(name, _event = nil)
+      sym = name.to_sym
+      spec = @buttons[sym]
+      unless spec
+        raise Lilac::Error,
+              "form has no button :#{sym} (declare via `f.button :#{sym} do |values| ... end`)"
+      end
+      if spec[:validate]
+        submit { |snapshot| spec[:handler].call(snapshot) }
+      else
+        # validate: false — snapshot current values and invoke handler.
+        # submit_attempted is NOT set; touch-all and error display are
+        # skipped so non-validating actions (Save Draft, Delete) don't
+        # disturb the form UI.
+        spec[:handler].call(values)
+      end
     end
 
     def fields
@@ -239,8 +405,21 @@ module Lilac
       nil
     end
 
+    # Reset all fields and form-level state. For source-backed fields
+    # (`source: refs.X.component`), the value signal is owned by the source
+    # component, so we delegate value reset to that component's `reset`
+    # method (no-op if the source is a raw Signal without `reset`). The
+    # field's own dirty/touched/server_error are always reset.
     def reset
-      @fields.each_value(&:reset)
+      @fields.each_value do |field|
+        if field.external_value?
+          src = field.source_component
+          src.reset if src && src.respond_to?(:reset)
+          field.reset_meta_only
+        else
+          field.reset
+        end
+      end
       @submit_attempted_signal.value = false
       clear_base_error
       nil
@@ -307,13 +486,30 @@ module Lilac
   end
 
   # Adds `form` and bare validator helpers to components when this gem is loaded.
+  #
+  # `form` is dual-purpose: block-with registers, block-less looks up (and
+  # auto-creates when missing — applies uniformly to default and named forms).
+  # Same-name re-registration raises so typos / accidental double-declare
+  # surface immediately.
   module FormBuilder
     include Lilac::Form::Validators
 
-    def form(&block)
-      f = Lilac::Form.new(self)
-      block.call(f) if block
-      f
+    def form(name = :default, &block)
+      @form_registry ||= {}
+      sym = name.to_sym
+      if block
+        if @form_registry.key?(sym)
+          raise Lilac::Error,
+                "form #{sym.inspect} is already declared in this component " \
+                "(use `form.reset` to clear values, or a different name for a new form)"
+        end
+        f = Lilac::Form.new(self)
+        @form_registry[sym] = f
+        block.call(f)
+        f
+      else
+        @form_registry[sym] ||= Lilac::Form.new(self)
+      end
     end
   end
 end

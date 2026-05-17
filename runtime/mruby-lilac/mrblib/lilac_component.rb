@@ -170,9 +170,7 @@ module Lilac
         @error_boundary_block = block
       end
 
-      # Walk the superclass chain via method dispatch (mruby's
-      # Class#instance_variable_get isn't available, so we resolve
-      # inheritance through method calls instead).
+      # Walk the superclass chain via method dispatch.
       def error_boundary_block
         return @error_boundary_block if @error_boundary_block
         sc = superclass
@@ -189,9 +187,7 @@ module Lilac
         nil
       end
 
-      # Local + inherited declarations, child wins on key collision. mruby
-      # doesn't expose `Class#instance_variable_get`, so we walk the chain
-      # via method dispatch — same pattern as `error_boundary_block`.
+      # Local + inherited declarations, child wins on key collision.
       def prop_declarations
         local = @prop_declarations || {}
         sc = superclass

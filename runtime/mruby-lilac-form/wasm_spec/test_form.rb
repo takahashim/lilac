@@ -551,10 +551,10 @@ Spec.describe "Lilac::Form: multiple forms per component" do
     klass = Class.new(Lilac::Component) do
       attr_reader :login, :signup
       define_method(:setup) do
-        @login = form do |f|
+        @login = form(:login) do |f|
           f.field :user, ref: refs.login_user, initial: ""
         end
-        @signup = form do |f|
+        @signup = form(:signup) do |f|
           f.field :email, ref: refs.signup_email, initial: "" do |field|
             "bad" unless field.value.include?("@")
           end

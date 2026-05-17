@@ -458,6 +458,16 @@ module Lilac
     include Reactive::Subscribable
     include Reactive::Observer
 
+    # Lazy: the block does NOT run at construction time. First `.value`
+    # access triggers `recompute`, which subscribes to dependencies. This
+    # lets users write `computed { form[:auto_registered_field].value }`
+    # in setup — `form[:X]` doesn't exist yet (scanner auto-registers it
+    # after setup returns) but the computed block won't fire until something
+    # actually reads `.value` (typically a phase-B dispatch effect created
+    # by data-text / data-class / ... after auto-register has completed).
+    #
+    # Side effects in computed blocks are an anti-pattern. If you need
+    # them at construction time, use `effect { ... }` instead.
     def initialize(equals: nil, on: nil, &block)
       raise ArgumentError, "block required" unless block
       @block = block
@@ -466,10 +476,11 @@ module Lilac
       @deps = []
       @subs = Subscribers.new
       @value = nil
-      recompute
+      @computed_once = false
     end
 
     def value
+      recompute_and_mark unless @computed_once
       if (obs = Reactive.current)
         subscribe(obs)
         obs.add_dep(self)
@@ -481,7 +492,13 @@ module Lilac
       raise NoMethodError, "Computed is read-only"
     end
 
+    # Notified by a dependency. If we've never been read, no observer is
+    # subscribed and the next `.value` read will recompute anyway, so
+    # skip the eager re-run here. Once read at least once, behave as
+    # before: recompute and notify downstream subscribers when the new
+    # value differs.
     def notify
+      return unless @computed_once
       prev = @value
       recompute
       notify_subscribers unless equal_for_skip?(prev, @value)
@@ -492,6 +509,11 @@ module Lilac
     end
 
     private
+
+    def recompute_and_mark
+      recompute
+      @computed_once = true
+    end
 
     def recompute
       remove_all_deps
