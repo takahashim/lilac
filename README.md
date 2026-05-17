@@ -4,9 +4,10 @@ A lightweight frontend framework for Ruby developers who are at
 home with modern HTML and CSS, and would rather reach for Ruby
 than JavaScript when adding behavior.
 
-Templates stay as valid HTML5 with `data-*` directives; reactivity
-is driven by Signals and Effects; everything runs in the browser
-as mruby compiled to WebAssembly via [mruby-wasm-runtime][mwr].
+Templates stay as valid HTML5 with `data-*` directives — **no inline
+expressions, no embedded code**. All logic lives in Ruby; reactivity
+is driven by Signals and Effects; everything runs in the browser as
+mruby compiled to WebAssembly via [mruby-wasm-runtime][mwr].
 
 [mwr]: https://github.com/takahashim/mruby-wasm-runtime
 
@@ -69,7 +70,7 @@ file with `data-*` directives and an inline `<script type="text/ruby">`:
 <!DOCTYPE html>
 <html>
   <body>
-    <div data-component="counter">
+    <div data-component="Counter">
       <button data-on-click="decrement">-</button>
       <span data-text="@count">0</span>
       <button data-on-click="increment">+</button>
@@ -83,7 +84,7 @@ file with `data-*` directives and an inline `<script type="text/ruby">`:
         def increment(_ev) = @count.update { |n| n + 1 }
         def decrement(_ev) = @count.update { |n| n - 1 }
       end
-      Lilac.register "counter", Counter
+      Lilac.register "Counter", Counter
       Lilac.start
     </script>
 

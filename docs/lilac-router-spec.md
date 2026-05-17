@@ -153,13 +153,13 @@ Router は 2 層構成:
 <div data-router-outlet></div>
 
 <template id="page-home">
-  <div data-component="home-page">
+  <div data-component="HomePage">
     <h1>Home</h1>
   </div>
 </template>
 
 <template id="page-user">
-  <div data-component="user-detail">
+  <div data-component="UserDetail">
     <h2 data-ref="title">User</h2>
   </div>
 </template>
@@ -186,8 +186,8 @@ Lilac::Router.start  # mode: :hash がデフォルト
 DSL を使わず、`bind hidden:` で「全 component 常駐 + 可視性切替」も書ける。state 保持したい / シンプル app / 低レベルに留めたい場合:
 
 ```html
-<div data-component="home-page">  <h1>Home</h1>  </div>
-<div data-component="user-detail" hidden>  <h2>User</h2>  </div>
+<div data-component="HomePage">  <h1>Home</h1>  </div>
+<div data-component="UserDetail" hidden>  <h2>User</h2>  </div>
 ```
 
 ```ruby
@@ -623,7 +623,7 @@ owner_component が自動で `self` (Component) になり、effect が component
 ### 1. シンプルな複数ページ SPA (lazy mount + DSL)
 
 ```html
-<nav data-component="nav">
+<nav data-component="Nav">
   <a href="/" data-ref="home_link">Home</a>
   <a href="/about" data-ref="about_link">About</a>
 </nav>
@@ -631,10 +631,10 @@ owner_component が自動で `self` (Component) になり、effect が component
 <div data-router-outlet></div>
 
 <template id="page-home">
-  <div data-component="home-page"><h1>Welcome</h1></div>
+  <div data-component="HomePage"><h1>Welcome</h1></div>
 </template>
 <template id="page-about">
-  <div data-component="about-page"><h1>About</h1></div>
+  <div data-component="AboutPage"><h1>About</h1></div>
 </template>
 ```
 
@@ -658,7 +658,7 @@ end
 
 ```html
 <template id="page-user">
-  <div data-component="user-detail">
+  <div data-component="UserDetail">
     <h2 data-ref="title"></h2>
   </div>
 </template>
@@ -781,7 +781,7 @@ class Footer < Lilac::Component  # 常時マウント
 end
 ```
 
-`<div data-component="nav">` と `<div data-component="footer">` は outlet の **外**に配置するだけで両立する。
+`<div data-component="Nav">` と `<div data-component="Footer">` は outlet の **外**に配置するだけで両立する。
 
 ---
 

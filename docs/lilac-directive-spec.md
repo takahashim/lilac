@@ -30,6 +30,24 @@
 > 避けられない。Lilac の template は "Ruby を実行する場所" ではなく
 > "static に解決可能な dispatch table" とする。
 
+#### 1.1.1 「HTML 内にロジック禁止」徹底
+
+具体的に何が禁止されるか、他フレームワークとの対比で示す:
+
+| 禁止 | 例 | Lilac での代替 |
+|---|---|---|
+| inline event handler | `<button onclick="handler()">` | `data-on-click="m"` + Ruby method |
+| expression in directive value | `data-text="@a + @b"` | `@sum = computed { @a.value + @b.value }` を Ruby 側で書き `data-text="@sum"` |
+| ternary in template | `data-class="cond ? 'a' : 'b'"` | computed signal で結果を ivar 化 |
+| method call with args | `data-text="format(@x)"` | `@formatted = computed { format(@x.value) }` |
+| 比較 / boolean 演算 | `data-show="@count > 0"` | `@visible = computed { @count.value > 0 }` |
+| string interpolation | `data-text='"hello #{@name}"'` | `@greeting = computed { "hello #{@name.value}" }` |
+| inline JS scheme URL | `<a href="javascript:...">` | URL sanitizer で raise |
+
+すべて **「ロジックは Ruby 側、HTML は identifier 参照のみ」** に変換
+する規律。詳細な rationale(差別化 / メリット)は
+[`docs/lilac-design.md`](./lilac-design.md) §2.2.1 参照。
+
 ### 1.2 系譜上の位置
 
 | 系統 | 例 | template の式 | 検証 |
@@ -75,7 +93,7 @@ Lilac は **Solid 系の fine-grained reactivity** を中核に置き、template
 | `?` predicate は read だけ | read-only query は安全、handler 名としては typo 元 |
 | `computed` / `Data.define` で view model 強制 | logic を Ruby class に集約 |
 | method 名のみ `data-on-X` | dispatch-style (Stimulus 継承) |
-| `data-value` / `data-checked` は `@ivar` のみ | iteration item の immutability 保持 |
+| `data-value` / `data-checked` は **Phase D で削除済み** — input 双方向 bind は `data-field` + form 経由(form-spec §10) | form 抽象に統合、validation / touched / dirty が自動で得られる |
 | `data-arg-X` は DOM data attribute 経由の string 渡し限定、reactive subscription API は提供しない | bind_list の stateless body 規律と整合、kanban 既存 pattern と互換、reactive 経路は `expose / lookup` 側に集約 |
 | `data-class` の hash key は Ruby Hash syntax と同じ (bare は Ruby ident、kebab / 特殊文字は quoted) | Ruby grammar 借用を完全に貫く、変換 magic ゼロ、Vue/Solid/React classNames と同じ規約 |
 | `RefElement` / `Template` に Turbo Streams 風の DOM 基本動詞 (`append` / `prepend` / `remove` / `replace_with` / `before` / `after`) を Ruby method として提供 | `method_missing` 経由でなく explicit な API、Ruby world で書ける範囲を広げ、`to_js` への escape を減らす |
@@ -255,7 +273,7 @@ class Admin::UserCard < Lilac::Component; end
 
 ---
 
-## 5. Directive 一覧 (全 15 種)
+## 5. Directive 一覧
 
 | Directive | 値の型 | Build 後 (例) |
 |---|---|---|
@@ -263,8 +281,6 @@ class Admin::UserCard < Lilac::Component; end
 | `data-ref="x"` | ref_ident | explicit ref capture |
 | `data-text="@s"` | ivar / it_path | `bind refs.gN, text: @s` |
 | `data-unsafe-html="@s"` | ivar / it_path | `bind refs.gN, html: @s` |
-| `data-value="@s"` | **ivar only** | `bind_input refs.gN, @s` |
-| `data-checked="@s"` | **ivar only** | `bind_checked refs.gN, @s` |
 | `data-show="@s"` | ivar / it_path | lil-hidden を falsy 時に付与 |
 | `data-hide="@s"` | ivar / it_path | lil-hidden を truthy 時に付与 |
 | `data-on-X="m"` | method_ident | `refs.gN.on(:X) { \|ev\| m(...) }` |
@@ -274,6 +290,29 @@ class Admin::UserCard < Lilac::Component; end
 | `data-each="@c"` | ivar / it_path | `bind_list refs.gN, @c do \|it, t\| ... end` |
 | `data-key="id"` | key_field (同要素に `data-each` 必須) | `key: ->(it) { it.id }` |
 | `data-class="{a: @s}"` | hash_literal | `bind refs.gN, class: { "a" => @s }` |
+
+### Form 統合 directive(別 spec 参照)
+
+input / button の form 連携は **`docs/lilac-form-spec.md` Section 10** で
+定義される独立の directive group:
+
+| Directive | 役割 | 詳細 |
+|---|---|---|
+| `data-form="<name>"` | form scope 宣言 | [form-spec §10.2](./lilac-form-spec.md) |
+| `data-field="<name>"` | field の UI 自動 wire | [form-spec §10.3](./lilac-form-spec.md) |
+| `data-button="<name>"` | named action button | [form-spec §10.5](./lilac-form-spec.md) |
+
+### 廃止された directive
+
+以下は **Phase D で削除予定**(削除前の旧仕様の参考のため記載):
+
+- `data-value="@s"` (ivar only) → form 経由 (`data-field`) に統合。汎用
+  signal binding は命令的 `bind_input refs.X, @signal` を escape hatch
+  として使う
+- `data-checked="@s"` (ivar only) → 同上。checkbox/radio は
+  `f.field :name, type: :checkbox` で form 経由
+
+旧コードからの migration は form-spec §10.8 参照。
 
 ---
 
@@ -337,16 +376,69 @@ def add_todo(ev)
 end
 ```
 
-### 6.2 `data-value` / `data-checked` — form control 専用
+### 6.2 `data-value` / `data-checked` — **削除済み**(Phase D)
+
+**ステータス**: Phase D で **削除**。CLI codegen / runtime scanner どちら
+からも dispatch が消えており、HTML にこれらの属性を書いても **何も起き
+ない**(普通の data-* 属性として残るが Lilac は無視)。新規 / 既存どちらの
+code でも使わない。
+
+旧仕様(歴史参照用):
 
 | Directive | 適用要素 | 値の型 | 用途 |
 |---|---|---|---|
 | `data-value` | `<input>` (text 系), `<textarea>`, `<select>` | **`@ivar` のみ** (writable signal) | 双方向 text bind |
 | `data-checked` | `<input type=checkbox>`, `<input type=radio>` | **`@ivar` のみ** (writable bool signal) | 双方向 boolean bind |
 
-`it_path` は **read-only** 扱いとし、iteration item の field を双方向 bind することは禁止 (Data の immutability と整合)。
+#### 廃止の理由
 
-iteration item の編集 UI は **read-only display + event handler** の組合せで:
+input/checkbox の declarative binding は **form 経由が canonical**(form-spec
+§1, §10 参照)。`data-value` / `data-checked` の汎用 ivar binding は廃止し、
+全 input binding を form の `f.field` + HTML の `data-field` に集約する。
+
+理由:
+- 「同じことをやる 2 つの directive」(`data-value` vs `data-field`)を
+  維持する mental cost
+- form 経由なら validation / touched / dirty / error が「ついで」に得られる
+- single-input ケースも `form.field :query, initial: ""` の 1 行宣言で済む(form-spec §5)
+
+#### Migration (旧 → 新)
+
+```html
+<!-- 旧 -->
+<input data-value="@query">
+<input type="checkbox" data-checked="@dark_mode">
+```
+
+```ruby
+@query = signal("")
+@dark_mode = signal(false)
+```
+
+→
+
+```html
+<!-- 新 -->
+<input data-field="query">
+<input type="checkbox" data-field="dark_mode">
+```
+
+```ruby
+form.field :query, initial: ""
+form.field :dark_mode, initial: false, type: :checkbox
+```
+
+`@query` / `@dark_mode` ivar は不要(値は `form[:query].value` /
+`form[:dark_mode].value` で取れる)。
+
+escape hatch として命令的 `bind_input refs.X, @signal` は残す(form を
+通さず純粋に signal と input を bind したい advanced 用途用)。
+
+#### iteration item の編集 UI
+
+旧 spec で「`it_path` は read-only、編集は data-attr-checked + data-on-change で」
+としていた pattern は引き続き有効。**read-only display + event handler** の
+組合せ:
 
 ```html
 <ul data-each="@todos">
@@ -1177,7 +1269,7 @@ refs.p
   - data-attr-srcdoc
   - data-attr-style (CSS variable 経由で `data-css-X` を使う、または `refs.X.set_style(prop, val)`)
 - 不正な class 名:
-  - data-component="counter" (PascalCase でない)
+  - data-component="Counter" (PascalCase でない)
 - directive 同居の衝突:
   - data-text + data-unsafe-html
   - data-each + data-component
@@ -1465,8 +1557,9 @@ end
   <div data-component="TodoList">
     <h1 data-text="@title"></h1>
 
-    <form data-on-submit="add_todo">
-      <input data-value="@new_title" placeholder="What needs doing?">
+    <!-- 素の <form> = default scope。f.button :submit が submit を受ける -->
+    <form>
+      <input data-field="new_title" placeholder="What needs doing?">
       <button type="submit">Add</button>
     </form>
 
@@ -1491,18 +1584,19 @@ class TodoList < Lilac::Component
 
   def setup
     @todos = signal([])
-    @new_title = signal("")
     @title = computed { "Todos (#{@todos.value.size})" }
     @remaining_label = computed { "Remaining: #{@todos.value.count { |t| !t.done }}" }
     @is_empty = computed { @todos.value.empty? }
-  end
 
-  def add_todo(ev)
-    ev.preventDefault
-    title = @new_title.value.strip
-    return if title.empty?
-    @todos.update { |l| l + [Todo.new(id: SecureRandom.uuid, title: title, done: false)] }
-    @new_title.value = ""
+    form do |f|
+      f.field :new_title, initial: ""
+      f.button :submit do |values|
+        title = values[:new_title].strip
+        next if title.empty?
+        @todos.update { |l| l + [Todo.new(id: SecureRandom.uuid, title: title, done: false)] }
+        form.reset
+      end
+    end
   end
 
   def toggle_done(todo, _ev)
