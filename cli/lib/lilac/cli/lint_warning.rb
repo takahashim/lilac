@@ -21,16 +21,28 @@ module Lilac
     # etc.) so the same warning shape carries both typo hints and
     # corrective advice.
     class LintWarning
-      def initialize(at:, body:, declared_label: nil, declared: [], suggestion: nil)
+      # `severity:` is `:warning` (default — non-fatal, build continues)
+      # or `:error` (fatal — build fails with non-zero exit code).
+      # Errors are reserved for violations that runtime would `raise`
+      # (so the build/runtime severity stays aligned).
+      def initialize(at:, body:, declared_label: nil, declared: [], suggestion: nil, severity: :warning)
         @at = at
         @body = body
         @declared_label = declared_label
         @declared = declared
         @suggestion = suggestion
+        @severity = severity
+      end
+
+      attr_reader :severity
+
+      def error?
+        @severity == :error
       end
 
       def to_s
-        parts = ["lilac: lint warning in #{@at}"]
+        label = error? ? "lint error" : "lint warning"
+        parts = ["lilac: #{label} in #{@at}"]
         @body.to_s.each_line { |l| parts << "  #{l.chomp}" }
         parts << "  #{@declared_label}: #{@declared.join(', ')}." if @declared_label && !@declared.empty?
         parts << "  #{@suggestion}" if @suggestion

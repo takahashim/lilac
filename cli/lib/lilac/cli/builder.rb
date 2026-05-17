@@ -209,13 +209,20 @@ module Lilac
           # the user's mental order ("first the diagnostics, then the
           # result"). Non-fatal — warnings go to stderr and the build
           # carries on.
-          CrossRefLinter.lint(
+          lint_result = CrossRefLinter.lint(
             script_text: user_script,
             directives: parsed[:default_directives],
             refs_map: parsed[:default_refs_map],
             component_name: ComponentName.new(name).ruby_class,
             file: parsed[:source_path] ? File.basename(parsed[:source_path]) : "(template)",
           )
+          # Fatal cross-ref violations (e.g. data-button referencing an
+          # undeclared `f.button :X`) abort the build — runtime would
+          # raise on first user interaction, so the build/runtime
+          # severity stays aligned (decisions §6).
+          if lint_result.errors?
+            raise Error, "build failed: #{lint_result.errors} lint error(s) in template; see warnings above."
+          end
           generated =
             if @codegen == :off
               # Runtime scanner mode: emit no bind_template_hook,

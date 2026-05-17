@@ -321,4 +321,122 @@ class TestCrossRefLinter < Minitest::Test
     )
     assert_equal 0, count
   end
+
+  # ---- form / field / button cross-reference ---------------------
+
+  def form_dir(kind, value:, form_scope: nil, line: 1, tag: "div")
+    Lilac::CLI::Directive.new(
+      kind: kind, name: nil, value: value, ref_id: "lil0",
+      line: line, element_tag: tag, scope_id: nil,
+      form_scope: form_scope,
+    )
+  end
+
+  def test_declared_button_in_default_form_emits_no_warning
+    count, = lint(
+      script: <<~RUBY,
+        form do |f|
+          f.button :save do |_v|
+          end
+        end
+      RUBY
+      directives: [form_dir(:button, value: "save", form_scope: :default, tag: "button")],
+    )
+    assert_equal 0, count
+  end
+
+  def test_undeclared_button_emits_error_with_suggestion
+    result, out = lint(
+      script: <<~RUBY,
+        form do |f|
+          f.button :save do |_v|
+          end
+        end
+      RUBY
+      directives: [form_dir(:button, value: "sav", form_scope: :default, line: 7, tag: "button")],
+    )
+    assert_equal 1, result.errors
+    assert_includes out, "lint error"
+    assert_includes out, "data-button=\"sav\""
+    assert_includes out, "form(:default)"
+    assert_includes out, "Did you mean: save?"
+  end
+
+  def test_undeclared_field_emits_warning_with_suggestion
+    result, out = lint(
+      script: <<~RUBY,
+        form do |f|
+          f.field :email, initial: ""
+        end
+      RUBY
+      directives: [form_dir(:field, value: "emial", form_scope: :default, line: 5, tag: "input")],
+    )
+    assert_equal 0, result.errors
+    assert_equal 1, result.warnings
+    assert_includes out, "lint warning"
+    assert_includes out, "data-field=\"emial\""
+    assert_includes out, "Did you mean: email?"
+  end
+
+  def test_declared_field_in_named_form_emits_no_warning
+    count, = lint(
+      script: <<~RUBY,
+        form :signup do |f|
+          f.field :email, initial: ""
+        end
+      RUBY
+      directives: [form_dir(:field, value: "email", form_scope: :signup, tag: "input")],
+    )
+    assert_equal 0, count
+  end
+
+  def test_field_in_undeclared_form_warns
+    result, out = lint(
+      script: "",
+      directives: [form_dir(:field, value: "email", form_scope: :signup, line: 3, tag: "input")],
+    )
+    assert_equal 1, result.warnings
+    assert_includes out, "data-field=\"email\" in form(:signup)"
+  end
+
+  def test_undeclared_named_form_emits_warning
+    # Use a near-typo so the suggestion fires (`signup` → `signupp`).
+    result, out = lint(
+      script: <<~RUBY,
+        form :signup do |f|
+        end
+      RUBY
+      directives: [form_dir(:form, value: "signupp", line: 4, tag: "form")],
+    )
+    assert_equal 1, result.warnings
+    assert_includes out, "data-form=\"signupp\""
+    assert_includes out, "Did you mean: signup?"
+  end
+
+  def test_data_form_default_never_warns
+    # `<form data-form="default">` (or no data-form at all) is fine
+    # without an explicit `form do |f| ... end` declaration — the
+    # framework auto-creates the default form on first access.
+    count, = lint(
+      script: "",
+      directives: [form_dir(:form, value: "default", tag: "form")],
+    )
+    assert_equal 0, count
+  end
+
+  def test_button_block_param_other_than_f_works
+    # The visitor anchors `<block_param>.button` calls to whatever
+    # name appears in the block signature — `do |form_builder| ... end`
+    # should be recognised just like the conventional `|f|`.
+    count, = lint(
+      script: <<~RUBY,
+        form do |form_builder|
+          form_builder.button :save do |_v|
+          end
+        end
+      RUBY
+      directives: [form_dir(:button, value: "save", form_scope: :default, tag: "button")],
+    )
+    assert_equal 0, count
+  end
 end

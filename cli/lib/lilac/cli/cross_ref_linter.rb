@@ -11,18 +11,49 @@ module Lilac
     # template directives (ivars in `data-text`, methods in
     # `data-on-X`, etc.) against the declarations extracted from
     # `<script type="text/ruby">` by ScriptAnalyzer (AST-based).
-    # Undeclared references emit a warning to stderr (or any
-    # caller-provided IO); warnings are non-fatal — the build still
-    # succeeds.
+    # Undeclared references emit a diagnostic to stderr (or any
+    # caller-provided IO).
     #
-    # Pure scan: never raises. Returns the count of warnings emitted so
-    # callers (e.g. a future `--strict` mode) can decide to exit with
-    # a non-zero code based on the result.
+    # Pure scan: never raises. Returns a `Result(warnings:, errors:)`
+    # struct — Builder fails the build when `errors > 0` (= violations
+    # the runtime would `raise`, currently `data-button` referencing an
+    # undeclared `f.button :NAME`). Other diagnostics stay non-fatal.
     module CrossRefLinter
       # Tunable: maximum Levenshtein distance for the "Did you mean?"
       # suggestion to be offered. 2 keeps it useful for typos without
       # surfacing unrelated names.
       SUGGESTION_MAX_DISTANCE = 2
+
+      # Aggregate counts returned from `lint`. `errors` tracks fatal
+      # violations (build should fail); `warnings` tracks non-fatal
+      # ones. `total` is the "any diagnostic count" sum.
+      Result = Struct.new(:warnings, :errors, keyword_init: true) do
+        def total
+          warnings + errors
+        end
+
+        def errors?
+          errors.positive?
+        end
+
+        # ---- back-compat shims (tests-only) ----
+        # Pre-Result, `lint` returned an Integer. The Integer-coercion
+        # below lets `assert_equal 0, result` keep working. New call
+        # sites should use `.total` / `.errors` / `.warnings` directly;
+        # remove these shims once tests migrate.
+        def to_int
+          total
+        end
+        alias_method :to_i, :to_int
+
+        def coerce(other)
+          [other, total]
+        end
+
+        def ==(other)
+          other.is_a?(Result) ? super : total == other
+        end
+      end
 
       # Methods the framework calls without an explicit `def name` →
       # `data-on-X` wiring; never flag them as dead even if no
@@ -47,6 +78,7 @@ module Lilac
       def self.lint(script_text:, directives:, component_name:, file:, refs_map: {}, out: $stderr)
         analysis = ScriptAnalyzer.analyze(script_text)
         warnings = 0
+        errors = 0
 
         warnings += lint_undeclared_signals(analysis, directives, component_name, file, out)
         warnings += lint_undefined_methods(analysis, directives, component_name, file, out)
@@ -55,8 +87,87 @@ module Lilac
         warnings += lint_reserved_ref_names(refs_map, file, out)
         warnings += lint_dead_signals(analysis, directives, component_name, file, out)
         warnings += lint_dead_methods(analysis, directives, component_name, file, out)
+        FORM_REF_CHECKS.each do |spec|
+          count = lint_form_ref(spec, analysis, directives, component_name, file, out)
+          spec[:severity] == :error ? errors += count : warnings += count
+        end
 
-        warnings
+        Result.new(warnings: warnings, errors: errors)
+      end
+
+      # Lint specs for `data-form` / `data-field` / `data-button`
+      # cross-references. All share the same shape — only the kind,
+      # severity, where-to-look, and the diagnostic phrasing differ —
+      # so dispatch through this table instead of three near-identical
+      # methods. Adding a new form-related directive becomes a row.
+      FORM_REF_CHECKS = [
+        {
+          kind: :button,
+          label: "data-button",
+          severity: :error,
+          consequence: "runtime click handler raises `Lilac::Error`",
+          declared_for: ->(analysis, form_sym) { (analysis.declared_buttons[form_sym] || {}).keys },
+          declared?: ->(analysis, form_sym, name) { analysis.declares_button?(form_sym, name) },
+          scoped: true,
+        },
+        {
+          kind: :field,
+          label: "data-field",
+          severity: :warning,
+          consequence: "runtime auto-registers a default text field (no validator)",
+          declared_for: ->(analysis, form_sym) { (analysis.declared_fields[form_sym] || {}).keys },
+          declared?: ->(analysis, form_sym, name) { analysis.declares_field?(form_sym, name) },
+          scoped: true,
+        },
+        {
+          kind: :form,
+          label: "data-form",
+          severity: :warning,
+          consequence: "runtime auto-creates the form on first access",
+          declared_for: ->(analysis, _form_sym) { analysis.declared_forms.keys },
+          declared?: ->(analysis, _form_sym, name) { analysis.declares_form?(name) },
+          # `:default` is suppressed: `<form>` without data-form is the
+          # dominant case and writing `form do |f| ... end` is optional
+          # (Component#form auto-creates on access).
+          skip_default: true,
+          # `data-form` is itself the form scope marker; it doesn't
+          # nest inside a `form(...)` block, so the diagnostic doesn't
+          # need a "in form(:X)" qualifier.
+          scoped: false,
+        },
+      ].freeze
+
+      def self.lint_form_ref(spec, analysis, directives, component_name, file, out)
+        count = 0
+        directives.each do |d|
+          next unless d.kind == spec[:kind]
+          name_str = d.value.to_s.strip
+          next if name_str.empty?
+          form_sym = (d.form_scope || :default).to_sym
+          lookup_form = spec[:scoped] ? form_sym : nil
+          name_sym = name_str.to_sym
+          next if spec[:skip_default] && name_sym == :default
+          next if spec[:declared?].call(analysis, form_sym, name_sym)
+
+          declared = spec[:declared_for].call(analysis, form_sym).map(&:to_s)
+          emit_form_ref_warning(out, d, file, component_name, spec, name_str, lookup_form, declared)
+          count += 1
+        end
+        count
+      end
+
+      def self.emit_form_ref_warning(out, directive, file, component_name, spec, member, form_sym, declared)
+        guess = nearest(member, declared)
+        scope_label = form_sym ? " in form(:#{form_sym})" : ""
+        emit(out, LintWarning.new(
+          at: directive.source_location(file),
+          body: "#{spec[:label]}=#{member.inspect}#{scope_label} is not declared in #{component_name} " \
+                "(#{spec[:consequence]}).",
+          declared_label: "Declared #{spec[:label].sub('data-', '')}s#{scope_label}",
+          declared: declared,
+          suggestion: guess && "Did you mean: #{guess}?",
+          severity: spec[:severity],
+        ))
       end
 
       def self.lint_undeclared_signals(analysis, directives, component_name, file, out)
