@@ -32,14 +32,24 @@ module Lilac
     # ---- Item mixin (row side) ------------------------------------
 
     module Item
-      # Row-side wiring. `id:` names the data-* attribute holding the
-      # row identity (defaults to `:id` → `data-id`).
-      def make_sortable(id: :id, event: DEFAULT_EVENT)
-        id_key = id
+      # Row-side wiring. The row identity (which the List side uses to
+      # match the dropped row against the model) is read via `by:`,
+      # whose type chooses the source:
+      #
+      #   - Symbol — `root.data(by)` (HTML `data-*` attribute; default
+      #     `:id` → `data-id`, preserving hand-written-row behaviour).
+      #   - Signal / Computed — `by.value` at drag-time.
+      #   - Proc — called to produce the value.
+      #   - Anything else — treated as a literal value (`to_s`-coerced).
+      #
+      # Components built from `data-prop-id="it.id"` pass `by: @id` to
+      # avoid duplicating `data-attr-data-id` on the row template.
+      def make_sortable(by: :id, event: DEFAULT_EVENT)
+        reader = build_sortable_id_reader(by)
         reorder_event = event
 
         root.on(:dragstart) do |ev|
-          ev[:dataTransfer].setData("text/plain", root.data(id_key))
+          ev[:dataTransfer].setData("text/plain", reader.call.to_s)
           ev[:dataTransfer][:effectAllowed] = "move"
           root.toggle_class("is-dragging", true)
         end
@@ -71,11 +81,26 @@ module Lilac
           root.toggle_class("drop-before", false)
           root.toggle_class("drop-after", false)
           src_id = ev[:dataTransfer].getData("text/plain").to_s
-          dst_id = root.data(id_key).to_s
+          dst_id = reader.call.to_s
           pos = Sortable.drop_before?(root, ev) ? "before" : "after"
           root.dispatch(reorder_event,
                         detail: { "src" => src_id, "dst" => dst_id, "pos" => pos },
                         bubbles: true)
+        end
+      end
+
+      private
+
+      def build_sortable_id_reader(by)
+        case by
+        when Symbol then -> { root.data(by) }
+        when Proc   then by
+        else
+          # Signal / Computed (anything quack-typed with `.value`) →
+          # always read the live current value at drag-time. Bare
+          # scalars fall into the same branch and get returned as-is
+          # (callers `.to_s` the result before use).
+          by.respond_to?(:value) ? -> { by.value } : -> { by }
         end
       end
     end
@@ -90,10 +115,42 @@ module Lilac
       # Also adds a fallback drop handler on `el_ref` so cursors
       # released in empty list space (below the last row, in the gap
       # between rows) still append the source instead of being lost.
-      # `key:` is the Hash key inside each item that carries the row
-      # identity (e.g. `"id"`).
-      def sortable_target(el_ref, signal, key:, event: DEFAULT_EVENT)
+      #
+      # `signal` and `key:` can be omitted when the ref's element carries
+      # `data-each="@items" data-key="id"`: the actual wiring is deferred
+      # to just after `bind_template_hook`, by which point the directive
+      # scanner has recorded `(source, key)` via `register_each_binding`.
+      # Pass both explicitly for imperative `bind_list` callers (no
+      # scanner registration in that path) — wiring then runs immediately.
+      def sortable_target(el_ref, signal = nil, key: nil, event: DEFAULT_EVENT)
+        if signal.nil? || key.nil?
+          defer_until_bound do
+            apply_sortable_target(el_ref, signal, key, event)
+          end
+        else
+          apply_sortable_target(el_ref, signal, key, event)
+        end
+      end
+
+      private
+
+      def apply_sortable_target(el_ref, signal, key, event)
         el = el_ref.is_a?(RefElement) ? el_ref : wrap(el_ref)
+        if signal.nil? || key.nil?
+          name = el.respond_to?(:name) ? el.name : nil
+          binding = name ? each_binding_for(name) : nil
+          if binding
+            signal ||= binding[:source]
+            key    ||= binding[:key]
+          end
+        end
+        if signal.nil? || key.nil?
+          raise Lilac::Error,
+                "sortable_target(#{(el.respond_to?(:name) && el.name) || "?"}): " \
+                "no `data-each` binding recorded for this ref. Either annotate " \
+                "the list element with `data-each=\"@items\" data-key=\"id\"` " \
+                "(both attributes required) or pass `signal` + `key:` explicitly."
+        end
 
         el.on(event) do |ev|
           src_id = ev[:detail][:src].to_s
@@ -115,6 +172,7 @@ module Lilac
           signal.update { |arr| Sortable.move_to_end(arr, key, src_id) }
         end
       end
+
     end
 
     # ---- Pure data ops (exposed for tests) -------------------------

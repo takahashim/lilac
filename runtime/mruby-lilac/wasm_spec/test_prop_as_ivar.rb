@@ -135,6 +135,31 @@ Spec.describe "prop declares an auto-init Signal ivar" do
     body[:innerHTML] = ""
   end
 
+  Spec.assert "prop defines a public reader returning the current Signal value" do
+    doc = JS.global[:document]
+    body = doc[:body]
+    body[:innerHTML] = '<div data-component="PropIvarString" data-prop-greeting="Howdy"></div>'
+    Lilac.start
+    el = doc.call(:querySelector, "[data-component='PropIvarString']")
+    inst = Lilac.find_for_element(el)
+    Spec.assert_equal "Howdy", inst.greeting
+    Spec.assert_equal "Howdy", inst.props.greeting
+    body[:innerHTML] = ""
+  end
+
+  Spec.assert "prop reader reflects update_prop changes" do
+    doc = JS.global[:document]
+    body = doc[:body]
+    body[:innerHTML] = '<div data-component="PropIvarUpdateTarget" data-prop-n="5"></div>'
+    Lilac.start
+    el = doc.call(:querySelector, "[data-component='PropIvarUpdateTarget']")
+    inst = Lilac.find_for_element(el)
+    Spec.assert_equal 5, inst.n
+    inst.update_prop(:n, "77")
+    Spec.assert_equal 77, inst.n
+    body[:innerHTML] = ""
+  end
+
   Spec.assert "prop with reserved name raises at declaration time" do
     raised_root = false
     begin

@@ -196,6 +196,14 @@ module Lilac
         end
         @prop_declarations ||= {}
         @prop_declarations[sym] = { type: type, default: default }
+        # Define a public reader that pulls the current Signal value, so
+        # callers can write `item.id` instead of `item.props.id` or
+        # `item.instance_variable_get(:@id).value`. Inside reactive
+        # contexts (effect / computed), reading via this accessor still
+        # subscribes to the Signal because `.value` does.
+        define_method(sym) do
+          instance_variable_get(:"@#{sym}").value
+        end
         nil
       end
 
@@ -292,6 +300,15 @@ module Lilac
     # API (`attr`, `data`, `on` with auto-cleanup, `text=` etc.) on it.
     def wrap(js_element)
       RefElement.new(js_element, current_owner)
+    end
+
+    # Component-instance alias for `Lilac.find_for_element` — returns
+    # the Lilac component instance whose root is `element_js`, or `nil`
+    # if the element is not a mounted data-component. Saves the
+    # `Lilac.` prefix inside `setup` blocks that resolve the source of
+    # a bubbled custom event.
+    def component_for(element_js)
+      Lilac.find_for_element(element_js)
     end
 
     def signal(initial)
@@ -513,10 +530,12 @@ module Lilac
       # fall back to an empty Props so subsequent setup-time access becomes a
       # NoMethodError (also routed) instead of a NPE on @props.
       begin
-        @props = Props.build(self.class.prop_declarations, @root, self.class.name, host: self)
+        @props = Props.build(self.class.prop_declarations, @root, self.class.name)
+        install_prop_ivars!
       rescue => e
         Lilac.logger.error("#{self.class.name}#props", e, source: self)
-        @props = Props.new({}, self)
+        @props = Props.new
+        @_prop_signals = {}
       end
       begin
         prepare_setup
@@ -528,29 +547,15 @@ module Lilac
     def mount
       return if @mounted
       @refs = Refs.new(self)
-      begin
-        setup
-      rescue => e
-        Lilac.logger.error("#{self.class.name}#setup", e, source: self)
-      end
-      # Detect user reassignment of `@NAME` ivars that `prop :NAME` auto-
-      # initialized — comparing Signal object identity. Runs between setup
-      # and bind_template_hook so the raise reaches the boundary before any
-      # binding closure captures the (now-broken) ivar reference.
-      begin
-        validate_prop_ivars_not_overwritten!
-      rescue => e
-        Lilac.logger.error("#{self.class.name}#prop_ivars", e, source: self)
-      end
-      # Generated directive bindings (Section 11 of the spec). Same
-      # error-routing shape as `setup` so a faulty generated `bind`
-      # call surfaces through the existing logger / error_boundary path
-      # rather than aborting the whole mount.
-      begin
-        bind_template_hook
-      rescue => e
-        Lilac.logger.error("#{self.class.name}#bind_template_hook", e, source: self)
-      end
+      # Each step runs independently — a failure logs through the
+      # boundary but does not abort later steps. `:prop_ivars` sits
+      # between `:setup` and `:bind_template_hook` so that a detected
+      # ivar override raises before any binding closure captures the
+      # (now-broken) ivar reference.
+      run_lifecycle_step(:setup)              { setup }
+      run_lifecycle_step(:prop_ivars)         { validate_prop_ivars_not_overwritten! }
+      run_lifecycle_step(:bind_template_hook) { bind_template_hook }
+      flush_deferred_until_bound!
       @mounted = true
     end
 
@@ -582,6 +587,29 @@ module Lilac
       @children.each { |c| @resources.safe_release("child unmount") { c.unmount } }
     end
 
+    # Directive scanner records the `data-each` binding here (keyed by
+    # ref name) so mixins like Sortable::List can recover the source
+    # signal + Hash key without users having to re-pass them. Populated
+    # during bind_template_hook; consumers query via `each_binding_for`.
+    def register_each_binding(name, source, key)
+      @each_bindings ||= {}
+      @each_bindings[name.to_s] = { source: source, key: key }
+    end
+
+    def each_binding_for(name)
+      return nil unless @each_bindings
+      @each_bindings[name.to_s]
+    end
+
+    # Queue a setup-time block to run after `bind_template_hook`.
+    # Lets mixins depend on per-mount state (e.g. `each_binding_for`)
+    # that only exists post-bind without exposing the hook order to
+    # the user.
+    def defer_until_bound(&block)
+      @deferred_until_bound ||= []
+      @deferred_until_bound << block
+    end
+
     private
 
     # Return the current resource-owning target — the active Scope when
@@ -591,6 +619,41 @@ module Lilac
     def current_owner
       stack = @scope_stack
       (stack && stack.last) || self
+    end
+
+    # Run one of `mount`'s independent steps with a uniform rescue: any
+    # raise is logged through Lilac.logger.error (which routes through the
+    # error_boundary) and swallowed so the following steps still run.
+    # `label` becomes the source qualifier in the logged message.
+    def run_lifecycle_step(label)
+      yield
+    rescue => e
+      Lilac.logger.error("#{self.class.name}##{label}", e, source: self)
+    end
+
+    # Drain any callbacks queued by `defer_until_bound` during setup.
+    # Each block is run in its own rescue (`:deferred_until_bound` label)
+    # so a single bad consumer (e.g. a sortable_target with a stale ref)
+    # doesn't poison the rest of mount.
+    def flush_deferred_until_bound!
+      return unless @deferred_until_bound
+      @deferred_until_bound.each do |block|
+        run_lifecycle_step(:deferred_until_bound) { instance_exec(&block) }
+      end
+      @deferred_until_bound = nil
+    end
+
+    # Take each Signal from `Props.build` and install it as a `@NAME`
+    # ivar on this Component, also stashing the originals in
+    # `@_prop_signals` for the mount-time override-detection sweep. The
+    # Signal-creation work lives in Props; the choice to project them as
+    # ivars (= what makes the templates' `@x` syntax see prop values) is
+    # this Component's concern, so the side effect lives here.
+    def install_prop_ivars!
+      @_prop_signals = @props.signals
+      @_prop_signals.each do |name, sig|
+        instance_variable_set(:"@#{name}", sig)
+      end
     end
 
     # Compare each prop ivar against the original Signal stored at mount

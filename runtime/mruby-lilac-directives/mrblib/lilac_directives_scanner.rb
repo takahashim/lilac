@@ -365,6 +365,7 @@ module Lilac
       def dispatch_each(raw_value, el, parent_item)
         value = parse_value_or_raise(raw_value, "data-each")
         key_proc = build_key_proc(el)
+        key_str = read_data_key_attr(el)
 
         cached_html = el[:innerHTML].to_s
         el[:innerHTML] = ""
@@ -383,6 +384,14 @@ module Lilac
         ref = wrap_ref(el)
         host = @host
         evaluator = @evaluator
+
+        # Record (ref-name → source/key) on the host so mixins like
+        # Sortable::List can look up the data-each binding by ref instead
+        # of re-parsing data-each / data-key themselves. Only registers
+        # when both data-ref and a parseable data-key are present —
+        # consumers fall back to explicit args otherwise.
+        ref_name = read_data_ref_attr(el)
+        host.register_each_binding(ref_name, source, key_str) if ref_name && key_str
 
         @host.bind_list(ref, source, key: key_proc) do |it, prev_t|
           row_node =
@@ -450,6 +459,20 @@ module Lilac
             Lilac.logger.error("data-prop reuse #{attr_name}", e, source: @host)
           end
         end
+      end
+
+      def read_data_key_attr(el)
+        raw = el.call(:getAttribute, "data-key")
+        return nil if raw.js_null?
+        s = raw.to_s.strip
+        s.empty? ? nil : s
+      end
+
+      def read_data_ref_attr(el)
+        raw = el.call(:getAttribute, "data-ref")
+        return nil if raw.js_null?
+        s = raw.to_s.strip
+        s.empty? ? nil : s
       end
 
       # data-key="id" → ->(it) { it.id }. Without a valid data-key

@@ -18,10 +18,11 @@ module Lilac
   # `prop :disabled, Lilac::Boolean`.
   module Boolean; end
 
-  # Holds the resolved prop values for a single component instance. Provides
-  # `props.NAME` read-through lookup via method_missing that pulls the
-  # current value from the host's `@NAME` Signal ivar (so updates via
-  # `Component#update_prop` are reflected on next read).
+  # Holds the resolved prop Signals for a single component instance.
+  # `props.NAME` returns the Signal's current value (= live, reflects
+  # `Component#update_prop` calls). Component reads `props.signals` once
+  # at mount time to install matching `@NAME` ivars and record them for
+  # override detection.
   class Props
     NO_DEFAULT = Object.new.freeze
     ATTR_PREFIX = "data-prop-".freeze
@@ -45,43 +46,37 @@ module Lilac
       end
     end
 
-    def initialize(values, host = nil)
-      @values = values
-      @host = host
+    def initialize(signals = {})
+      @signals = signals
     end
 
+    # Internal: the underlying `name => Signal` map. Component reads this
+    # once at mount to install ivars (`@NAME = signal`) and record them
+    # for override detection. Treat as read-only — mutate values via
+    # `Component#update_prop`, not by reaching in here.
+    attr_reader :signals
+
     def has?(name)
-      @values.key?(name)
+      @signals.key?(name)
     end
 
     # Snapshot of all current prop values (scalars, not Signals).
     def to_h
       out = {}
-      @values.each_key { |k| out[k] = current_value(k) }
+      @signals.each { |k, sig| out[k] = sig.value }
       out
     end
 
     def respond_to_missing?(name, _include_private = false)
-      @values.key?(name) || super
+      @signals.key?(name) || super
     end
 
     def method_missing(name, *args)
-      if @values.key?(name) && args.empty?
-        current_value(name)
+      if @signals.key?(name) && args.empty?
+        @signals[name].value
       else
         super
       end
-    end
-
-    private
-
-    # Pull from the host's auto-init Signal ivar if available (live value);
-    # fall back to the stored scalar when @host is nil (empty fallback Props
-    # used by prepare_setup_phase's rescue branch).
-    def current_value(name)
-      return @values[name] unless @host
-      sig = @host.instance_variable_get(:"@#{name}")
-      sig.is_a?(Signal) ? sig.value : @values[name]
     end
 
     class << self
@@ -89,44 +84,32 @@ module Lilac
       # type conversion, default application, missing-required raise, and
       # (dev_mode only) unknown `data-prop-*` warn.
       #
-      # Side effects on `host`:
-      #   - sets `@NAME` to a new `Signal.new(coerced_value)` for each prop
-      #   - stores the original Signal references in `@_prop_signals` so the
-      #     mount-time `validate_prop_ivars_not_overwritten!` can detect
-      #     user reassignment via object-identity comparison
-      def build(declarations, root_ref, component_name, host: nil)
-        values = {}
+      # Returns a Props holding a fresh Signal per declared prop. No side
+      # effects on any component — the caller (Component#prepare_setup_phase)
+      # owns installing the Signals as `@NAME` ivars.
+      def build(declarations, root_ref, component_name)
         signals = {}
-        # Install the signals Hash on the host BEFORE the loop so any raise
-        # mid-iteration still leaves `@_prop_signals` referencing the
-        # partial map — `validate_prop_ivars_not_overwritten!` then covers
-        # the props that did succeed.
-        host.instance_variable_set(:@_prop_signals, signals) if host
         declarations.each do |name, spec|
           attr_key = attr_key_for(name)
           raw = root_ref.attr(attr_key)
-          if raw.nil?
-            if spec[:default].equal?(NO_DEFAULT)
-              raise Lilac::Error,
-                    "required prop :#{name} is missing in component #{component_name} " \
-                    "(declare default via `prop :#{name}, ..., default: ...`)"
+          value =
+            if raw.nil?
+              if spec[:default].equal?(NO_DEFAULT)
+                raise Lilac::Error,
+                      "required prop :#{name} is missing in component #{component_name} " \
+                      "(declare default via `prop :#{name}, ..., default: ...`)"
+              end
+              spec[:default]
+            else
+              convert(
+                type: spec[:type], raw: raw, name: name,
+                ctx: ConversionContext.new(attr_key, component_name)
+              )
             end
-            value = spec[:default]
-          else
-            value = convert(
-              type: spec[:type], raw: raw, name: name,
-              ctx: ConversionContext.new(attr_key, component_name)
-            )
-          end
-          values[name] = value
-          if host
-            sig = Signal.new(value)
-            host.instance_variable_set(:"@#{name}", sig)
-            signals[name] = sig
-          end
+          signals[name] = Signal.new(value)
         end
         warn_unknown(declarations, root_ref, component_name) if Lilac.dev_mode
-        new(values, host)
+        new(signals)
       end
 
       # Public so Component / tests can build attribute keys the same way as
