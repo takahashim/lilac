@@ -178,9 +178,32 @@ module Lilac
         sc = superclass
         sc.respond_to?(:error_boundary_block) ? sc.error_boundary_block : nil
       end
+
+      # Declare a prop read from `data-prop-NAME` on the component root
+      # element. Type is one of: String / Integer / Float / Lilac::Boolean.
+      # Without `default:` the prop is required (mount-time raise on missing).
+      # See docs/lilac-props-spec.md.
+      def prop(name, type, default: Lilac::Props::NO_DEFAULT)
+        @prop_declarations ||= {}
+        @prop_declarations[name.to_sym] = { type: type, default: default }
+        nil
+      end
+
+      # Local + inherited declarations, child wins on key collision. mruby
+      # doesn't expose `Class#instance_variable_get`, so we walk the chain
+      # via method dispatch — same pattern as `error_boundary_block`.
+      def prop_declarations
+        local = @prop_declarations || {}
+        sc = superclass
+        if sc.respond_to?(:prop_declarations)
+          sc.prop_declarations.merge(local)
+        else
+          local
+        end
+      end
     end
 
-    attr_reader :root, :refs, :parent
+    attr_reader :root, :refs, :parent, :props
 
     def initialize(root_element)
       @root = RefElement.new(root_element, self, name: "(root)")
@@ -194,6 +217,10 @@ module Lilac
       @unmounted = false
       @error_handler = nil
       @abort_controller = nil
+      # Props.build is deferred to prepare_setup_phase so that any raise
+      # (required-missing / type-mismatch) is routed through the same
+      # error_boundary path as prepare_setup / setup. Placeholder until then.
+      @props = nil
     end
 
     # Override to publish values to descendants. Runs in pre-order
@@ -472,6 +499,16 @@ module Lilac
       @prepare_setup_phase_done = true
       if (boundary = self.class.error_boundary_block)
         @error_handler = ->(label, error) { instance_exec(label, error, &boundary) }
+      end
+      # Build props after error_boundary install so prop conversion / required
+      # raises route through the same logger.error path as setup. On error,
+      # fall back to an empty Props so subsequent setup-time access becomes a
+      # NoMethodError (also routed) instead of a NPE on @props.
+      begin
+        @props = Props.build(self.class.prop_declarations, @root, self.class.name)
+      rescue => e
+        Lilac.logger.error("#{self.class.name}#props", e, source: self)
+        @props = Props.new({})
       end
       begin
         prepare_setup
