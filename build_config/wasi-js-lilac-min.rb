@@ -78,6 +78,7 @@ MRuby::CrossBuild.new(build_name) do |conf|
 
   conf.gem "#{mwr_mrbgem}/mruby-wasm-js"
   conf.gem "#{runtime_dir}/mruby-lilac"
+  conf.gem "#{runtime_dir}/mruby-lilac-form"   # Phase A: form is core
 
   conf.bins = []
 end
