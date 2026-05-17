@@ -25,8 +25,8 @@ module Lilac
       DIRECTIVE_PATTERNS = [
         [/\Adata-text\z/,        :text,        false],
         [/\Adata-unsafe-html\z/, :unsafe_html, false],
-        [/\Adata-value\z/,       :value,       false],
-        [/\Adata-checked\z/,     :checked,     false],
+        # data-value / data-checked were removed in Phase D (form-spec
+        # §10.8 deprecation). Use `<input data-field="X">` + form gem.
         [/\Adata-show\z/,        :show,        false],
         [/\Adata-hide\z/,        :hide,        false],
         [/\Adata-each\z/,        :each,        false],
@@ -248,10 +248,6 @@ module Lilac
           dispatch_on(name, raw_value, el, item)
         when :each
           dispatch_each(raw_value, el, item)
-        when :value
-          dispatch_value(raw_value, el)
-        when :checked
-          dispatch_checked(raw_value, el)
         when :class_
           dispatch_class(raw_value, el, item)
         when :field
@@ -309,19 +305,6 @@ module Lilac
         @host.effect do
           ref.set_style("--#{css_name}", evaluator.read(value, item))
         end
-      end
-
-      # data-value / data-checked are ivar-only (they write back to
-      # the signal on input events). Iteration item fields cannot be
-      # the target — they're frozen Data attributes.
-      def dispatch_value(raw_value, el)
-        sig = ivar_or_raise(raw_value, "data-value")
-        @host.bind_input(wrap_ref(el), sig)
-      end
-
-      def dispatch_checked(raw_value, el)
-        sig = ivar_or_raise(raw_value, "data-checked")
-        @host.bind_input(wrap_ref(el), sig, property: :checked)
       end
 
       # data-each iteration:
@@ -448,19 +431,6 @@ module Lilac
                 "(expected `@ivar` or `it.path`)"
         end
         value
-      end
-
-      # data-value / data-checked require a writable Signal, which means
-      # the source must be `@ivar` (resolved via Evaluator#lookup_ivar to
-      # the underlying Signal) — not `it.field` (frozen Data attribute).
-      def ivar_or_raise(raw_value, attr_label)
-        value = Value.parse(raw_value)
-        unless value && value.ivar?
-          raise Lilac::Error,
-                "Invalid value for #{attr_label}: #{raw_value.inspect} " \
-                "(expected `@ivar` — writable signal only)"
-        end
-        @evaluator.lookup_ivar(value)
       end
 
       def wrap_ref(el_js)

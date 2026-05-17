@@ -153,4 +153,126 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     body[:innerHTML] = ""
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
+
+  # --- data-field: input value flows into form[:name] on both paths ----
+
+  Spec.assert "data-field: input change updates form[:name] value identically on both paths" do
+    body = JS.global[:document][:body]
+
+    # Path A: CLI-style codegen (Bindings module mirrors emit_field output).
+    body[:innerHTML] = '<div data-component="parity-field-cli"><form><input data-ref="lilInput" type="text"></form></div>'
+    cli_klass = Class.new(Lilac::Component) do
+      define_method(:setup) { form { |_f| } }
+    end
+    cli_mod = Module.new do
+      define_method(:bind_template_hook) do
+        form(:default).field(:email) unless form(:default).has_field?(:email)
+        form(:default)[:email].bind_to(refs.lilInput)
+      end
+    end
+    cli_klass.include(cli_mod)
+    Lilac.register("parity-field-cli", cli_klass)
+    Lilac.start
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+
+    cli_input = body.call(:querySelector, "[data-component='parity-field-cli'] input")
+    cli_input[:value] = "hi@example.com"
+    ev = JS.global[:document][:defaultView][:Event]
+    cli_input.call(:dispatchEvent, ev.new("input", JS.object(bubbles: true)))
+    cli_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component='parity-field-cli']"))
+    cli_value = cli_inst.form[:email].value
+
+    Lilac.reset!
+    body[:innerHTML] = ""
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+
+    # Path B: runtime scanner (declarative data-field directive only).
+    body[:innerHTML] = '<div data-component="parity-field-rt"><form><input data-field="email" type="text"></form></div>'
+    rt_klass = Class.new(Lilac::Component) do
+      define_method(:setup) { form { |_f| } }
+    end
+    Lilac.register("parity-field-rt", rt_klass)
+    Lilac.start
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+
+    rt_input = body.call(:querySelector, "[data-component='parity-field-rt'] input")
+    rt_input[:value] = "hi@example.com"
+    rt_input.call(:dispatchEvent, ev.new("input", JS.object(bubbles: true)))
+    rt_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component='parity-field-rt']"))
+    rt_value = rt_inst.form[:email].value
+
+    Spec.assert_equal cli_value, rt_value
+    Spec.assert_equal "hi@example.com", cli_value
+
+    Lilac.reset!
+    body[:innerHTML] = ""
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+  end
+
+  # --- data-button: click invokes the same handler on both paths -------
+
+  Spec.assert "data-button: click invokes named action identically on both paths" do
+    body = JS.global[:document][:body]
+
+    # Path A: CLI-style codegen.
+    body[:innerHTML] = '<div data-component="parity-btn-cli"><form><button data-ref="lilBtn" type="button">Save</button></form></div>'
+    cli_klass = Class.new(Lilac::Component) do
+      attr_accessor :fired
+      define_method(:setup) do
+        outer = self
+        form do |f|
+          f.button :save, validate: false do |_v|
+            outer.fired = :cli
+          end
+        end
+      end
+    end
+    cli_mod = Module.new do
+      define_method(:bind_template_hook) do
+        refs.lilBtn.on(:click) { |__ev| form(:default).invoke_button(:save, __ev) }
+      end
+    end
+    cli_klass.include(cli_mod)
+    Lilac.register("parity-btn-cli", cli_klass)
+    Lilac.start
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+
+    cli_btn = body.call(:querySelector, "[data-component='parity-btn-cli'] button")
+    cli_btn.call(:click)
+    cli_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component='parity-btn-cli']"))
+    cli_fired = cli_inst.fired
+
+    Lilac.reset!
+    body[:innerHTML] = ""
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+
+    # Path B: runtime scanner.
+    body[:innerHTML] = '<div data-component="parity-btn-rt"><form><button data-button="save" type="button">Save</button></form></div>'
+    rt_klass = Class.new(Lilac::Component) do
+      attr_accessor :fired
+      define_method(:setup) do
+        outer = self
+        form do |f|
+          f.button :save, validate: false do |_v|
+            outer.fired = :rt
+          end
+        end
+      end
+    end
+    Lilac.register("parity-btn-rt", rt_klass)
+    Lilac.start
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+
+    rt_btn = body.call(:querySelector, "[data-component='parity-btn-rt'] button")
+    rt_btn.call(:click)
+    rt_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component='parity-btn-rt']"))
+    rt_fired = rt_inst.fired
+
+    Spec.assert_equal :cli, cli_fired
+    Spec.assert_equal :rt,  rt_fired
+
+    Lilac.reset!
+    body[:innerHTML] = ""
+    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+  end
 end

@@ -8,13 +8,6 @@ module Lilac
     # but before dispatch. Returns the set of directive kinds to skip
     # (after warning). May raise `Lilac::Error` on hard violations.
     module Compat
-      INPUT_TYPES_FOR_VALUE = %w[
-        text email number search tel url password date time
-        datetime-local month week color
-      ].freeze
-      VALUE_ELEMENTS = %w[input textarea select].freeze
-      CHECKED_INPUT_TYPES = %w[checkbox radio].freeze
-
       class << self
 
       # `directives` is Array<[kind, name, value]>. `tag_name` is the
@@ -30,25 +23,7 @@ module Lilac
         check_collision!(kinds, :text, :unsafe_html, element_descriptor)
         check_collision!(kinds, :unsafe_html, :each, element_descriptor)
         check_collision!(kinds, :show, :hide, element_descriptor)
-        check_collision!(kinds, :value, :checked, element_descriptor)
         check_collision!(kinds, :component, :each, element_descriptor)
-
-        # Element-type ergonomics — warn + skip.
-        if kinds.include?(:value)
-          unless value_element_ok?(tag_name, attrs)
-            warn_skip("data-value", tag_name, element_descriptor,
-                      "requires <input type=text/email/...>, <textarea>, or <select>")
-            skip << :value
-          end
-        end
-
-        if kinds.include?(:checked)
-          unless checked_input_ok?(tag_name, attrs)
-            warn_skip("data-checked", tag_name, element_descriptor,
-                      "requires <input type=checkbox|radio>")
-            skip << :checked
-          end
-        end
 
         # data-key without data-each — warn + skip the orphan key.
         if kinds.include?(:key) && !kinds.include?(:each)
@@ -69,19 +44,6 @@ module Lilac
 
       def kind_label(kind)
         kind.to_s.chomp("_").tr("_", "-")
-      end
-
-      def value_element_ok?(tag, attrs)
-        return false unless VALUE_ELEMENTS.include?(tag)
-        return true unless tag == "input"
-        type = (attrs["type"] || "text").downcase
-        INPUT_TYPES_FOR_VALUE.include?(type)
-      end
-
-      def checked_input_ok?(tag, attrs)
-        return false unless tag == "input"
-        type = (attrs["type"] || "text").downcase
-        CHECKED_INPUT_TYPES.include?(type)
       end
 
       def warn_skip(attr, tag, element_descriptor, reason)
