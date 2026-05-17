@@ -105,9 +105,12 @@
         <button type="submit">Add</button>
       </form>
       <ul data-ref="list" class="todos" data-each="@items" data-key="id">
-        <li data-component="TodoItem" draggable="true" data-attr-data-id="it.id">
+        <li data-component="TodoItem"
+            draggable="true"
+            data-prop-id="it.id"
+            data-prop-title="it.title">
           <span class="handle" aria-hidden="true">⋮⋮</span>
-          <span class="title" data-text="it.title"></span>
+          <span class="title" data-text="@title"></span>
           <button class="dismiss" aria-label="delete" data-on-click="dismiss">×</button>
         </li>
       </ul>
@@ -123,13 +126,16 @@
 class TodoItem < Lilac::Component
   include Lilac::Sortable::Item
 
+  prop :id, Integer
+  prop :title, String
+
   def setup
-    make_sortable
+    make_sortable(by: @id)
   end
 
   # bubbles: true lets the event cross the data-component boundary up
-  # to the parent TodoList. event.target on the parent side is the
-  # <li> that fired, so the parent can read its data-id.
+  # to the parent TodoList, which resolves the TodoItem via
+  # `component_for(event.target)` and reads its `id` prop.
   def dismiss(_ev)
     root.dispatch(:item_dismissed, bubbles: true)
   end
@@ -164,7 +170,7 @@ class TodoList < Lilac::Component
       end
     end
 
-    sortable_target refs.list, @items, key: "id"
+    sortable_target refs.list
 
     root.on(:submit) do |event|
       event.preventDefault
@@ -179,7 +185,9 @@ class TodoList < Lilac::Component
     end
 
     root.on(:item_dismissed) do |event|
-      id = wrap(event[:target]).data(:id).to_i
+      item = component_for(event[:target])
+      next unless item
+      id = item.id
       @items.update { |arr| arr.reject { |it| it["id"] == id } }
     end
   end
