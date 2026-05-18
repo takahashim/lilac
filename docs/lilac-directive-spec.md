@@ -286,6 +286,7 @@ class Admin::UserCard < Lilac::Component; end
 | `data-on-X="m"` | method_ident | `refs.gN.on(:X) { \|ev\| m(...) }` |
 | `data-attr-X="@s"` | ivar / it_path | `bind refs.gN, attr: { "X" => @s }` |
 | `data-arg-X="it.id"` | ivar / it_path (同要素に `data-component` 必須、**DOM 経由**) | `t.data(:X, it.id)` (子は `root.data(:X)` で読む。ivar に取れば snapshot、event 毎に読めば live) |
+| `data-prop-X="..."` | literal / ivar / it_path (同要素に `data-component` 必須、子に `prop :X` 宣言が必要。`@ivar` / `it_path` の式解決は主に `data-each` 配下の row component 向け) | child の `@X` Signal を auto-init。子は `@X` / `props.X` / `instance.X` の 3 経路で値を読める。詳細 [`lilac-props-spec.md`](./lilac-props-spec.md) |
 | `data-css-X="@s"` | ivar / it_path | `element.style.setProperty("--X", @s.to_s)` (CSS custom property 設定、`--` は自動 prepend) |
 | `data-each="@c"` | ivar / it_path | `bind_list refs.gN, @c do \|it, t\| ... end` |
 | `data-key="id"` | key_field (同要素に `data-each` 必須) | `key: ->(it) { it.id }` |
@@ -753,7 +754,8 @@ v0.12 では提供しない。子の reactive な計算が必要なら:
 
 - 親が `expose :todos, @todos` で signal を公開、子が `lookup(:todos)` で取得、
   `computed { lookup(:todos).value.find { |t| t.id == @id } }` で id 経由で追跡
-- または将来の `data-prop-X` (Section 19) で Ruby reactive prop を直結
+- または `data-prop-X` ([`lilac-props-spec.md`](./lilac-props-spec.md)) で
+  prop 値を渡す(`prop :X, Type` で auto-init される `@X` Signal で受け取る)
 
 「`data-arg-X` は identity を **DOM 経由** で渡す。**reactive 経路は別建て** で、
 signal を直接配線したいなら `expose / lookup`」が rule。
@@ -832,12 +834,16 @@ end
 
 #### `data-prop-X` との関係
 
-`data-prop-X` は将来 phase で予約済み (Section 19)。役割の住み分け:
+`data-prop-X` は [`lilac-props-spec.md`](./lilac-props-spec.md) で実装済み。
+役割の住み分け:
 
-| 機構 | 渡せるもの | 媒体 | reactive subscription | v0.12 |
+| 機構 | 渡せるもの | 媒体 | reactive subscription | 採用 |
 |---|---|---|---|---|
-| `data-arg-X` | string | DOM data attribute (live, 子は `root.data(:X)` で read-on-demand) | **なし** — 子が ivar に取れば snapshot、event 毎に読み直せば live | **採用** |
-| `data-prop-X` | 任意 Ruby 値 (signal 等) | framework 内部 channel | あり — 親の signal 変化を子の prop に flow | 予約 |
+| `data-arg-X` | string | DOM data attribute (live, 子は `root.data(:X)` で read-on-demand) | **なし** — 子が ivar に取れば snapshot、event 毎に読み直せば live | 採用 |
+| `data-prop-X` | string / `@ivar` / `it.field` を scalar 解決して child に渡す | child の `@X` Signal | 子の中で `@X` は普通の Signal、`computed { @X.value... }` で reactive 取得可。row reuse 時 parent が自動更新 | 採用 |
+
+軽い identity 渡しなら `data-arg-X`、型付きの component prop として扱うなら
+`data-prop-X` (+ `prop :X, Type` 宣言)。
 
 #### 子 component を切り出す判断軸
 
@@ -1300,7 +1306,7 @@ refs.p
   - bare key が Ruby ident 規則外 (kebab `btn-primary` 等は quoted form 必須)
   - quoted key に whitespace / 制御文字 / `;` / quote 文字混入
 - 将来予約 directive の使用 (Section 19 参照):
-  - data-prop-X (v0.12 では reserved。use data-arg-X + lookup or expose/lookup instead)
+  - (`data-prop-X` は実装済み — [`lilac-props-spec.md`](./lilac-props-spec.md) 参照)
 - ref / class 衝突:
   - data-class に lil-hidden key + 同要素に data-show/hide
 
@@ -1698,43 +1704,24 @@ end
 
 ## 19. スコープ外 (将来 phase で議論)
 
-### `data-prop-X` (parent → child の Ruby reactive prop 通信) — **予約**
+### Parent signal の継続追従 (`data-prop-X="@signal"` の signal 自動同期)
 
-`data-arg-X` (Section 6.6) が string identity を渡す軽量 channel なのに対し、
-`data-prop-X` は **任意 Ruby 値 (signal を含む) を framework が直接子に
-配線する**重量 channel として将来導入予定。
+現状の `data-prop-X="@signal"` は **初回 mount 時 / row reuse 時の値だけ**
+child の Signal に書き込む(parent の per-row scanner が触る 2 タイミング)。
+parent の signal が他のタイミングで変化しても child には伝わらない。
 
-将来の minimum design idea:
+P3 候補: parent の per-row scanner が `@parent_signal` を effect で watch し、
+変化を `child.update_prop(:x, new_value)` で伝達。詳細は
+[`lilac-props-spec.md` §11](./lilac-props-spec.md)。
 
-```html
-<div data-component="UserCard"
-     data-prop-user="@current_user"
-     data-prop-edit-mode="@is_editing"></div>
-```
+### CLI codegen 経路での `data-prop-X` 値式
 
-```ruby
-class UserCard < Lilac::Component
-  def setup
-    @user = props[:user]            # 親の signal を直接受け取る
-    @edit_mode = props[:edit_mode]
-  end
-end
-```
+runtime canonical 経路では `data-prop-x="it.field"` / `data-prop-x="@ivar"` を
+parent の Scanner が clone-time に解決するが、CLI codegen 経路では未対応。
+CLI を経由して build するページでは `data-prop-X` の値は literal 限定。
 
-`data-arg-X` との住み分け:
-
-| 機構 | 渡せるもの | 媒体 | reactive subscription | v0.12 |
-|---|---|---|---|---|
-| `data-arg-X` | string | DOM data attribute (live, 子は `root.data(:X)` で read-on-demand) | **なし** — 子が ivar に取れば snapshot、event 毎に読み直せば live | **採用** |
-| `data-prop-X` | 任意 Ruby 値 (signal 等) | framework 内部 channel | あり — 親の signal 変化を子の prop に flow | 予約 |
-
-ただし v0.12 では:
-- 文法上 `data-prop-X` を **build error にする** (`reserved for future use, use data-arg-X + lookup or expose/lookup instead`)
-- 実装は次フェーズ
-
-代替:
-- identity を渡したい: `data-arg-X` (Section 6.6)
-- 任意距離の祖先 → 子孫通信: 現行の `expose` / `lookup`
+将来対応: CLI codegen 側に同等の resolve コードを emit するか、CLI build に
+lint warning を追加。
 
 ### その他
 
