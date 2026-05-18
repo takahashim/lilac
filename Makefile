@@ -5,11 +5,13 @@
 # Makefile picks up `mruby/` and `vendor/wasi-sdk/` from there.
 #
 # Targets:
-#   make js-lilac-full     Build → build/mruby-js-lilac-full.wasm
-#   make js-lilac-small    Build → build/mruby-js-lilac-small.wasm
-#   make js-lilac-min      Build → build/mruby-js-lilac-min.wasm
-#   make test                Run wasm_spec against the full bundle
-#   make clean               Remove this repo's build/ artifacts
+#   make lilac-full        Build → build/lilac-full.wasm
+#   make lilac-compiled    Build → build/lilac-compiled.wasm
+#   make lilac-all         Build both variants (dev)
+#   make lilac-all-release Build both variants (release: -Os + strip-debug)
+#   make test              Run wasm_spec against the full bundle
+#   make npm-pack          Stage release wasms into npm/lilac-*/lilac.wasm
+#   make clean             Remove this repo's build/ artifacts
 
 # Locate mruby-wasm-runtime. ENV takes precedence; otherwise look at
 # the sibling directory (../mruby-wasm-runtime).
@@ -41,33 +43,27 @@ TARGET  := wasm32-wasip1
 
 JS_WASM_RELEASE_LDFLAGS := -Wl,--strip-debug
 
-MRUBY_CONFIG_LILAC_FULL  := $(CURDIR)/build_config/wasi-js-lilac-full.rb
-MRUBY_CONFIG_LILAC_SMALL := $(CURDIR)/build_config/wasi-js-lilac-small.rb
-MRUBY_CONFIG_LILAC_MIN   := $(CURDIR)/build_config/wasi-js-lilac-min.rb
+MRUBY_CONFIG_LILAC_FULL     := $(CURDIR)/build_config/lilac-full.rb
+MRUBY_CONFIG_LILAC_COMPILED := $(CURDIR)/build_config/lilac-compiled.rb
 
-LIBMRUBY_LILAC_FULL          := $(MRUBY_DIR)/build/wasi-js-lilac-full/lib/libmruby.a
-LIBMRUBY_LILAC_FULL_RELEASE  := $(MRUBY_DIR)/build/wasi-js-lilac-full-release/lib/libmruby.a
-LIBMRUBY_LILAC_SMALL         := $(MRUBY_DIR)/build/wasi-js-lilac-small/lib/libmruby.a
-LIBMRUBY_LILAC_SMALL_RELEASE := $(MRUBY_DIR)/build/wasi-js-lilac-small-release/lib/libmruby.a
-LIBMRUBY_LILAC_MIN           := $(MRUBY_DIR)/build/wasi-js-lilac-min/lib/libmruby.a
-LIBMRUBY_LILAC_MIN_RELEASE   := $(MRUBY_DIR)/build/wasi-js-lilac-min-release/lib/libmruby.a
+LIBMRUBY_LILAC_FULL             := $(MRUBY_DIR)/build/lilac-full/lib/libmruby.a
+LIBMRUBY_LILAC_FULL_RELEASE     := $(MRUBY_DIR)/build/lilac-full-release/lib/libmruby.a
+LIBMRUBY_LILAC_COMPILED         := $(MRUBY_DIR)/build/lilac-compiled/lib/libmruby.a
+LIBMRUBY_LILAC_COMPILED_RELEASE := $(MRUBY_DIR)/build/lilac-compiled-release/lib/libmruby.a
 
 BUILD_DIR := $(CURDIR)/build
-BUILD_WASM_LILAC_FULL          := $(BUILD_DIR)/mruby-js-lilac-full.wasm
-BUILD_WASM_LILAC_FULL_RELEASE  := $(BUILD_DIR)/mruby-js-lilac-full.release.wasm
-BUILD_WASM_LILAC_SMALL         := $(BUILD_DIR)/mruby-js-lilac-small.wasm
-BUILD_WASM_LILAC_SMALL_RELEASE := $(BUILD_DIR)/mruby-js-lilac-small.release.wasm
-BUILD_WASM_LILAC_MIN           := $(BUILD_DIR)/mruby-js-lilac-min.wasm
-BUILD_WASM_LILAC_MIN_RELEASE   := $(BUILD_DIR)/mruby-js-lilac-min.release.wasm
+BUILD_WASM_LILAC_FULL             := $(BUILD_DIR)/lilac-full.wasm
+BUILD_WASM_LILAC_FULL_RELEASE     := $(BUILD_DIR)/lilac-full.release.wasm
+BUILD_WASM_LILAC_COMPILED         := $(BUILD_DIR)/lilac-compiled.wasm
+BUILD_WASM_LILAC_COMPILED_RELEASE := $(BUILD_DIR)/lilac-compiled.release.wasm
 
 .PHONY: all \
-        js-lilac-full js-lilac-full-release \
-        js-lilac-small js-lilac-small-release \
-        js-lilac-min js-lilac-min-release \
-        js-all js-all-release \
+        lilac-full lilac-full-release \
+        lilac-compiled lilac-compiled-release \
+        lilac-all lilac-all-release \
         test node-deps clean
 
-all: js-lilac-full
+all: lilac-full
 
 # ── libmruby.a builds (one per build_config × release) ──────────────────
 $(LIBMRUBY_LILAC_FULL):
@@ -76,17 +72,11 @@ $(LIBMRUBY_LILAC_FULL):
 $(LIBMRUBY_LILAC_FULL_RELEASE):
 	cd $(MRUBY_DIR) && MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_FULL)
 
-$(LIBMRUBY_LILAC_SMALL):
-	cd $(MRUBY_DIR) && rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_SMALL)
+$(LIBMRUBY_LILAC_COMPILED):
+	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_COMPILED)
 
-$(LIBMRUBY_LILAC_SMALL_RELEASE):
-	cd $(MRUBY_DIR) && MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_SMALL)
-
-$(LIBMRUBY_LILAC_MIN):
-	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_MIN)
-
-$(LIBMRUBY_LILAC_MIN_RELEASE):
-	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_MIN)
+$(LIBMRUBY_LILAC_COMPILED_RELEASE):
+	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_COMPILED)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -107,14 +97,12 @@ $(CLANG) --target=$(TARGET) --sysroot=$(SYSROOT) \
 @echo "Built $(4) ($$(du -h $(4) | cut -f1))"
 endef
 
-js-lilac-full: $(BUILD_WASM_LILAC_FULL)
-js-lilac-full-release: $(BUILD_WASM_LILAC_FULL_RELEASE)
-js-lilac-small: $(BUILD_WASM_LILAC_SMALL)
-js-lilac-small-release: $(BUILD_WASM_LILAC_SMALL_RELEASE)
-js-lilac-min: $(BUILD_WASM_LILAC_MIN)
-js-lilac-min-release: $(BUILD_WASM_LILAC_MIN_RELEASE)
-js-all: js-lilac-full js-lilac-small js-lilac-min
-js-all-release: js-lilac-full-release js-lilac-small-release js-lilac-min-release
+lilac-full: $(BUILD_WASM_LILAC_FULL)
+lilac-full-release: $(BUILD_WASM_LILAC_FULL_RELEASE)
+lilac-compiled: $(BUILD_WASM_LILAC_COMPILED)
+lilac-compiled-release: $(BUILD_WASM_LILAC_COMPILED_RELEASE)
+lilac-all: lilac-full lilac-compiled
+lilac-all-release: lilac-full-release lilac-compiled-release
 
 $(BUILD_WASM_LILAC_FULL): $(LIBMRUBY_LILAC_FULL) | $(BUILD_DIR)
 	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_FULL),$(BUILD_WASM_LILAC_FULL))
@@ -122,24 +110,18 @@ $(BUILD_WASM_LILAC_FULL): $(LIBMRUBY_LILAC_FULL) | $(BUILD_DIR)
 $(BUILD_WASM_LILAC_FULL_RELEASE): $(LIBMRUBY_LILAC_FULL_RELEASE) | $(BUILD_DIR)
 	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_FULL_RELEASE),$(BUILD_WASM_LILAC_FULL_RELEASE))
 
-$(BUILD_WASM_LILAC_SMALL): $(LIBMRUBY_LILAC_SMALL) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_SMALL),$(BUILD_WASM_LILAC_SMALL))
+$(BUILD_WASM_LILAC_COMPILED): $(LIBMRUBY_LILAC_COMPILED) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_COMPILED),$(BUILD_WASM_LILAC_COMPILED))
 
-$(BUILD_WASM_LILAC_SMALL_RELEASE): $(LIBMRUBY_LILAC_SMALL_RELEASE) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_SMALL_RELEASE),$(BUILD_WASM_LILAC_SMALL_RELEASE))
-
-$(BUILD_WASM_LILAC_MIN): $(LIBMRUBY_LILAC_MIN) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_MIN),$(BUILD_WASM_LILAC_MIN))
-
-$(BUILD_WASM_LILAC_MIN_RELEASE): $(LIBMRUBY_LILAC_MIN_RELEASE) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_MIN_RELEASE),$(BUILD_WASM_LILAC_MIN_RELEASE))
+$(BUILD_WASM_LILAC_COMPILED_RELEASE): $(LIBMRUBY_LILAC_COMPILED_RELEASE) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_COMPILED_RELEASE),$(BUILD_WASM_LILAC_COMPILED_RELEASE))
 
 # ── test ────────────────────────────────────────────────────────────────
 node_modules: package.json
 	npm install --no-audit --no-fund --silent
 	@touch node_modules
 
-test: js-lilac-full node_modules
+test: lilac-full node_modules
 	MRUBY_WASM_PATH=$(BUILD_WASM_LILAC_FULL) \
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node test/runner.mjs
@@ -155,7 +137,7 @@ mrbgem:
 	@cp -R $(MRUBY_WASM_RUNTIME)/mrbgem mrbgem
 
 .PHONY: serve
-serve: js-lilac-full mrbgem
+serve: lilac-full mrbgem
 	@command -v wsv >/dev/null 2>&1 || { \
 	  echo "wsv not installed. Run: gem install wsv"; \
 	  exit 1; \
@@ -164,7 +146,31 @@ serve: js-lilac-full mrbgem
 	@echo "Examples: http://127.0.0.1:8000/examples/"
 	@wsv .
 
+# ── npm package staging ─────────────────────────────────────────────────
+# Copies *.release.wasm into npm/{lilac-full,lilac-compiled}/lilac.wasm
+# so the variant packages can be `npm publish`'d from those directories.
+# Uses *-release artefacts (= -Os + symbol stripping); dev wasms are ~5x
+# larger and not suitable for end users.
+NPM_DIR := $(CURDIR)/npm
+
+.PHONY: npm-pack
+npm-pack: $(NPM_DIR)/lilac-full/lilac.wasm $(NPM_DIR)/lilac-compiled/lilac.wasm
+	@echo "npm packages staged. To publish:"
+	@echo "  cd npm/lilac-full     && npm publish"
+	@echo "  cd npm/lilac-compiled && npm publish"
+
+$(NPM_DIR)/lilac-full/lilac.wasm: $(BUILD_WASM_LILAC_FULL_RELEASE)
+	cp $< $@
+
+$(NPM_DIR)/lilac-compiled/lilac.wasm: $(BUILD_WASM_LILAC_COMPILED_RELEASE)
+	cp $< $@
+
+.PHONY: npm-clean
+npm-clean:
+	rm -f $(NPM_DIR)/lilac-full/lilac.wasm
+	rm -f $(NPM_DIR)/lilac-compiled/lilac.wasm
+
 # ── clean ───────────────────────────────────────────────────────────────
 clean:
-	rm -rf $(MRUBY_DIR)/build/wasi-js-lilac-*
+	rm -rf $(MRUBY_DIR)/build/lilac-*
 	rm -rf $(BUILD_DIR)

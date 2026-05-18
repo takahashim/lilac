@@ -44,10 +44,10 @@ canonical な仕様であり、文書中の API / 挙動はすべて実装済み
 ### Form gem の位置付け
 
 `mruby-lilac-form` は **core 機能** として `mruby-lilac` の全 build variant
-(`full` / `small` / `min`)に同梱される。理由:
+(`full` / `compiled`)に同梱される。理由:
 
 - input binding が form 中心になることで、form gem は事実上必須
-- `lilac-min` でも declarative input が動かないと validation 不可
+- `lilac-compiled` でも declarative input が動かないと validation 不可
 - 「form は便利機能の1つ」ではなく「Lilac の中心 input 機構」
 
 ## 2. 非目標
@@ -1260,7 +1260,7 @@ scope 違反(§11.2.1 / §11.2.2 を参照、ここでは要点のみ):
 - `<input form="...">` 属性 → `Lilac.logger.warn` で 1 回警告、属性自体は無視
 
 gem 未ロード:
-- `Lilac::Form` クラス未定義(form gem 未ロード、`js-lilac-min` 等) → `Lilac.logger.warn` で1回警告して silent skip(他の directive と同じ severity policy)
+- `Lilac::Form` クラス未定義(form gem 未ロード — `full` / `compiled` どちらも同梱しているので通常は発生しない、カスタムビルド時のみ) → `Lilac.logger.warn` で1回警告して silent skip(他の directive と同じ severity policy)
 
 ### 11.7 Lilac 内部 type の意味
 
@@ -1595,7 +1595,7 @@ form(:signup) の `:submit` handler に、`<form data-form="login">` の同
 
 ### 18.1 form gem の core 統合
 
-`mruby-lilac-form` は **core 機能** として `build_config/wasi-js-lilac-{full,small,min}.rb`
+`mruby-lilac-form` は **core 機能** として `build_config/lilac-{full,compiled}.rb`
 すべてに同梱される(独立 gem は維持、全 variant で必須)。
 
 `mruby-lilac-directives` の scanner は依然 form gem ロード状況に依存。

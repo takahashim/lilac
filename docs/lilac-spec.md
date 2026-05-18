@@ -1845,17 +1845,20 @@ mruby は `if x.nil?` を型タグチェックにインライン化し、`#nil?`
 
 ### `Regexp` の扱い
 
-`mruby-regexp-compat` (mruby master の `mruby-regexp` をベンダー) を `js-lilac-full` / `js-lilac-small` バンドルに同梱しているので、ランタイム内部でもユーザコードからも普通に Regexp / `=~` / `match?` が使える。`js-lilac-min` は意図的に同梱外。
+`mruby-regexp-compat` (mruby master の `mruby-regexp` をベンダー) を `lilac-full` / `lilac-compiled` バンドル両方に同梱しているので、ランタイム内部でもユーザコードからも普通に Regexp / `=~` / `match?` が使える。
 
 例外として、`HTML.escape` だけは hot path (text バインド毎に走る) なので Regexp / `gsub` の per-call allocation を避けて `each_char` + case で実装している。他のバリデータ (`AttrName`、`Lilac::Directives::Grammar` の文法 predicate など) は one-shot 呼び出しなので普通に Regexp を使う。
 
 ### Build size
 
-`build_config/wasi-js.rb` で2つのプロファイル:
-- debug: `make js` → ~4.4 MB (.debug_* セクション保持、開発用)
-- release: `make js-release` → ~830 KB (`-Os` + `--strip-debug`、配布用、gzip 後 ~315 KB)
+2 つの build variant (`build_config/lilac-full.rb` / `lilac-compiled.rb`)、それぞれ debug / release プロファイル:
 
-`make dist-js` は release を使う。
+| Variant | Target | Size (raw / brotli) | Use case |
+|---|---|---|---|
+| `full`     | `make lilac-full-release`     | ~1.0 MB / ~322 KB | runtime canonical, no build step |
+| `compiled` | `make lilac-compiled-release` | ~530 KB / ~175 KB | production, requires `lilac build` |
+
+Debug ターゲット (`make lilac-{full,compiled}`) は `.debug_*` セクション保持 + `-O0`、開発用。`make npm-pack` は release を `npm/lilac-{full,compiled}/lilac.wasm` に stage する。
 
 ---
 

@@ -29,7 +29,7 @@ lilac/
 ├── build_config/   # mruby cross-build configs for the wasm bundles
 ├── docs/           # directive spec, framework design notes
 ├── examples/       # standalone Lilac apps
-└── Makefile        # builds mruby-js-lilac-{full,small,min}.wasm
+└── Makefile        # builds lilac-{full,compiled}.wasm
 ```
 
 `mruby-wasm-runtime` is a **separate repo** that owns the underlying
@@ -58,7 +58,7 @@ make wasi-sdk
 #
 # 4. Build the full Lilac wasm bundle
 cd ../lilac
-make js-lilac-full      # → build/mruby-js-lilac-full.wasm
+make lilac-full         # → build/lilac-full.wasm
 ```
 
 ## Quick start: open and run
@@ -90,7 +90,7 @@ file with `data-*` directives and an inline `<script type="text/ruby">`:
 
     <script type="module">
       import { createVM } from "../mruby-wasm-runtime/mrbgem/mruby-wasm-js/js/index.js";
-      const vm = await createVM({ wasm: "./build/mruby-js-lilac-full.wasm" });
+      const vm = await createVM({ wasm: "./build/lilac-full.wasm" });
       vm.evalScript("#ruby-source");
     </script>
   </body>
@@ -113,9 +113,8 @@ make serve   # builds the wasm bundle, symlinks mrbgem, starts wsv
 
 | Variant | Compiler | Mrbgems | Use case |
 |---|---|---|---|
-| `js-lilac-min` | ❌ (apps must ship `mrbc`-compiled IREP) | core only | smallest production wasm |
-| `js-lilac-small` | ✅ | core only | dev with eval, no async/router/form |
-| `js-lilac-full` | ✅ | core + async + router + form | full-featured dev / production |
+| `lilac-full` | ✅ | core + directives + async + router + form + regexp-compat | default, no-build, runtime canonical |
+| `lilac-compiled` | ❌ (apps must ship `mrbc`-compiled IREP via `lilac build`) | core + form + regexp-compat | production size optimization |
 
 Add `-release` to any target for the optimised (`-Os --strip-debug`)
 variant.

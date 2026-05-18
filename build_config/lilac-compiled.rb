@@ -1,13 +1,24 @@
-# mruby cross-build for the production "min" Lilac variant.
+# mruby cross-build for the "compiled" Lilac variant.
 #
-# Goals: smallest possible JS-host wasm that still runs Lilac.
-#  - no async / router / form
-#  - no mruby-compiler (and no mruby-eval) → no runtime source eval
-#  - only the core mrbgems Lilac actually touches
+# Goals: smallest production JS-host wasm. Companion to `lilac-cli`
+# (Ruby gem) — apps shipped against this build MUST be pre-compiled
+# with `lilac build` / `mrbc` and loaded via `vm.loadIrep(bytes)`.
+# `vm.eval(source)` raises NotImplementedError (the JS bridge surfaces
+# it) because no mruby-compiler is bundled.
 #
-# Apps shipped against this build MUST be pre-compiled with `mrbc` and
-# loaded via `vm.loadIrep(bytes)`. `vm.eval(source)` raises
-# NotImplementedError (the JS bridge surfaces it).
+# What's in:
+#  - Lilac core + Lilac form gem (decisions §2: form is core)
+#  - mruby-regexp-compat (Regexp class for user code & form validators)
+#  - tightly-selected mruby core gems Lilac actually touches
+#
+# What's out:
+#  - mruby-compiler / mruby-eval (= no runtime parser)
+#  - Lilac directives scanner (CLI codegen emits explicit
+#    `Lilac::Bindings::*` modules; runtime needs no scanner)
+#  - Lilac async (Fetchy / Resource) / router
+#  - WASI io (mruby-io / mruby-wasi-*)
+#
+# Surfaces as `@takahashim/lilac-compiled` on npm (see npm/lilac-compiled/).
 #
 # Environment knobs:
 #   MRUBY_WASM_RELEASE=1     enable -Os + --strip-debug
@@ -16,7 +27,7 @@
 LOCAL_WASM_RUNTIME = ENV["MRUBY_WASM_RUNTIME_PATH"]
 unless LOCAL_WASM_RUNTIME && File.directory?(LOCAL_WASM_RUNTIME)
   abort "Set MRUBY_WASM_RUNTIME_PATH to a local mruby-wasm-runtime clone " \
-        "(see .envrc or wasi-js-lilac-full.rb)"
+        "(see .envrc or lilac-full.rb)"
 end
 
 wasi_sdk = ENV.fetch("WASI_SDK_PATH") { abort "Set WASI_SDK_PATH" }
@@ -26,7 +37,7 @@ ar = "#{wasi_sdk}/bin/llvm-ar"
 target = "wasm32-wasip1"
 
 release = ENV["MRUBY_WASM_RELEASE"] == "1"
-build_name = "wasi-js-lilac-min"
+build_name = "lilac-compiled"
 build_name += "-release" if release
 mwr_mrbgem   = "#{LOCAL_WASM_RUNTIME}/mrbgem"
 runtime_dir  = File.expand_path("../runtime", __dir__)
@@ -43,7 +54,10 @@ MRuby::CrossBuild.new(build_name) do |conf|
   sjlj_flags = ["-mllvm", "-wasm-enable-sjlj"]
   shim_dir = "#{mwr_mrbgem}/hal-wasi-io/include"
   stub_flags = ["-isystem", shim_dir, "-include", "#{shim_dir}/wasi-shims.h"]
-  size_flags = release ? ["-Os"] : []
+  # -Oz over -Os: ~5% smaller wasm; the compiled variant prioritizes
+  # bundle size over throughput (apps are CLI-precompiled anyway).
+  # -flto enables cross-TU dead-code elimination at link time.
+  size_flags = release ? ["-Oz", "-flto"] : []
 
   conf.cc.flags.concat(common_flags + size_flags + sjlj_flags + stub_flags)
   conf.cxx.flags.concat(common_flags + size_flags + sjlj_flags + stub_flags)
@@ -77,6 +91,7 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem core: "mruby-sprintf"     # Kernel#sprintf, "%s" % ...
 
   conf.gem "#{mwr_mrbgem}/mruby-wasm-js"
+  conf.gem "#{runtime_dir}/mruby-regexp-compat"  # Regexp class for user code & form validators
   conf.gem "#{runtime_dir}/mruby-lilac"
   conf.gem "#{runtime_dir}/mruby-lilac-form"   # Phase A: form is core
 

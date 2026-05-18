@@ -88,7 +88,7 @@ input / textarea / select / checkbox の declarative binding は **form 経由
 
 ### 2.4 トレードオフ
 
-- form gem が **core 機能化**(`lilac-min` 含む全 variant 同梱、現状の
+- form gem が **core 機能化**(`lilac-compiled` 含む全 variant 同梱、現状の
   optional 位置付けを変更)
 - 検索ボックスやトグル等を「form」と呼ぶ違和感(API ergonomics で緩和:
   `form.field :query, initial: ""` の 1 行で済むようにする)

@@ -81,7 +81,7 @@ puts "counter component mounted"
       import { createVM } from "../mrbgem/mruby-wasm-js/js/index.js";
       const status = document.getElementById("status");
       try {
-        const vm = await createVM({ wasm: "../build/mruby-js-lilac-full.wasm" });
+        const vm = await createVM({ wasm: "../build/lilac-full.wasm" });
         vm.evalScript("#ruby-source");
         status.textContent = "ready";
       } catch (err) {

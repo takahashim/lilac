@@ -26,5 +26,14 @@ build_config/*.lock
 /cli/Gemfile.lock
 /cli/pkg/
 
+# npm wasm artefacts copied by `make npm-pack` from build/*.release.wasm.
+# JS / package.json / LICENSE / README stay tracked.
+/npm/lilac-full/lilac.wasm
+/npm/lilac-compiled/lilac.wasm
+
+# npm
+/npm/lilac-*/node_modules/
+/npm/lilac-*/package-lock.json
+
 # Misc
 *.tsbuildinfo

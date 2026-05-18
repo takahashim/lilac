@@ -18,7 +18,7 @@ module Lilac
       Result = Struct.new(:level, :message, keyword_init: true)
 
       # Where the wasm runtime is expected to live, relative to public_dir.
-      RUNTIME_WASM = "vendor/mruby-js-lilac-full.wasm"
+      RUNTIME_WASM = "vendor/lilac-full.wasm"
       RUNTIME_JS_ADAPTER = "vendor/mruby-wasm-js/index.js"
 
       def initialize(config, out: $stdout)

@@ -1,10 +1,11 @@
 # mruby cross-build for the Lilac "full" variant — compiler + all
-# Lilac gems (core / async / router / form). Produces
-# `mruby-js-lilac-full.wasm`.
+# Lilac gems (core / directives / async / router / form). Produces
+# `build/lilac-full.wasm`. Surfaces as `@takahashim/lilac-full` on
+# npm (see npm/lilac-full/).
 #
-# Sibling configs in this repo:
-#   build_config/wasi-js-lilac-min.rb    — no compiler, Lilac core only
-#   build_config/wasi-js-lilac-small.rb  — compiler, Lilac core only
+# Sibling config in this repo:
+#   build_config/lilac-compiled.rb — no compiler, Lilac core + form
+#   + Regexp; for apps pre-built with `lilac-cli`.
 #
 # Build mode (debug vs release) is selected via MRUBY_WASM_RELEASE.
 #
@@ -48,7 +49,7 @@ ar = "#{wasi_sdk}/bin/llvm-ar"
 target = "wasm32-wasip1"
 
 release = ENV["MRUBY_WASM_RELEASE"] == "1"
-build_name = release ? "wasi-js-lilac-full-release" : "wasi-js-lilac-full"
+build_name = release ? "lilac-full-release" : "lilac-full"
 
 # Bridge mrbgems live in mruby-wasm-runtime; framework mrbgems live
 # in this repo's runtime/ subdir.

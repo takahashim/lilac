@@ -558,7 +558,7 @@ Lilac.start
       globalThis.__tryRubyHost = host;
 
       try {
-        host.vm = await createVM({ wasm: "../build/mruby-js-lilac-full.wasm" });
+        host.vm = await createVM({ wasm: "../build/lilac-full.wasm" });
         host.vm.evalScript("#ruby-source");
       } catch (err) {
         const status = document.querySelector("[data-ref='status']");

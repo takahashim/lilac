@@ -137,8 +137,8 @@ module Lilac
         @out.puts
         @out.puts "  # 1. Install the mruby-wasm runtime (one-time, ~5MB):"
         @out.puts "  mkdir -p public/vendor/mruby-wasm-js"
-        @out.puts "  cp /path/to/mruby-wasm-runtime/build/mruby-js-lilac-full.wasm \\"
-        @out.puts "     public/vendor/mruby-js-lilac-full.wasm"
+        @out.puts "  cp /path/to/lilac/build/lilac-full.wasm \\"
+        @out.puts "     public/vendor/lilac-full.wasm"
         @out.puts "  cp -r /path/to/mruby-wasm-runtime/mrbgem/mruby-wasm-js/js/* \\"
         @out.puts "        public/vendor/mruby-wasm-js/"
         @out.puts

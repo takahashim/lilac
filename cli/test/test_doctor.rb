@@ -31,7 +31,7 @@ class TestDoctor < Minitest::Test
       <template><div data-component="counter"></div></template>
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
-    File.write(File.join(@tmp, "public", "vendor", "mruby-js-lilac-full.wasm"), "WASM")
+    File.write(File.join(@tmp, "public", "vendor", "lilac-full.wasm"), "WASM")
     File.write(File.join(@tmp, "public", "vendor", "mruby-wasm-js", "index.js"), "export {}")
   end
 
@@ -52,7 +52,7 @@ class TestDoctor < Minitest::Test
 
   def test_fails_when_runtime_wasm_missing
     scaffold_minimal_project
-    FileUtils.rm(File.join(@tmp, "public", "vendor", "mruby-js-lilac-full.wasm"))
+    FileUtils.rm(File.join(@tmp, "public", "vendor", "lilac-full.wasm"))
 
     status, out = run_doctor
     refute_equal 0, status

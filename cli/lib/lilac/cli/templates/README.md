@@ -19,8 +19,8 @@ both in dev (`lilac dev`) and in production (`lilac build`).
 
 ```sh
 mkdir -p public/vendor/mruby-wasm-js
-cp /path/to/mruby-wasm-runtime/build/mruby-js-lilac-full.wasm \
-   public/vendor/mruby-js-lilac-full.wasm
+cp /path/to/lilac/build/lilac-full.wasm \
+   public/vendor/lilac-full.wasm
 cp -r /path/to/mruby-wasm-runtime/mrbgem/mruby-wasm-js/js/* \
        public/vendor/mruby-wasm-js/
 ```
