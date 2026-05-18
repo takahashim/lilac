@@ -211,10 +211,16 @@ data-each で代替可能** になった。
 
 ### 6.1 判断
 
-- **runtime が raise する違反は build 時も error**(undeclared form / field
-  / button、文法エラー、banned attribute 等)
-- **runtime が warn する違反のみ build 時も warning**(form gem 未ロード、
-  form scope 外の submit ボタン等の ergonomics 系)
+- **runtime が raise する違反は build 時も error**(例: undeclared
+  `data-button`、directive 文法エラー、banned `data-attr-X` 属性)
+- **runtime が warn / auto-recover する違反は build 時も warning**
+  (例: undeclared `data-field` は runtime で auto-register、undeclared
+  `data-form` は auto-create、form gem 未ロード時の `data-field` は silent
+  skip — いずれも warning)
+
+判断のキーは「runtime がエラーで止まるかどうか」。runtime が auto-X で
+recover する違反を build error にすると、書いた通り動く HTML が build を
+通らなくなり原則から外れる。
 
 ### 6.2 背景
 
@@ -708,7 +714,7 @@ P1 完了直後の `examples/lilac-todo.html` の修正で、`<ul data-each="@it
 の boundary 規則(data-component subtree を child の Scanner に任せる)と
 衝突 — child は parent の iteration item を知らないので resolve できない。
 
-複数の代替案を比較した結果(`canonical-js-ts-mighty-beaver.md` plan 履歴参照):
+複数の代替案を比較した結果:
 
 - 案A: `it` を child に貫通させる Iteration registry → component 境界の暗黙
   leak が将来の reactive props と概念衝突 → 不採用
@@ -748,7 +754,8 @@ P1 完了直後の `examples/lilac-todo.html` の修正で、`<ul data-each="@it
 - **mount lifecycle に +2 step**: `install_prop_ivars!` (Props.build 直後) と
   `validate_prop_ivars_not_overwritten!` (setup 直後)。lifecycle 全体が
   begin/rescue 連発になりやすいので `run_lifecycle_step(label) { ... }` の
-  helper に統合(`docs/lilac-spec.md` Lifecycle 節)
+  helper に統合(実装は `runtime/mruby-lilac/mrblib/lilac_component.rb` の
+  `mount` 経路)
 - **`@X` の意味二重性**: `@X` は ivar (user 定義) または prop (`prop :X` で
   auto-init) のいずれか。同名衝突は override 検出で raise されるので「両方
   存在する」状態は発生しないが、新規読者は「`@title` の出所」を判別するため

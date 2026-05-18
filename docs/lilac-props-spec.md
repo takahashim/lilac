@@ -484,110 +484,20 @@ component.props = props_object (instance attr)
 component.setup を呼ぶ(従来通り)
 ```
 
-### 10.2 `prop` DSL の実装スケッチ
+### 10.2 実装の SSOT
 
-```ruby
-module Lilac
-  class Component
-    class << self
-      def prop(name, type, default: :__no_default__)
-        @prop_declarations ||= {}
-        @prop_declarations[name] = { type: type, default: default }
-        nil
-      end
+`prop` DSL / `Props.build` / `Props.coerce` / `install_prop_ivars!` /
+`validate_prop_ivars_not_overwritten!` / `update_prop` の正確な実装は次の
+2 ファイルに集約:
 
-      def prop_declarations
-        @prop_declarations || {}
-      end
-    end
+- `runtime/mruby-lilac/mrblib/lilac_props.rb` — `Props` クラスと build / coerce
+- `runtime/mruby-lilac/mrblib/lilac_component.rb` — `prop` class-method、
+  mount lifecycle (`install_prop_ivars!` / `validate_prop_ivars_not_overwritten!` /
+  `update_prop`)
 
-    attr_reader :props
-
-    # scanner / mount logic が呼ぶ
-    def assign_props(raw_attrs)
-      @props = Lilac::Props.new(self.class.prop_declarations, raw_attrs, self.class.name)
-    end
-  end
-
-  class Props
-    def initialize(declarations, raw_attrs, component_name)
-      @values = {}
-      declarations.each do |name, spec|
-        attr_key = "prop-#{name.to_s.tr('_', '-')}"
-        if raw_attrs.key?(attr_key)
-          @values[name] = convert(spec[:type], raw_attrs[attr_key], name, component_name)
-        elsif spec[:default] != :__no_default__
-          @values[name] = spec[:default]
-        else
-          raise Lilac::Error, "required prop :#{name} is missing in component #{component_name}"
-        end
-      end
-      warn_unknown_props(declarations, raw_attrs, component_name)
-    end
-
-    def method_missing(name, *args)
-      if @values.key?(name)
-        @values[name]
-      else
-        super
-      end
-    end
-
-    def respond_to_missing?(name, _private = false)
-      @values.key?(name) || super
-    end
-
-    def has?(name)
-      @values.key?(name)
-    end
-
-    def to_h
-      @values.dup
-    end
-
-    private
-
-    def convert(type, value, name, component_name)
-      case type
-      when String
-        value
-      when Integer
-        Integer(value)
-      when Float
-        Float(value)
-      when ::TrueClass.singleton_class, ::FalseClass.singleton_class
-        # 上は使えないので実際は `when Boolean` でなく特別 check
-        convert_boolean(value, name, component_name)
-      else
-        raise Lilac::Error, "unsupported prop type #{type} for :#{name}"
-      end
-    rescue ArgumentError, TypeError => e
-      raise Lilac::Error,
-            "data-prop-#{name.to_s.tr('_', '-')}=#{value.inspect} cannot be converted to #{type} " \
-            "in component #{component_name}: #{e.message}"
-    end
-
-    def convert_boolean(value, name, component_name)
-      case value
-      when "true" then true
-      when "false" then false
-      when "", nil then true   # presence shortcut
-      else
-        raise Lilac::Error,
-              "data-prop-#{name.to_s.tr('_', '-')}=#{value.inspect} is invalid Boolean " \
-              "(use \"true\" / \"false\" / presence shortcut) in component #{component_name}"
-      end
-    end
-  end
-
-  # Ruby に Boolean class が無いので Lilac 独自 sentinel を提供
-  module Boolean
-  end
-end
-```
-
-(`Boolean` 表現は Ruby に組み込み class が無いので、`Lilac::Boolean` sentinel
-module で代用。`prop :x, Lilac::Boolean` と書く想定。これは spec で明示する。)
+本 spec は contract と semantics を SSOT として持ち、実装の細部 (型変換の
+コード片、`Lilac::Boolean` sentinel の判定方法等) は実装ファイル側に委ねる。
+これにより spec がコード変更に追従しない drift を防ぐ。
 
 ### 10.3 `mruby-lilac-props` gem の位置付け
 

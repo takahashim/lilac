@@ -1248,6 +1248,8 @@ field / control 単位:
 
 宣言 / lookup:
 - `data-button` で指定した名前の button が form に無い → `Lilac::Error` raise
+  (build 時にも `CrossRefLinter` が **error** として検出して build を fail
+  させる — §13 参照)
 - `data-field` で指定した名前の field が auto-register もできない場合
   (form gem 未ロード等)→ `Lilac::Error` raise
 
@@ -1343,7 +1345,7 @@ end
 
 両者で観察される DOM 変化は同一(parity test で担保)。
 
-## 13. CLI codegen との整合
+## 13. CLI build との整合 (codegen + cross-ref lint)
 
 CLI の `lilac build` でも `data-form` / `data-field` / `data-button` を
 解釈し、`bind_template_hook` 内に Ruby を生成する。**ただし現行実装では

@@ -93,7 +93,7 @@ Lilac は **Solid 系の fine-grained reactivity** を中核に置き、template
 | `?` predicate は read だけ | read-only query は安全、handler 名としては typo 元 |
 | `computed` / `Data.define` で view model 強制 | logic を Ruby class に集約 |
 | method 名のみ `data-on-X` | dispatch-style (Stimulus 継承) |
-| `data-value` / `data-checked` は **Phase D で削除済み** — input 双方向 bind は `data-field` + form 経由(form-spec §10) | form 抽象に統合、validation / touched / dirty が自動で得られる |
+| `data-value` / `data-checked` は **Phase D で削除済み** — input 双方向 bind は `data-field` + form 経由(form-spec §11) | form 抽象に統合、validation / touched / dirty が自動で得られる |
 | `data-arg-X` は DOM data attribute 経由の string 渡し限定、reactive subscription API は提供しない | bind_list の stateless body 規律と整合、kanban 既存 pattern と互換、reactive 経路は `expose / lookup` 側に集約 |
 | `data-class` の hash key は Ruby Hash syntax と同じ (bare は Ruby ident、kebab / 特殊文字は quoted) | Ruby grammar 借用を完全に貫く、変換 magic ゼロ、Vue/Solid/React classNames と同じ規約 |
 | `RefElement` / `Template` に Turbo Streams 風の DOM 基本動詞 (`append` / `prepend` / `remove` / `replace_with` / `before` / `after`) を Ruby method として提供 | `method_missing` 経由でなく explicit な API、Ruby world で書ける範囲を広げ、`to_js` への escape を減らす |
@@ -294,18 +294,18 @@ class Admin::UserCard < Lilac::Component; end
 
 ### Form 統合 directive(別 spec 参照)
 
-input / button の form 連携は **`docs/lilac-form-spec.md` Section 10** で
+input / button の form 連携は **`docs/lilac-form-spec.md` Section 11** で
 定義される独立の directive group:
 
 | Directive | 役割 | 詳細 |
 |---|---|---|
-| `data-form="<name>"` | form scope 宣言 | [form-spec §10.2](./lilac-form-spec.md) |
-| `data-field="<name>"` | field の UI 自動 wire | [form-spec §10.3](./lilac-form-spec.md) |
-| `data-button="<name>"` | named action button | [form-spec §10.5](./lilac-form-spec.md) |
+| `data-form="<name>"` | form scope 宣言 | [form-spec §11.2](./lilac-form-spec.md) |
+| `data-field="<name>"` | field の UI 自動 wire | [form-spec §11.3](./lilac-form-spec.md) |
+| `data-button="<name>"` | named action button | [form-spec §11.5](./lilac-form-spec.md) |
 
 ### 廃止された directive
 
-以下は **Phase D で削除予定**(削除前の旧仕様の参考のため記載):
+以下は **Phase D で削除済み**(旧仕様の参考のため記載):
 
 - `data-value="@s"` (ivar only) → form 経由 (`data-field`) に統合。汎用
   signal binding は命令的 `bind_input refs.X, @signal` を escape hatch
@@ -313,7 +313,7 @@ input / button の form 連携は **`docs/lilac-form-spec.md` Section 10** で
 - `data-checked="@s"` (ivar only) → 同上。checkbox/radio は
   `f.field :name, type: :checkbox` で form 経由
 
-旧コードからの migration は form-spec §10.8 参照。
+旧コードからの migration は form-spec §11.8 参照。
 
 ---
 
@@ -394,7 +394,7 @@ code でも使わない。
 #### 廃止の理由
 
 input/checkbox の declarative binding は **form 経由が canonical**(form-spec
-§1, §10 参照)。`data-value` / `data-checked` の汎用 ivar binding は廃止し、
+§1, §11 参照)。`data-value` / `data-checked` の汎用 ivar binding は廃止し、
 全 input binding を form の `f.field` + HTML の `data-field` に集約する。
 
 理由:
