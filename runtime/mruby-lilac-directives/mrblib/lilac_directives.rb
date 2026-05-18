@@ -14,11 +14,15 @@ module Lilac
   # components built without the CLI.
   #
   # Submodules:
-  #   - `Grammar`   — name-shaped token predicates (method ident, kebab, ...)
-  #   - `Value`     — `@ivar` / `it[.field]` parsed RHS
-  #   - `Evaluator` — resolves Value against host + iteration item
-  #   - `Compat`    — runtime compatibility / element-type checks
-  #   - `Scanner`   — DOM walk + per-directive dispatch
+  #   - `Grammar`      — name-shaped token predicates (method ident, kebab, ...)
+  #   - `Value`        — `@ivar` / `it[.field]` / bare ident parsed RHS
+  #   - `Evaluator`    — resolves Value against host + iteration item
+  #   - `ItemField`    — single-source lookup of `item[name]` (Hash sym → str
+  #                      → public_send), shared by Evaluator and PropAutoFill
+  #   - `PropAutoFill` — populates child component props from iteration item
+  #                      when no explicit `data-prop-X` is given
+  #   - `Compat`       — runtime compatibility / element-type checks
+  #   - `Scanner`      — DOM walk + per-directive dispatch
   module Directives
   end
 end

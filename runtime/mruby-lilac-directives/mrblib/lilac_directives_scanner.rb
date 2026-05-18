@@ -138,16 +138,8 @@ module Lilac
       # are literals. Bare ident in other directives means "item field",
       # but for data-prop-* the literal interpretation wins so that
       # `data-prop-status="todo"` remains a literal string. Iteration
-      # field flow into child components goes through the **auto-fill**
-      # path below.
-      #
-      # **Auto-fill (data-each scope only)**: when the child's
-      # `prop :X` declaration has no explicit `data-prop-X` attribute
-      # AND the current iteration item carries key `"X"` / `:X`, write
-      # `item[X]` as the attribute so the child's `Props.build` sees it
-      # as if the user had written `data-prop-X="<value>"`. Lookup
-      # priority: explicit attribute > item field > declared default >
-      # required-prop error.
+      # field flow into child components goes through `PropAutoFill`
+      # invoked at the end of this method.
       def resolve_props(el, item)
         # First pass: evaluate existing data-prop-* expressions (Ivar /
         # ItPath) so item context flows even if the user wrote the
@@ -168,41 +160,13 @@ module Lilac
           i += 1
         end
 
-        autofill_props_from_item(el, item) if item
+        # Second pass: fill in any unset data-prop-X attributes from the
+        # iteration item by name match (data-each scope only). Owned by
+        # `PropAutoFill` so the scanner doesn't accrete prop-mapping
+        # responsibilities.
+        PropAutoFill.fill_attributes(el, item)
       rescue Lilac::Error => e
         Lilac.logger.error("data-prop-*", e, source: @host)
-      end
-
-      # Auto-fill: for each `prop :X` declared on the child class that
-      # lacks an explicit `data-prop-X` attribute on this element, look
-      # up `item[X]` (Hash sym → str fallback) and write it as the
-      # attribute. No-op if the child class can't be resolved (the
-      # scanner skips auto-fill silently rather than blocking the row).
-      def autofill_props_from_item(el, item)
-        comp_name_raw = el.call(:getAttribute, "data-component")
-        return if comp_name_raw.js_null?
-        comp_name = comp_name_raw.to_s
-        return if comp_name.empty?
-        klass = Lilac.registry.find_component_class(comp_name)
-        return unless klass && klass.respond_to?(:prop_declarations)
-        klass.prop_declarations.each do |prop_name, _spec|
-          attr_key = "data-prop-#{prop_name.to_s.tr('_', '-')}"
-          next if el.call(:hasAttribute, attr_key).js_bool
-          field_value = lookup_item_field(item, prop_name)
-          next if field_value.nil?
-          el.call(:setAttribute, attr_key, field_value.to_s)
-        end
-      end
-
-      def lookup_item_field(item, prop_name)
-        if item.is_a?(Hash)
-          return item[prop_name] if item.key?(prop_name)
-          str_key = prop_name.to_s
-          return item[str_key] if item.key?(str_key)
-          nil
-        elsif item.respond_to?(prop_name)
-          item.public_send(prop_name)
-        end
       end
 
       # Per-element record built during collection. Captures everything
@@ -539,7 +503,7 @@ module Lilac
           # template, populated from the iteration item on first mount).
           if prev_t
             push_prop_updates(row_node, it, row_prop_exprs, evaluator) unless row_prop_exprs.empty?
-            push_autofill_prop_updates(row_node, it, row_prop_exprs)
+            PropAutoFill.push_updates(row_node, it, row_prop_exprs, host: host)
           end
           # Fresh Scanner per row keeps `@evaluator` bound to the same
           # host (so `@ivar` continues to resolve on the host) but
@@ -590,34 +554,6 @@ module Lilac
             child.update_prop(prop_name, resolved.to_s)
           rescue Lilac::Error => e
             Lilac.logger.error("data-prop reuse #{attr_name}", e, source: @host)
-          end
-        end
-      end
-
-      # Row reuse twin of `autofill_props_from_item`: push fresh item
-      # values into the already-mounted child's prop signals for every
-      # declared prop NOT covered by an explicit data-prop-X expression.
-      # `skip_exprs` is the prop_exprs hash so we don't double-push props
-      # that `push_prop_updates` already handled.
-      def push_autofill_prop_updates(row_node, item, skip_exprs)
-        child = Lilac.find_for_element(row_node)
-        return unless child
-        return unless child.respond_to?(:update_prop)
-        klass = child.class
-        return unless klass.respond_to?(:prop_declarations)
-        explicit = {}
-        skip_exprs.each_key do |attr_name|
-          name = attr_name.sub("data-prop-", "").tr("-", "_").to_sym
-          explicit[name] = true
-        end
-        klass.prop_declarations.each_key do |prop_name|
-          next if explicit[prop_name]
-          field_value = lookup_item_field(item, prop_name)
-          next if field_value.nil?
-          begin
-            child.update_prop(prop_name, field_value.to_s)
-          rescue Lilac::Error => e
-            Lilac.logger.error("data-prop auto-fill reuse :#{prop_name}", e, source: @host)
           end
         end
       end
