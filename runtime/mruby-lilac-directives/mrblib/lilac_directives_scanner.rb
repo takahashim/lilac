@@ -25,8 +25,13 @@ module Lilac
       DIRECTIVE_PATTERNS = [
         [/\Adata-text\z/,        :text,        false],
         [/\Adata-unsafe-html\z/, :unsafe_html, false],
-        # data-value / data-checked were removed in Phase D (form-spec
-        # §10.8 deprecation). Use `<input data-field="X">` + form gem.
+        # data-bind is the form-independent two-way binding directive
+        # (revived & unified successor of the Phase-D-removed data-value
+        # / data-checked). Property auto-selected from element type:
+        # <input type=checkbox> → :checked, others → :value. Coexists
+        # with data-field (form-spec §11.3) which adds form-scope
+        # registration + error UI wiring; Compat raises on collision.
+        [/\Adata-bind\z/,        :bind,        false],
         [/\Adata-show\z/,        :show,        false],
         [/\Adata-hide\z/,        :hide,        false],
         [/\Adata-each\z/,        :each,        false],
@@ -124,10 +129,29 @@ module Lilac
       # For each `data-prop-*` attribute whose value parses as `@ivar` or
       # `it.field`, evaluate it against the current scope and write the
       # resolved scalar back as the attribute value. Pure literals (parse
-      # failure) are left untouched. Called just before descent stops at
-      # a nested `data-component`, so the child's `Props.build` reads a
-      # fully-resolved literal.
+      # failure OR bare ident — see below) are left untouched. Called
+      # just before descent stops at a nested `data-component`, so the
+      # child's `Props.build` reads a fully-resolved literal.
+      #
+      # **Bare-ident exclusion**: `data-prop-*` keeps the long-standing
+      # convention that unparseable values (`data-prop-status="todo"`)
+      # are literals. Bare ident in other directives means "item field",
+      # but for data-prop-* the literal interpretation wins so that
+      # `data-prop-status="todo"` remains a literal string. Iteration
+      # field flow into child components goes through the **auto-fill**
+      # path below.
+      #
+      # **Auto-fill (data-each scope only)**: when the child's
+      # `prop :X` declaration has no explicit `data-prop-X` attribute
+      # AND the current iteration item carries key `"X"` / `:X`, write
+      # `item[X]` as the attribute so the child's `Props.build` sees it
+      # as if the user had written `data-prop-X="<value>"`. Lookup
+      # priority: explicit attribute > item field > declared default >
+      # required-prop error.
       def resolve_props(el, item)
+        # First pass: evaluate existing data-prop-* expressions (Ivar /
+        # ItPath) so item context flows even if the user wrote the
+        # attribute explicitly with `it.X`.
         names_js = el.call(:getAttributeNames)
         n = names_js[:length].to_i
         i = 0
@@ -136,15 +160,49 @@ module Lilac
           if attr_name.start_with?("data-prop-")
             raw = el.call(:getAttribute, attr_name).to_s
             value = Value.parse(raw)
-            if value
+            if value && !value.is_a?(Value::BareIdent)
               resolved = @evaluator.read(value, item)
               el.call(:setAttribute, attr_name, resolved.to_s)
             end
           end
           i += 1
         end
+
+        autofill_props_from_item(el, item) if item
       rescue Lilac::Error => e
         Lilac.logger.error("data-prop-*", e, source: @host)
+      end
+
+      # Auto-fill: for each `prop :X` declared on the child class that
+      # lacks an explicit `data-prop-X` attribute on this element, look
+      # up `item[X]` (Hash sym → str fallback) and write it as the
+      # attribute. No-op if the child class can't be resolved (the
+      # scanner skips auto-fill silently rather than blocking the row).
+      def autofill_props_from_item(el, item)
+        comp_name_raw = el.call(:getAttribute, "data-component")
+        return if comp_name_raw.js_null?
+        comp_name = comp_name_raw.to_s
+        return if comp_name.empty?
+        klass = Lilac.registry.find_component_class(comp_name)
+        return unless klass && klass.respond_to?(:prop_declarations)
+        klass.prop_declarations.each do |prop_name, _spec|
+          attr_key = "data-prop-#{prop_name.to_s.tr('_', '-')}"
+          next if el.call(:hasAttribute, attr_key).js_bool
+          field_value = lookup_item_field(item, prop_name)
+          next if field_value.nil?
+          el.call(:setAttribute, attr_key, field_value.to_s)
+        end
+      end
+
+      def lookup_item_field(item, prop_name)
+        if item.is_a?(Hash)
+          return item[prop_name] if item.key?(prop_name)
+          str_key = prop_name.to_s
+          return item[str_key] if item.key?(str_key)
+          nil
+        elsif item.respond_to?(prop_name)
+          item.public_send(prop_name)
+        end
       end
 
       # Per-element record built during collection. Captures everything
@@ -271,6 +329,8 @@ module Lilac
           dispatch_value_bind(raw_value, el, item, "data-text", :text)
         when :unsafe_html
           dispatch_value_bind(raw_value, el, item, "data-unsafe-html", :html)
+        when :bind
+          dispatch_bind(raw_value, el, item)
         when :show
           dispatch_visibility(raw_value, el, item, "data-show", negate: true)
         when :hide
@@ -296,17 +356,83 @@ module Lilac
         end
       end
 
+      # Both `it.path` (legacy) and `BareIdent` (new) reference fields on
+      # the current iteration item, so they need silent-skip when scanning
+      # outside any `data-each` body (e.g., the host root scan that
+      # precedes / accompanies per-row scans).
+      def requires_item?(value)
+        value.is_a?(Value::ItPath) || value.is_a?(Value::BareIdent)
+      end
+
       def dispatch_value_bind(raw_value, el, item, attr_label, prop)
         value = parse_value_or_raise(raw_value, attr_label)
-        return if item.nil? && value.is_a?(Value::ItPath)
+        return if item.nil? && requires_item?(value)
         ref = wrap_ref(el)
         source = @evaluator.bind_source(value, item)
         @host.bind(ref, prop => source)
       end
 
+      # data-bind: two-way input ↔ signal sync, form-independent.
+      # Accepts `@ivar` (host Signal) or bare ident (current iteration
+      # item's field — must resolve to a Signal stored in the item hash).
+      # In both cases the underlying value must be a writable `Signal`;
+      # Computed and plain values have no setter side. Target DOM property
+      # is auto-selected from element type so HTML alone decides contract.
+      def dispatch_bind(raw_value, el, item)
+        value = parse_value_or_raise(raw_value, "data-bind")
+        return if item.nil? && requires_item?(value)
+        unless value.is_a?(Value::Ivar) || value.is_a?(Value::BareIdent)
+          raise Lilac::Error,
+                "data-bind requires @ivar or bare ident pointing at a writable " \
+                "Signal (got #{raw_value.inspect}); it.path / literals have no setter"
+        end
+        signal = @evaluator.read_raw(value, item)
+        unless signal.is_a?(Lilac::Signal)
+          raise Lilac::Error,
+                "data-bind=#{raw_value.inspect}: resolved value is not a Signal " \
+                "(got #{signal.class}); two-way binding requires `signal(...)`, " \
+                "not Computed / raw value"
+        end
+        tag = el[:tagName].to_s.downcase
+        property = detect_bind_property(el, tag, raw_value)
+        ref = wrap_ref(el)
+        @host.bind_input(ref, signal, property: property)
+      end
+
+      # Pick the DOM property data-bind syncs against. Restricts to the
+      # form-control trio so that `data-bind` on, say, a <div> raises
+      # instead of silently wiring nothing useful.
+      def detect_bind_property(el, tag, raw_value)
+        case tag
+        when "input"
+          type_raw = el.call(:getAttribute, "type")
+          type_str = type_raw.js_null? ? "text" : type_raw.to_s.downcase
+          case type_str
+          when "checkbox"
+            :checked
+          when "radio"
+            raise Lilac::Error,
+                  "data-bind on <input type=radio> is not supported yet; " \
+                  "use data-on-change + manual signal update for now"
+          when "file"
+            raise Lilac::Error,
+                  "data-bind on <input type=file> is not supported (the " \
+                  "files property is read-only from script); use data-on-change"
+          else
+            :value
+          end
+        when "textarea", "select"
+          :value
+        else
+          raise Lilac::Error,
+                "data-bind=#{raw_value.inspect} is only allowed on " \
+                "<input> / <textarea> / <select> (got <#{tag}>)"
+        end
+      end
+
       def dispatch_visibility(raw_value, el, item, attr_label, negate:)
         value = parse_value_or_raise(raw_value, attr_label)
-        return if item.nil? && value.is_a?(Value::ItPath)
+        return if item.nil? && requires_item?(value)
         evaluator = @evaluator
         ref = wrap_ref(el)
         cond = @host.computed do
@@ -328,7 +454,7 @@ module Lilac
         # Skip ItPath bindings when scanning without iteration context
         # (= the child component is scanning its own root, but `it` was a
         # parent-iteration concern already dispatched by the parent).
-        return if item.nil? && value.is_a?(Value::ItPath)
+        return if item.nil? && requires_item?(value)
         ref = wrap_ref(el)
         @host.bind(ref, attr: { attr_name => @evaluator.bind_source(value, item) })
       end
@@ -341,7 +467,7 @@ module Lilac
                 "([a-z][a-z0-9-]*) and not start with `-`."
         end
         value = parse_value_or_raise(raw_value, "data-css-#{css_name}")
-        return if item.nil? && value.is_a?(Value::ItPath)
+        return if item.nil? && requires_item?(value)
         ref = wrap_ref(el)
         evaluator = @evaluator
         @host.effect do
@@ -406,9 +532,14 @@ module Lilac
             end
           # On row reuse, the child component is already mounted with its
           # initial prop values baked in — push fresh values through
-          # `update_prop` so its prop Signals reflect the new item.
-          if prev_t && !row_prop_exprs.empty?
-            push_prop_updates(row_node, it, row_prop_exprs, evaluator)
+          # `update_prop` so its prop Signals reflect the new item. This
+          # covers two sources: (a) explicit data-prop-X="@ivar"/it.path
+          # expressions captured at template extraction time, and (b)
+          # auto-fill props (declared on the child class but not on the
+          # template, populated from the iteration item on first mount).
+          if prev_t
+            push_prop_updates(row_node, it, row_prop_exprs, evaluator) unless row_prop_exprs.empty?
+            push_autofill_prop_updates(row_node, it, row_prop_exprs)
           end
           # Fresh Scanner per row keeps `@evaluator` bound to the same
           # host (so `@ivar` continues to resolve on the host) but
@@ -421,7 +552,9 @@ module Lilac
       # Scan the row template's first element for `data-prop-*` attributes
       # whose value parses as `@ivar` / `it.field`. Returns
       # `{attr_name => Value}`. Empty hash if the row is not a
-      # data-component or has no parseable prop expressions.
+      # data-component or has no parseable prop expressions. BareIdent
+      # is excluded — `data-prop-*` keeps the literal interpretation for
+      # unparseable/bare values (see `resolve_props` for the rationale).
       def extract_row_prop_exprs(tpl)
         out = {}
         row_tpl_el = tpl[:content][:firstElementChild]
@@ -435,7 +568,7 @@ module Lilac
           if attr_name.start_with?("data-prop-")
             raw = row_tpl_el.call(:getAttribute, attr_name).to_s
             v = Value.parse(raw)
-            out[attr_name] = v if v
+            out[attr_name] = v if v && !v.is_a?(Value::BareIdent)
           end
           i += 1
         end
@@ -457,6 +590,34 @@ module Lilac
             child.update_prop(prop_name, resolved.to_s)
           rescue Lilac::Error => e
             Lilac.logger.error("data-prop reuse #{attr_name}", e, source: @host)
+          end
+        end
+      end
+
+      # Row reuse twin of `autofill_props_from_item`: push fresh item
+      # values into the already-mounted child's prop signals for every
+      # declared prop NOT covered by an explicit data-prop-X expression.
+      # `skip_exprs` is the prop_exprs hash so we don't double-push props
+      # that `push_prop_updates` already handled.
+      def push_autofill_prop_updates(row_node, item, skip_exprs)
+        child = Lilac.find_for_element(row_node)
+        return unless child
+        return unless child.respond_to?(:update_prop)
+        klass = child.class
+        return unless klass.respond_to?(:prop_declarations)
+        explicit = {}
+        skip_exprs.each_key do |attr_name|
+          name = attr_name.sub("data-prop-", "").tr("-", "_").to_sym
+          explicit[name] = true
+        end
+        klass.prop_declarations.each_key do |prop_name|
+          next if explicit[prop_name]
+          field_value = lookup_item_field(item, prop_name)
+          next if field_value.nil?
+          begin
+            child.update_prop(prop_name, field_value.to_s)
+          rescue Lilac::Error => e
+            Lilac.logger.error("data-prop auto-fill reuse :#{prop_name}", e, source: @host)
           end
         end
       end

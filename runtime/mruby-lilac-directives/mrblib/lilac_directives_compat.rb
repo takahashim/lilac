@@ -24,6 +24,10 @@ module Lilac
         check_collision!(kinds, :unsafe_html, :each, element_descriptor)
         check_collision!(kinds, :show, :hide, element_descriptor)
         check_collision!(kinds, :component, :each, element_descriptor)
+        # data-bind = form-independent two-way; data-field = form-scope
+        # registration + UI wiring. Double-wiring would cause two effects
+        # to fight for the same input value, so make the conflict explicit.
+        check_collision!(kinds, :bind, :field, element_descriptor)
 
         # data-key without data-each — warn + skip the orphan key.
         if kinds.include?(:key) && !kinds.include?(:each)

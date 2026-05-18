@@ -1,6 +1,6 @@
 module Lilac
   module Directives
-    # Resolves a parsed `Value` (Ivar or ItPath) against a host
+    # Resolves a parsed `Value` (Ivar / BareIdent / ItPath) against a host
     # component and an optional iteration item.
     #
     # Two main entry points mirror the CLI codegen's polymorphic
@@ -9,12 +9,16 @@ module Lilac
     #   - `bind_source(value, item)` — returns an object suitable as
     #     a `bind ref, prop: source` argument. For Ivar, that's the
     #     Signal directly (host.bind calls `.value` inside an effect).
-    #     For ItPath, that's a `host.computed { ... }` so re-rendering
-    #     is reactive when the item changes.
+    #     For BareIdent / ItPath, that's a `host.computed { ... }` so
+    #     re-rendering is reactive when the item changes.
     #
     #   - `read(value, item)` — returns the current scalar value, for
     #     use inside an already-reactive context (effect / computed
     #     block created by the dispatcher).
+    #
+    #   - `read_raw(value, item)` — like `read` but does NOT unwrap the
+    #     resolved value via `.value`. Used by `data-bind` which needs
+    #     the Signal object itself to wire `bind_input`.
     class Evaluator
       def initialize(host)
         @host = host
@@ -27,6 +31,9 @@ module Lilac
         when Value::ItPath
           field = value.field
           @host.computed { field ? read_field(item, field) : item }
+        when Value::BareIdent
+          field = value.field
+          @host.computed { read_field(item, field) }
         end
       end
 
@@ -37,6 +44,25 @@ module Lilac
         when Value::ItPath
           field = value.field
           field ? read_field(item, field) : item
+        when Value::BareIdent
+          read_field(item, value.field)
+        end
+      end
+
+      # Same as `read` but skips the final `.value` unwrap on Ivar.
+      # data-bind uses this to grab the Signal object itself (needed
+      # by `bind_input` for two-way wiring). For BareIdent / ItPath
+      # the field lookup already returns whatever is stored on the
+      # item (typically a Signal when row-level bind is intended).
+      def read_raw(value, item)
+        case value
+        when Value::Ivar
+          lookup_ivar(value)
+        when Value::ItPath
+          field = value.field
+          field ? read_field(item, field) : item
+        when Value::BareIdent
+          read_field(item, value.field)
         end
       end
 

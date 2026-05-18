@@ -103,6 +103,15 @@ module Lilac
       end
     end
 
+    # Public lookup variant: returns nil instead of raising on lookup
+    # error. Used by directive scanner (data-prop-* auto-fill) where a
+    # missing class is non-fatal — the scanner just skips auto-fill.
+    def find_component_class(name)
+      resolve_component_class(name)
+    rescue StandardError
+      nil
+    end
+
     private
 
     # Resolve a `data-component` name to a class. Explicit `Lilac.register`

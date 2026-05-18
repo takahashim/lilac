@@ -156,10 +156,7 @@
         <div data-component="KanbanColumn" data-prop-status="todo" class="column">
           <h2>Todo <span data-ref="count" class="count">0</span></h2>
           <ul data-ref="list" class="cards" data-each="@filtered" data-key="id">
-            <li data-component="KanbanCard"
-                draggable="true"
-                data-prop-id="it.id"
-                data-prop-title="it.title">
+            <li data-component="KanbanCard" draggable="true">
               <span class="title" data-text="@title"></span>
               <button class="dismiss" data-on-click="dismiss" type="button" aria-label="delete">×</button>
             </li>
@@ -172,10 +169,7 @@
         <div data-component="KanbanColumn" data-prop-status="doing" class="column">
           <h2>Doing <span data-ref="count" class="count">0</span></h2>
           <ul data-ref="list" class="cards" data-each="@filtered" data-key="id">
-            <li data-component="KanbanCard"
-                draggable="true"
-                data-prop-id="it.id"
-                data-prop-title="it.title">
+            <li data-component="KanbanCard" draggable="true">
               <span class="title" data-text="@title"></span>
               <button class="dismiss" data-on-click="dismiss" type="button" aria-label="delete">×</button>
             </li>
@@ -188,10 +182,7 @@
         <div data-component="KanbanColumn" data-prop-status="done" class="column">
           <h2>Done <span data-ref="count" class="count">0</span></h2>
           <ul data-ref="list" class="cards" data-each="@filtered" data-key="id">
-            <li data-component="KanbanCard"
-                draggable="true"
-                data-prop-id="it.id"
-                data-prop-title="it.title">
+            <li data-component="KanbanCard" draggable="true">
               <span class="title" data-text="@title"></span>
               <button class="dismiss" data-on-click="dismiss" type="button" aria-label="delete">×</button>
             </li>

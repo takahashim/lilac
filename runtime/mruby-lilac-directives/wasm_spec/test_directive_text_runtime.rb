@@ -51,13 +51,14 @@ Spec.describe "data-text / data-unsafe-html (runtime scanner)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
-  Spec.assert "invalid value (not @ivar / it.path) routes via Lilac.logger.error" do
+  Spec.assert "invalid value (not @ivar / it.path / bare ident) routes via Lilac.logger.error" do
     captured = []
     prev_logger = Lilac.logger
     Lilac.logger = ->(level, msg, err) { captured << [level, msg.to_s, err ? err.message : nil] }
 
     body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="bad-rt"><span data-text="not_an_ivar">x</span></div>'
+    # `1bad` starts with digit → not a valid identifier, fails Value.parse.
+    body[:innerHTML] = '<div data-component="bad-rt"><span data-text="1bad">x</span></div>'
 
     klass = Class.new(Lilac::Component) do
       define_method(:setup) {}
