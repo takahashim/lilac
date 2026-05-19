@@ -51,9 +51,13 @@ module Lilac
       DIRECTIVE_PATTERNS = [
         [/\Adata-text\z/,        :text,        false],
         [/\Adata-unsafe-html\z/, :unsafe_html, false],
-        # data-value / data-checked were deprecated in favour of
-        # data-field + the form gem (form-spec §10.8). Removed in
-        # Phase D. Use `<input data-field="X">` instead.
+        # data-bind is the form-independent two-way binding directive
+        # (Phase E revival/unification of data-value / data-checked).
+        # Property auto-selected from element type:
+        # <input type=checkbox> → :checked, others → :value.
+        # See directive-spec §6.2 for the full grammar; runtime parity
+        # lives in runtime/mruby-lilac-directives/.
+        [/\Adata-bind\z/,        :bind,        false],
         [/\Adata-show\z/,        :show,        false],
         [/\Adata-hide\z/,        :hide,        false],
         [/\Adata-each\z/,        :each,        false],

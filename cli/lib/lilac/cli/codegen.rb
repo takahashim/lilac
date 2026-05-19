@@ -119,6 +119,8 @@ module Lilac
           emit_text(directive, context)
         when :unsafe_html
           emit_unsafe_html(directive, context)
+        when :bind
+          emit_bind(directive, context)
         when :show
           emit_show(directive, context)
         when :hide
@@ -180,6 +182,71 @@ module Lilac
         ]
       end
 
+      # data-bind="@s" → `bind_input refs.lilN, @s, property: :value`
+      # (or :checked for checkbox inputs). Form-independent two-way
+      # binding: the value must be `@ivar` or bare identifier (inside
+      # data-each); both must resolve at runtime to a writable Signal.
+      # `it.path` is intentionally **rejected** here even during the
+      # broader it.path migration window — it has no setter side, so
+      # bind_input would have nothing to write to. See directive-spec
+      # §6.2 for the full grammar and form-scope collision rule.
+      def emit_bind(directive, context)
+        value = read_bind_value_or_raise(directive)
+        property = bind_property_or_raise(directive)
+        [
+          "# #{@file}:#{directive.line} — data-bind=#{value.inspect}",
+          "bind_input #{context.refs_expr}.#{directive.ref_id}, #{value.signal_ref}, property: :#{property}",
+        ]
+      end
+
+      # data-bind value parser. Rejects it_path (no setter side) at
+      # build time; runtime mirrors the same rejection.
+      def read_bind_value_or_raise(directive)
+        value = DirectiveValue.parse(directive.value)
+        return value if value.is_a?(DirectiveValue::Ivar) || value.is_a?(DirectiveValue::BareIdent)
+
+        raise Error.new(
+          "Invalid value for data-bind: #{directive.value.inspect} " \
+          "(expected `@ivar` or bare identifier; `it.path` is rejected because it has no setter — " \
+          "use bare ident with a per-row Signal field instead)",
+          at: directive.source_location(@file),
+        )
+      end
+
+      # Form-control DOM property selection. Mirrors the runtime
+      # detect_bind_property logic; kept here as a build-time precheck
+      # so dist HTML breaks loudly rather than silently no-op.
+      def bind_property_or_raise(directive)
+        tag = directive.element_tag.to_s.downcase
+        case tag
+        when "input"
+          type = (directive.element_attrs || {})["type"].to_s.downcase
+          case type
+          when "checkbox"        then "checked"
+          when "radio"
+            raise Error.new(
+              "data-bind on <input type=radio> is not supported yet; " \
+              "use data-on-change + manual signal update for now",
+              at: directive.source_location(@file),
+            )
+          when "file"
+            raise Error.new(
+              "data-bind on <input type=file> is not supported (the " \
+              "files property is read-only from script); use data-on-change",
+              at: directive.source_location(@file),
+            )
+          else "value"
+          end
+        when "textarea", "select" then "value"
+        else
+          raise Error.new(
+            "data-bind=#{directive.value.inspect} is only allowed on " \
+            "<input> / <textarea> / <select> (got <#{tag}>)",
+            at: directive.source_location(@file),
+          )
+        end
+      end
+
       # data-show / data-hide → toggle the reserved `lil-hidden` class
       # based on the signal. `data-show` adds the class when falsy
       # (show on truthy); `data-hide` adds it when truthy. Always wraps
@@ -203,17 +270,17 @@ module Lilac
         ]
       end
 
-      # Parses the directive's raw value into a `DirectiveValue` (Ivar
-      # or ItPath), raising a build error on invalid input. Caller uses
-      # the returned object's polymorphic `reactive_read` / `bind_source`
-      # / `to_s` rather than re-classifying the string.
+      # Parses the directive's raw value into a `DirectiveValue` (Ivar,
+      # BareIdent, or ItPath), raising a build error on invalid input.
+      # Caller uses the returned object's polymorphic `reactive_read` /
+      # `bind_source` / `to_s` rather than re-classifying the string.
       def read_value_or_raise(directive, attr_name)
         value = DirectiveValue.parse(directive.value)
         return value if value
 
         raise Error.new(
           "Invalid value for #{attr_name}: #{directive.value.inspect} " \
-          "(expected `@ivar` or `it.path`)",
+          "(expected `@ivar` or bare identifier; `it.path` is deprecated)",
           at: directive.source_location(@file),
         )
       end

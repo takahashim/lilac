@@ -65,6 +65,80 @@ class TestDirectiveCodegen < Minitest::Test
     assert_raises(Lilac::CLI::Codegen::Error) { gen([text(value: "@save!")]) }
   end
 
+  # ---- data-bind ---------------------------------------------------
+
+  def bind(value:, ref_id: "lil0", line: 1, tag: "input", attrs: {})
+    Lilac::CLI::Directive.new(
+      kind: :bind, name: nil, value: value, ref_id: ref_id, line: line,
+      element_tag: tag, element_attrs: attrs,
+    )
+  end
+
+  def test_data_bind_text_input_emits_bind_input_value
+    out = gen([bind(value: "@qty")])
+    assert_includes out, "bind_input refs.lil0, @qty, property: :value"
+  end
+
+  def test_data_bind_checkbox_uses_checked_property
+    out = gen([bind(value: "@on", attrs: { "type" => "checkbox" })])
+    assert_includes out, "bind_input refs.lil0, @on, property: :checked"
+  end
+
+  def test_data_bind_textarea_uses_value_property
+    out = gen([bind(value: "@note", tag: "textarea")])
+    assert_includes out, "bind_input refs.lil0, @note, property: :value"
+  end
+
+  def test_data_bind_select_uses_value_property
+    out = gen([bind(value: "@choice", tag: "select")])
+    assert_includes out, "bind_input refs.lil0, @choice, property: :value"
+  end
+
+  def test_data_bind_bare_ident_resolves_against_it
+    # Inside a data-each body the bind_list block exposes `it`; bare
+    # ident emits `it.qty` so the runtime field-lookup path matches.
+    out = gen([bind(value: "qty")])
+    assert_includes out, "bind_input refs.lil0, it.qty, property: :value"
+  end
+
+  def test_data_bind_rejects_it_path
+    err = assert_raises(Lilac::CLI::Codegen::Error) do
+      gen([bind(value: "it.qty", line: 7)], source_path: "row.lil")
+    end
+    assert_includes err.message, "row.lil:7"
+    assert_includes err.message, "data-bind"
+    assert_includes err.message, "no setter"
+  end
+
+  def test_data_bind_rejects_literal
+    err = assert_raises(Lilac::CLI::Codegen::Error) do
+      gen([bind(value: "1bad")])
+    end
+    assert_includes err.message, "data-bind"
+  end
+
+  def test_data_bind_on_radio_raises
+    err = assert_raises(Lilac::CLI::Codegen::Error) do
+      gen([bind(value: "@choice", attrs: { "type" => "radio" })])
+    end
+    assert_includes err.message, "radio"
+  end
+
+  def test_data_bind_on_file_input_raises
+    err = assert_raises(Lilac::CLI::Codegen::Error) do
+      gen([bind(value: "@upload", attrs: { "type" => "file" })])
+    end
+    assert_includes err.message, "file"
+  end
+
+  def test_data_bind_on_non_form_control_raises
+    err = assert_raises(Lilac::CLI::Codegen::Error) do
+      gen([bind(value: "@x", tag: "div")])
+    end
+    assert_includes err.message, "data-bind"
+    assert_includes err.message, "<div>"
+  end
+
   # ---- data-on-X ---------------------------------------------------
 
   def test_data_on_click_emits_event_listener

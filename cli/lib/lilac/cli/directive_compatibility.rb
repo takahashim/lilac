@@ -18,7 +18,10 @@ module Lilac
 
       # Directive pairs that may not coexist on the same element. Each
       # row is [Array<kind>, message]. data-value / data-checked were
-      # removed in Phase D (see form-spec §10.8); use data-field instead.
+      # removed in Phase D and revived as :bind in Phase E (directive-spec
+      # §6.2). The :bind / :field pair is added here so the form-independent
+      # two-way binding and form-scope binding can't fight over the same
+      # input.
       COLLISION_PAIRS = [
         [
           %i[text unsafe_html],
@@ -35,6 +38,10 @@ module Lilac
         [
           %i[component each],
           "data-component and data-each cannot coexist (wrap with another element — put the child component inside the iteration body)",
+        ],
+        [
+          %i[bind field],
+          "data-bind and data-field cannot coexist (both wire the input value — pick one: data-bind for form-independent binding, data-field for form-scope binding)",
         ],
       ].freeze
 

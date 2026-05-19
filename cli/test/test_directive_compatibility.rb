@@ -36,8 +36,23 @@ class TestDirectiveCompatibility < Minitest::Test
     assert_includes err.message, "data-show and data-hide"
   end
 
-  # data-value / data-checked collision pair removed in Phase D
-  # (form-spec §10.8) — both directives no longer exist.
+  # data-value / data-checked collision pair was removed in Phase D
+  # (form-spec §10.8). The Phase-E successor `data-bind` has its own
+  # collision with `data-field` (form-scope binding) tested below.
+
+  def test_bind_and_field_on_same_element_raise
+    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
+      Lilac::CLI::DirectiveCompatibility.check!(
+        [
+          dir(:bind, value: "@qty", tag: "input"),
+          dir(:field, value: "qty", tag: "input", line: 4),
+        ],
+        file: "x.lil",
+      )
+    end
+    assert_includes err.message, "x.lil:4"
+    assert_includes err.message, "data-bind and data-field"
+  end
 
   def test_component_and_each_on_same_element_raise
     err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do

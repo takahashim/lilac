@@ -66,12 +66,43 @@ class TestDirectiveValue < Minitest::Test
     assert_nil Lilac::CLI::DirectiveValue.parse("it.foo()")
   end
 
+  # ---- bare_ident parsing ----------------------------------------
+
+  def test_parses_bare_ident
+    # Plain identifier — field name on the current iteration item when
+    # used inside a data-each body.
+    v = Lilac::CLI::DirectiveValue.parse("description")
+    assert_kind_of Lilac::CLI::DirectiveValue::BareIdent, v
+    refute v.ivar?
+    refute v.it_path?
+    assert v.bare_ident?
+    assert_equal "description", v.to_s
+  end
+
+  def test_parses_predicate_suffix_bare_ident
+    v = Lilac::CLI::DirectiveValue.parse("valid?")
+    assert v.bare_ident?
+    assert_equal "valid?", v.to_s
+  end
+
+  def test_it_takes_precedence_over_bare_ident
+    # `it` alone matches IT_PATH before BARE_IDENT.
+    v = Lilac::CLI::DirectiveValue.parse("it")
+    assert v.it_path?
+    refute v.bare_ident?
+  end
+
+  def test_rejects_dotted_bare_ident
+    assert_nil Lilac::CLI::DirectiveValue.parse("user.name")
+  end
+
   # ---- invalid forms ---------------------------------------------
 
   def test_returns_nil_on_arbitrary_expression
     assert_nil Lilac::CLI::DirectiveValue.parse("@a + 1")
     assert_nil Lilac::CLI::DirectiveValue.parse("not @a")
-    assert_nil Lilac::CLI::DirectiveValue.parse("foo")
+    # Numeric prefix is not an identifier.
+    assert_nil Lilac::CLI::DirectiveValue.parse("1bad")
   end
 
   # ---- polymorphic codegen helpers -------------------------------
@@ -94,6 +125,33 @@ class TestDirectiveValue < Minitest::Test
   def test_it_path_bind_source_wraps_in_computed
     v = Lilac::CLI::DirectiveValue.parse("it.title")
     assert_equal "computed { it.title }", v.bind_source
+  end
+
+  def test_bare_ident_reactive_read_resolves_against_it
+    v = Lilac::CLI::DirectiveValue.parse("title")
+    assert_equal "it.title", v.reactive_read
+  end
+
+  def test_bare_ident_bind_source_wraps_in_computed
+    v = Lilac::CLI::DirectiveValue.parse("title")
+    assert_equal "computed { it.title }", v.bind_source
+  end
+
+  # ---- signal_ref (data-bind codegen) ----------------------------
+
+  def test_ivar_signal_ref_returns_raw_signal_without_value_unwrap
+    # bind_input wants the Signal object itself (it calls .value
+    # inside its own effect), so signal_ref skips the .value suffix
+    # that reactive_read appends.
+    v = Lilac::CLI::DirectiveValue.parse("@qty")
+    assert_equal "@qty", v.signal_ref
+  end
+
+  def test_bare_ident_signal_ref_reads_item_field
+    # Inside a data-each bind_list block, `it` is the iteration variable
+    # and `it.qty` resolves to the per-row Signal stored on the item.
+    v = Lilac::CLI::DirectiveValue.parse("qty")
+    assert_equal "it.qty", v.signal_ref
   end
 
   # ---- inspect / interpolation -----------------------------------
