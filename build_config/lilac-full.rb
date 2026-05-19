@@ -9,6 +9,15 @@
 #
 # Build mode (debug vs release) is selected via MRUBY_WASM_RELEASE.
 #
+# Gem selection policy: **explicit allow-list**, no gembox. This keeps
+# the bundle to what Lilac actually exercises and lets `wasm-ld`'s
+# `--gc-sections` strip everything else. Removed from the historical
+# `default-no-stdio` gembox: math.gembox (mruby-math / -rational /
+# -complex / -bigint), mruby-set, mruby-objectspace, mruby-enum-lazy,
+# mruby-enum-chain, mruby-time, mruby-random — none are referenced by
+# Lilac runtime or any example (verified with grep + wasm_spec).
+# That trim saves ~150 KB raw / ~50 KB brotli (verified 2026-05-19).
+#
 # DEPENDENCY: mruby-wasm-runtime
 #
 # Lilac's wasm bundle includes the `mruby-wasm-js` JS↔mruby bridge
@@ -86,17 +95,46 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.cc.defines << "MRB_NO_BOXING"
   conf.cc.defines << "MRB_UTF8_STRING"
 
-  conf.gembox "default-no-stdio"
+  # `mruby-compiler` + `mruby-eval` are pulled in transitively by
+  # `mruby-wasm-js` (its `add_dependency` is gated on
+  # MRUBY_WASM_NO_COMPILER, which lilac-full does not set). That's
+  # what makes the "full" variant able to `vm.eval(rubyString)` at
+  # runtime; `lilac-compiled.rb` sets MRUBY_WASM_NO_COMPILER=1 to
+  # opt out and ship a smaller bundle (see Makefile).
 
-  # WASI shims + IO mrbgems from mruby-wasm-runtime.
+  # stdlib pick — only what Lilac runtime / examples actually use.
+  # Selection verified by grep + wasm_spec; removed entries are listed
+  # in the header comment.
+  conf.gem core: "mruby-compar-ext"    # Comparable module extension
+  conf.gem core: "mruby-enum-ext"      # Enumerable#each_with_object, etc.
+  conf.gem core: "mruby-string-ext"    # String#strip, tr, gsub, ...
+  conf.gem core: "mruby-numeric-ext"   # Numeric#step etc.
+  conf.gem core: "mruby-array-ext"     # Array#sum, find, reverse_each
+  conf.gem core: "mruby-hash-ext"      # Hash#each, dup, merge variants
+  conf.gem core: "mruby-range-ext"     # Range#each, cover?
+  conf.gem core: "mruby-proc-ext"      # Proc class extensions
+  conf.gem core: "mruby-symbol-ext"    # Symbol#to_proc
+  conf.gem core: "mruby-object-ext"    # Object#instance_variable_*, tap
+  conf.gem core: "mruby-fiber"         # Reactive::TRACKER fiber-id key
+  conf.gem core: "mruby-enumerator"    # Enumerator class
+  conf.gem core: "mruby-toplevel-ext"  # toplevel main object methods
+  conf.gem core: "mruby-kernel-ext"    # Kernel#raise variants
+  conf.gem core: "mruby-class-ext"     # Class#name (used in errors)
+  conf.gem core: "mruby-catch"         # throw/catch (resource teardown)
+
+  # Lilac-specific I/O + sprintf. mruby-io stays for read-side helpers
+  # used by hal-wasi-io (file path resolution etc.); mruby-sprintf is
+  # required by Kernel#sprintf and `"%s" %` interpolation in user code.
+  # mruby-metaprog is the single doorway for `instance_variable_get`
+  # (decisions §13 keeps metaprog access centralized).
+  conf.gem core: "mruby-io"
+  conf.gem core: "mruby-sprintf"
+  conf.gem core: "mruby-metaprog"
+
+  # WASI shims + JS bridge from mruby-wasm-runtime.
   # hal-wasi-io must come BEFORE mruby-io so the latter's HAL
   # auto-detector picks it instead of the hal-posix-io fallback.
   conf.gem "#{mwr_mrbgem}/hal-wasi-io"
-  conf.gem core: "mruby-io"
-  conf.gem core: "mruby-time"
-  conf.gem core: "mruby-random"
-  conf.gem core: "mruby-sprintf"
-  conf.gem core: "mruby-metaprog"
   conf.gem "#{mwr_mrbgem}/mruby-wasm-js"
   conf.gem "#{mwr_mrbgem}/mruby-wasi-dir"
   conf.gem "#{mwr_mrbgem}/mruby-wasi-env"
