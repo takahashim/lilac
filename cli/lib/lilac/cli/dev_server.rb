@@ -86,6 +86,13 @@ module Lilac
         @err.puts "lilac dev: build failed: #{e.message}"
       end
 
+      # Bumping `max_connections` (wsv defaults to 8) gives the dev server
+      # enough headroom to handle many SSE subscribers (one per open tab,
+      # plus a brief overlap during navigation) without rejecting page
+      # requests with 503. LiveReload's keepalive reaps dead subscribers
+      # promptly, so this is generous-but-not-leaky.
+      DEV_MAX_CONNECTIONS = 64
+
       def build_server
         Wsv::Server.new(
           host: @host,
@@ -94,6 +101,7 @@ module Lilac
           out: @out,
           err: @err,
           app: build_app,
+          max_connections: DEV_MAX_CONNECTIONS,
         )
       end
 

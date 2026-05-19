@@ -18,7 +18,10 @@ module Lilac
       # `:keepalive` is a SSE-comment frame: clients ignore it, but
       # writing it lets us detect a dropped connection (the write raises
       # Errno::EPIPE) when no real reload event has fired in a while.
-      KEEPALIVE_INTERVAL = 30
+      # Short interval keeps dead subscribers from clogging the wsv
+      # connection-throttle pool (default cap 8) on rapid page reloads —
+      # without this we'd see 503s after ~8 reloads within 30 s.
+      KEEPALIVE_INTERVAL = 5
 
       def initialize
         @subscribers = []
