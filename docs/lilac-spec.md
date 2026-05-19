@@ -1855,7 +1855,7 @@ mruby は `if x.nil?` を型タグチェックにインライン化し、`#nil?`
 
 | Variant | Target | Size (raw / brotli) | Use case |
 |---|---|---|---|
-| `full`     | `make lilac-full-release`     | ~1.0 MB / ~322 KB | runtime canonical, no build step |
+| `full`     | `make lilac-full-release`     | ~1.0 MB / ~322 KB | dev / prototyping with CLI build, ships mruby parser + runtime scanner as escape hatch (decisions §17) |
 | `compiled` | `make lilac-compiled-release` | ~530 KB / ~175 KB | production, requires `lilac build` |
 
 Debug ターゲット (`make lilac-{full,compiled}`) は `.debug_*` セクション保持 + `-O0`、開発用。`make npm-pack` は release を `npm/lilac-{full,compiled}/lilac.wasm` に stage する。

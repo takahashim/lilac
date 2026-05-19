@@ -1801,9 +1801,11 @@ P3 候補: parent の per-row scanner が `@parent_signal` を effect で watch 
 
 ### CLI codegen 経路での `data-prop-X` 値式
 
-runtime canonical 経路では `data-prop-x="it.field"` / `data-prop-x="@ivar"` を
-parent の Scanner が clone-time に解決するが、CLI codegen 経路では未対応。
-CLI を経由して build するページでは `data-prop-X` の値は literal 限定。
+runtime scanner 経路(= `codegen :off` の escape hatch、decisions §17)では
+`data-prop-x="@ivar"` を parent の Scanner が clone-time に解決するが、
+CLI codegen 経路では未対応。CLI を経由して build するページでは
+`data-prop-X` の値は literal / iteration item field の auto-fill(§7.6)
+限定。
 
 将来対応: CLI codegen 側に同等の resolve コードを emit するか、CLI build に
 lint warning を追加。
