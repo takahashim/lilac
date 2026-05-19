@@ -256,22 +256,58 @@ module Lilac
     # 1. **CLI codegen path** — lilac-cli generates a
     #    `Lilac::Bindings::<ClassName>` module whose `bind_template_hook`
     #    applies the data-* directive bindings declared in the `.lil`
-    #    template. The user class includes the generated module, so its
-    #    override wins and this default never runs.
+    #    template. Resolution is order-independent: if the user class
+    #    `include`s the module before mount, the override wins and this
+    #    default never runs; otherwise the default looks the module up
+    #    by class name, `include`s it into the class on demand, and
+    #    re-dispatches. The lookup path is the one `lilac-compiled`
+    #    relies on (no runtime scanner, codegen output may be parsed
+    #    after `Lilac.start` is called).
     #
-    # 2. **Runtime scanner path** — when no codegen module is included
-    #    (e.g. plain HTML + Ruby authored without the CLI), the default
-    #    delegates to `Lilac::Directives::Scanner`, which walks the
-    #    component subtree at mount time and wires the same `bind` /
-    #    `bind_input` / `bind_list` calls that codegen would produce.
+    # 2. **Runtime scanner path** — when no codegen module is found,
+    #    the default delegates to `Lilac::Directives::Scanner`, which
+    #    walks the component subtree at mount time and wires the same
+    #    `bind` / `bind_input` / `bind_list` calls that codegen would
+    #    produce. Only available in builds that include the directives
+    #    gem (e.g. `lilac-full`).
     #
     # See docs/lilac-directive-spec.md Section 11 (Mount order).
     def bind_template_hook
       # `const_defined?` (not `defined?`) because mruby's `defined?`
       # keyword doesn't reliably resolve namespaced constants.
+      bindings_mod = lookup_codegen_bindings
+      if bindings_mod && !self.class.include?(bindings_mod)
+        # `include` the module so generated helper methods (such as
+        # `bind_template_hook__each_<refid>`) become callable from
+        # within the module's main `bind_template_hook` body. A direct
+        # `instance_method.bind.call` would invoke the entry point but
+        # leave helper calls unresolved on `self.class`'s MRO.
+        self.class.include(bindings_mod)
+        # Re-dispatch: the include above just updated MRO, so this
+        # `bind_template_hook` call now resolves to the codegen
+        # module's override instead of the default we're in.
+        bind_template_hook
+        return
+      end
       return unless Lilac.const_defined?(:Directives)
       return unless Lilac::Directives.const_defined?(:Scanner)
       Lilac::Directives::Scanner.new(self).scan_and_bind
+    end
+
+    # Resolve `Lilac::Bindings::<ClassName>` to a Module, or nil if no
+    # codegen output is loaded for this class. Walks the namespace
+    # piece by piece so namespaced classes (`Admin::UserCard` etc.)
+    # resolve as `Lilac::Bindings::Admin::UserCard`.
+    def lookup_codegen_bindings
+      return nil unless self.class.name
+      return nil unless Lilac.const_defined?(:Bindings)
+
+      mod = Lilac::Bindings
+      self.class.name.split("::").each do |segment|
+        return nil unless mod.const_defined?(segment, false)
+        mod = mod.const_get(segment)
+      end
+      mod.is_a?(Module) ? mod : nil
     end
 
     # ---- Expose / Lookup -------------------------------------------

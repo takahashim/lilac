@@ -243,20 +243,23 @@ module Lilac
 
     private
 
-    # Iterative DFS over `element`'s descendants. Records [data-ref]
+    # Iterative DFS over the component subtree. Records [data-ref]
     # elements as RefElements. Does not descend into nested
     # `data-component` subtrees, but DOES collect refs declared on the
     # nested component's *root* element (which belongs to the parent's
     # scope per the spec).
+    #
+    # Walks `root_js` ITSELF first — TemplateAST may emit a synthetic
+    # `data-ref="lilN"` on the component's root element when a directive
+    # (`data-class` / `data-attr-*` / `data-css-*` / etc.) is declared
+    # there, and the CLI codegen path's `refs.lilN` lookup must resolve
+    # to the root. The runtime scanner path, which walks the component
+    # subtree directly without going through `refs`, was unaffected and
+    # therefore the gap stayed hidden until the `:compiled` build target
+    # (codegen-only, no scanner) started exercising `refs` for root
+    # bindings.
     def collect(root_js)
-      stack = []
-      children = root_js[:children]
-      n = children[:length].to_i
-      i = 0
-      while i < n
-        stack << children[i]
-        i += 1
-      end
+      stack = [root_js]
       until stack.empty?
         node = stack.shift
         ref_attr = node.call(:getAttribute, "data-ref")
@@ -266,8 +269,13 @@ module Lilac
             @cache[name] = RefElement.new(node, @component, name: name)
           end
         end
-        component_attr = node.call(:getAttribute, "data-component")
-        next if !component_attr.js_null?
+        # Stop descent at a nested data-component (its subtree owns
+        # its own Refs). The check is skipped for the initial root
+        # itself — otherwise we'd visit zero elements.
+        if !node.equal?(root_js)
+          component_attr = node.call(:getAttribute, "data-component")
+          next if !component_attr.js_null?
+        end
         kids = node[:children]
         kn = kids[:length].to_i
         ki = 0
@@ -294,7 +302,17 @@ module Lilac
       el = @cache[key]
       return el if el
       validated = AttrName.new(key, kind: "data-ref")
-      js = @root_js.call(:querySelector, "[data-ref=\"#{validated}\"]")
+      selector = "[data-ref=\"#{validated}\"]"
+      # querySelector only searches descendants, so check the root element
+      # itself first. Required when the template body is a single element
+      # whose data-ref names that element (e.g. a list row whose <li>
+      # carries data-ref).
+      root_attr = @root_js.call(:getAttribute, "data-ref")
+      js = if !root_attr.js_null? && root_attr.to_s == key
+             @root_js
+           else
+             @root_js.call(:querySelector, selector)
+           end
       raise Lilac::Error, "Missing template ref: #{key}" if js.js_null?
       @cache[key] = RefElement.new(js, @component, name: key)
     end
