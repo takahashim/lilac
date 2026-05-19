@@ -7,6 +7,7 @@ require_relative "template_ast"
 require_relative "codegen"
 require_relative "component_name"
 require_relative "cross_ref_linter"
+require_relative "bytecode_builder"
 
 module Lilac
   module CLI
@@ -63,7 +64,8 @@ module Lilac
       HTML
 
       def initialize(components_dir:, pages_dir:, output_dir:, public_dir: nil,
-                     live_reload: false, codegen: :auto)
+                     live_reload: false, codegen: :auto,
+                     target: :full, mrbc_path: nil)
         @components_dir = components_dir
         @pages_dir = pages_dir
         @output_dir = output_dir
@@ -79,6 +81,14 @@ module Lilac
         # (parity-test mode, validates the runtime path against the
         # same .lil source).
         @codegen = codegen
+        # `:full` — dist HTML loads inline Ruby via lilac-full wasm
+        # (vm.evalScript). `:compiled` — Ruby is pre-compiled to
+        # `.mrb` bytecode via `mrbc` and loaded by lilac-compiled wasm
+        # (vm.loadIrep). The compiled target shaves ~32% off the brotli
+        # bundle but requires `mrbc` available at build time. See
+        # `BytecodeBuilder` for path discovery.
+        @target = target
+        @mrbc_path = mrbc_path
       end
 
       def build
@@ -229,16 +239,43 @@ module Lilac
               # leaving the runtime to interpret data-* at mount.
               ""
             else
+              # Both targets rely on Component#bind_template_hook to
+              # look up `Lilac::Bindings::<Class>` by name. The explicit
+              # `<Class>.include(...)` line is dropped — it would
+              # either NameError (codegen runs before the class def)
+              # or run too late (after the user's `Lilac.start`, which
+              # already triggered bind_template_hook on mount).
               Codegen.generate(
                 component_name: name,
                 directives: parsed[:default_directives],
                 source_path: parsed[:source_path],
+                emit_include: false,
               ).strip
             end
-          [user_script, generated].reject(&:empty?).join("\n\n")
+          # Generated FIRST so that `Lilac::Bindings::<Class>` is
+          # defined before the user script's `Lilac.start` mounts
+          # components and calls `bind_template_hook`. The component
+          # base's `lookup_codegen_bindings` resolves and includes the
+          # module on demand at that point.
+          parts = [generated, user_script]
+          parts.reject(&:empty?).join("\n\n")
         }.reject(&:empty?)
 
-        script_block = scripts.empty? ? nil : render_script(scripts.join("\n\n"))
+        ruby_source = scripts.join("\n\n")
+        script_block =
+          if scripts.empty?
+            nil
+          elsif @target == :compiled
+            # Compile the aggregated Ruby to `.mrb` bytecode and emit a
+            # module script that fetches the bytecode + boots the
+            # lilac-compiled wasm. The `data-lilac-bootstrap` attribute
+            # marks the tag so a future asset-pipeline pass can rewrite
+            # the URLs.
+            mrb_file = bytecode_builder.build(ruby_source, source_label: "page bundle")
+            render_compiled_boot_module(mrb_file)
+          else
+            render_script(ruby_source)
+          end
 
         # Live reload is dev-only; the `lilac build` command leaves it
         # off. When on, the snippet opens an SSE connection back to the
@@ -246,6 +283,33 @@ module Lilac
         parts = [named_templates, script_block]
         parts << LIVE_RELOAD_SCRIPT if @live_reload
         parts.flatten.compact.join("\n")
+      end
+
+      # Lazily instantiated so `:full` builds incur no mrbc resolution
+      # cost (`BytecodeBuilder.new` itself is cheap, but keeping the
+      # creation lazy keeps the `:full` happy path obviously side-effect-free).
+      def bytecode_builder
+        @bytecode_builder ||= BytecodeBuilder.new(
+          mrbc_path: @mrbc_path,
+          output_dir: @output_dir,
+        )
+      end
+
+      # Emits the module script that loads `.mrb` bytecode and boots
+      # the lilac-compiled wasm. Vendor path defaults to
+      # `./vendor/lilac-compiled/` (mirrored from `public/vendor/...`
+      # at build time — same convention as Vite / Eleventy's `public/`
+      # passthrough).
+      def render_compiled_boot_module(mrb_filename)
+        <<~HTML.strip
+          <script type="module" data-lilac-bootstrap>
+            import { boot } from "./vendor/lilac-compiled/index.js";
+            const bytecode = new Uint8Array(
+              await (await fetch("./#{mrb_filename}")).arrayBuffer()
+            );
+            await boot({ bytecode });
+          </script>
+        HTML
       end
 
       def render_named_template(template_name, body_html)

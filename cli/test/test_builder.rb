@@ -26,12 +26,14 @@ class TestBuilder < Minitest::Test
     File.write(File.join(@pages, "#{name}.html"), source)
   end
 
-  def build!(codegen: :auto)
+  def build!(codegen: :auto, target: :full, mrbc_path: nil)
     Lilac::CLI::Builder.new(
       components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
       codegen: codegen,
+      target: target,
+      mrbc_path: mrbc_path,
     ).build
   end
 
@@ -402,7 +404,8 @@ class TestBuilder < Minitest::Test
     out = read_output("index.html")
     assert_includes out, "bind_template_hook",
                     "codegen :auto should emit the bind_template_hook override"
-    assert_includes out, "Lilac::Bindings::Counter"
+    assert_includes out, "module Counter",
+                    "codegen :auto should declare the Lilac::Bindings::Counter module"
   end
 
   def test_codegen_off_skips_bind_template_hook
@@ -428,5 +431,67 @@ class TestBuilder < Minitest::Test
     # The declarative directive itself stays in the HTML so the runtime
     # scanner can find and wire it at mount time.
     assert_includes out, 'data-text="@count"'
+  end
+
+  # ---- target: :compiled ------------------------------------------
+
+  def test_target_compiled_emits_mrb_and_boot_module
+    mrbc = mrbc_or_skip
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">
+        class Counter < Lilac::Component
+          def setup; @count = signal(0); end
+        end
+      </script>
+    GNT
+    write_page "index", '<html><body><lilac-component name="counter"></lilac-component></body></html>'
+
+    build!(target: :compiled, mrbc_path: mrbc)
+
+    out = read_output("index.html")
+    # Inline Ruby script tag is replaced with a module-script boot loader.
+    refute_includes out, '<script type="text/ruby">',
+                    "compiled target must not leave inline Ruby in dist HTML"
+    assert_includes out, "data-lilac-bootstrap"
+    assert_includes out, 'import { boot } from "./vendor/lilac-compiled/index.js"'
+    # The fetch URL must reference a content-hashed .mrb sibling.
+    assert_match(/fetch\("\.\/app\.[0-9a-f]{8}\.mrb"\)/, out)
+
+    # The .mrb itself was produced under output_dir with RITE magic.
+    mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))
+    assert_equal 1, mrb_files.length,
+                 "expected exactly one .mrb under output_dir, found #{mrb_files.inspect}"
+    bytes = File.binread(mrb_files.first)
+    assert_equal "RITE", bytes[0, 4]
+  end
+
+  def test_target_compiled_omits_mrb_when_no_components_used
+    mrbc = mrbc_or_skip
+    write_page "static", "<html><body><h1>plain page</h1></body></html>"
+
+    build!(target: :compiled, mrbc_path: mrbc)
+
+    # No <lilac-component> tag, so no scripts collected → no .mrb emit
+    # and no boot module injection.
+    assert_empty Dir.glob(File.join(@output, "*.mrb"))
+    out = read_output("static.html")
+    refute_includes out, "data-lilac-bootstrap"
+    refute_includes out, "lilac-compiled"
+  end
+
+  private
+
+  def mrbc_or_skip
+    return ENV["MRBC"] if ENV["MRBC"] && File.executable?(ENV["MRBC"])
+    if (mwr = ENV["MRUBY_WASM_RUNTIME_PATH"])
+      candidate = File.join(mwr, "mruby", "build", "host", "bin", "mrbc")
+      return candidate if File.executable?(candidate)
+    end
+    on_path = (ENV["PATH"] || "").split(File::PATH_SEPARATOR).map { |d| File.join(d, "mrbc") }.find do |p|
+      File.executable?(p) && !File.directory?(p)
+    end
+    return on_path if on_path
+    skip "mrbc not available; set MRBC or MRUBY_WASM_RUNTIME_PATH to run this test"
   end
 end
