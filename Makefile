@@ -8,7 +8,8 @@
 #   make lilac-full        Build → build/lilac-full.wasm
 #   make lilac-compiled    Build → build/lilac-compiled.wasm
 #   make lilac-all         Build both variants (dev)
-#   make lilac-all-release Build both variants (release: -Os + strip-debug)
+#   make lilac-all-release Build both variants (release: -Oz + strip-debug;
+#                          compile-time -flto handled by build_config)
 #   make test              Run wasm_spec against the full bundle
 #   make npm-pack          Stage release wasms into npm/lilac-*/lilac.wasm
 #   make clean             Remove this repo's build/ artifacts
@@ -108,7 +109,7 @@ $(BUILD_WASM_LILAC_FULL): $(LIBMRUBY_LILAC_FULL) | $(BUILD_DIR)
 	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_FULL),$(BUILD_WASM_LILAC_FULL))
 
 $(BUILD_WASM_LILAC_FULL_RELEASE): $(LIBMRUBY_LILAC_FULL_RELEASE) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,-Os,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_FULL_RELEASE),$(BUILD_WASM_LILAC_FULL_RELEASE))
+	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_FULL_RELEASE),$(BUILD_WASM_LILAC_FULL_RELEASE))
 
 $(BUILD_WASM_LILAC_COMPILED): $(LIBMRUBY_LILAC_COMPILED) | $(BUILD_DIR)
 	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_COMPILED),$(BUILD_WASM_LILAC_COMPILED))

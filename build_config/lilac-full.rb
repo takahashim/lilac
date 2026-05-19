@@ -16,7 +16,14 @@
 # -complex / -bigint), mruby-set, mruby-objectspace, mruby-enum-lazy,
 # mruby-enum-chain, mruby-time, mruby-random — none are referenced by
 # Lilac runtime or any example (verified with grep + wasm_spec).
-# That trim saves ~150 KB raw / ~50 KB brotli (verified 2026-05-19).
+# That trim saved ~150 KB raw / ~50 KB brotli (verified 2026-05-19).
+#
+# Also dropped for the browser variant: mruby-io / hal-wasi-io /
+# mruby-wasi-dir / mruby-wasi-env. Lilac runtime / examples don't use
+# File / IO / Dir / ENV in the browser; the default logger now writes
+# to `console.warn` / `console.error` via the JS bridge instead of
+# STDERR. Additional saving: ~110 KB raw / ~30 KB brotli on top of
+# the stdlib trim (verified 2026-05-19).
 #
 # DEPENDENCY: mruby-wasm-runtime
 #
@@ -82,7 +89,17 @@ MRuby::CrossBuild.new(build_name) do |conf|
   # gaps. See hal-wasi-io/README.md in mruby-wasm-runtime for details.
   shim_dir = "#{mwr_mrbgem}/hal-wasi-io/include"
   stub_flags = ["-isystem", shim_dir, "-include", "#{shim_dir}/wasi-shims.h"]
-  size_flags = release ? ["-Os"] : []
+  # `-Oz` over `-Os`: a few % smaller wasm; the framework is not CPU-bound
+  # (interop crossings dominate), so optimizing harder for size pays off.
+  #
+  # NOTE: `-flto` is intentionally NOT included for the `full` variant.
+  # The mruby-compiler / mruby-eval gems (which `lilac-compiled` excludes)
+  # exercise setjmp/longjmp paths that hit a code-gen bug under LTO + the
+  # `-mllvm -wasm-enable-sjlj` lowering — the resulting wasm either leaves
+  # a stray `env::setjmp` import or throws an unhandled `WebAssembly.Exception`
+  # at instantiation. The `lilac-compiled` variant (no compiler) is fine
+  # with `-flto` and keeps it.
+  size_flags = release ? ["-Oz"] : []
   conf.cc.flags.concat(common_flags + size_flags + sjlj_flags + stub_flags)
   conf.cxx.flags.concat(common_flags + size_flags + sjlj_flags + stub_flags)
   conf.linker.flags.concat(common_flags)
@@ -122,22 +139,20 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem core: "mruby-class-ext"     # Class#name (used in errors)
   conf.gem core: "mruby-catch"         # throw/catch (resource teardown)
 
-  # Lilac-specific I/O + sprintf. mruby-io stays for read-side helpers
-  # used by hal-wasi-io (file path resolution etc.); mruby-sprintf is
-  # required by Kernel#sprintf and `"%s" %` interpolation in user code.
-  # mruby-metaprog is the single doorway for `instance_variable_get`
-  # (decisions §13 keeps metaprog access centralized).
-  conf.gem core: "mruby-io"
+  # mruby-sprintf is required by Kernel#sprintf and `"%s" %` style
+  # interpolation in user code. mruby-metaprog is the single doorway
+  # for `instance_variable_get` (decisions §13 keeps metaprog access
+  # centralized in directives evaluator).
   conf.gem core: "mruby-sprintf"
   conf.gem core: "mruby-metaprog"
 
-  # WASI shims + JS bridge from mruby-wasm-runtime.
-  # hal-wasi-io must come BEFORE mruby-io so the latter's HAL
-  # auto-detector picks it instead of the hal-posix-io fallback.
-  conf.gem "#{mwr_mrbgem}/hal-wasi-io"
+  # JS bridge from mruby-wasm-runtime. NOTE: mruby-io / hal-wasi-io /
+  # mruby-wasi-dir / mruby-wasi-env are intentionally omitted —
+  # browsers don't expose File / Dir / ENV, and the default Logger
+  # routes through `console.warn` / `console.error` instead of STDERR.
+  # The `stub_flags` (POSIX shim include paths) above remain in case
+  # any future mrbgem references symbols WASI-sysroot lacks.
   conf.gem "#{mwr_mrbgem}/mruby-wasm-js"
-  conf.gem "#{mwr_mrbgem}/mruby-wasi-dir"
-  conf.gem "#{mwr_mrbgem}/mruby-wasi-env"
 
   # Lilac framework mrbgems (this repo).
   conf.gem "#{runtime_dir}/mruby-regexp-compat"

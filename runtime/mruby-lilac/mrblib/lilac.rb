@@ -115,16 +115,22 @@ module Lilac
       emit_error(label, error)
     end
 
+    # Browser-targeted output: route through `console.warn` /
+    # `console.error` via the JS bridge. mruby-io / hal-wasi-io are
+    # NOT pulled into the browser bundle, so `STDERR` is undefined here
+    # and a direct `puts` would NameError. Tests / non-browser hosts
+    # can still override emission via `Lilac.logger = ->(...) { ... }`.
     def emit_warn(msg)
-      STDERR.puts "[Lilac] #{msg}"
+      JS.global[:console].call(:warn, "[Lilac] #{msg}")
     end
 
     def emit_error(label, error)
-      STDERR.puts "[Lilac] Error in #{label}"
-      STDERR.puts "  #{error.class}: #{error.message}"
+      con = JS.global[:console]
+      con.call(:error, "[Lilac] Error in #{label}")
+      con.call(:error, "  #{error.class}: #{error.message}")
       return unless Lilac.dev_mode?
       bt = error.backtrace if error.respond_to?(:backtrace)
-      bt&.each { |line| STDERR.puts "    #{line}" }
+      bt&.each { |line| con.call(:error, "    #{line}") }
     end
 
     # Auto-installed when a user does `Lilac.logger = ->(s, m, e) { ... }`.
