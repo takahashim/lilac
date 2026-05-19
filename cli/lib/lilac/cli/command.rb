@@ -30,7 +30,7 @@ module Lilac
         when "dev" then run_dev
         when "new" then run_new
         when "doctor" then run_doctor
-        when "help", "-h", "--help" then print_help; 0
+        when "help", "-h", "--help" then run_help
         when "--version" then print_version; 0
         else
           @err.puts "lilac: unknown command #{subcommand.inspect}"
@@ -41,6 +41,27 @@ module Lilac
       rescue Builder::Error, SFC::ParseError, Scaffold::Error, ConfigLoader::LoadError => e
         @err.puts "lilac: #{e.message}"
         1
+      end
+
+      # `lilac help` shows the top-level help; `lilac help <subcmd>`
+      # shows the per-subcommand option list (sourced from the same
+      # OptionParser that the subcommand uses, so it stays in sync).
+      def run_help
+        topic = @argv.shift
+        case topic
+        when nil, "help", "-h", "--help"
+          print_help
+          0
+        when "build"  then @out.puts build_opts_parser; 0
+        when "dev"    then @out.puts dev_opts_parser; 0
+        when "new"    then @out.puts new_opts_parser; 0
+        when "doctor" then @out.puts doctor_opts_parser; 0
+        else
+          @err.puts "lilac help: unknown command #{topic.inspect}"
+          @err.puts
+          print_help(io: @err)
+          1
+        end
       end
 
       private
@@ -89,13 +110,16 @@ module Lilac
 
       def parse_doctor_opts
         opts = {}
-        parser = OptionParser.new do |o|
+        doctor_opts_parser(opts).parse!(@argv)
+        opts
+      end
+
+      def doctor_opts_parser(opts = {})
+        OptionParser.new do |o|
           o.banner = "Usage: lilac doctor [options]"
           add_path_options(o, opts)
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
-        parser.parse!(@argv)
-        opts
       end
 
       def run_new
@@ -121,11 +145,14 @@ module Lilac
       # parser is kept here so future flags (e.g. --no-counter,
       # --with-router) slot in symmetrically with `build` / `dev`.
       def parse_new_opts
-        parser = OptionParser.new do |o|
+        new_opts_parser.order!(@argv) # `order!` stops at the first non-option argument
+      end
+
+      def new_opts_parser
+        OptionParser.new do |o|
           o.banner = "Usage: lilac new <project-name>"
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
-        parser.order!(@argv) # `order!` stops at the first non-option argument
       end
 
       def print_creation_summary(name, files)
@@ -185,7 +212,12 @@ module Lilac
 
       def parse_dev_opts
         opts = {}
-        parser = OptionParser.new do |o|
+        dev_opts_parser(opts).parse!(@argv)
+        opts
+      end
+
+      def dev_opts_parser(opts = {})
+        OptionParser.new do |o|
           o.banner = "Usage: lilac dev [options]"
           o.on("--host HOST", "Bind host (default: #{Config::DEFAULT_DEV_HOST})") { |v| opts[:host] = v }
           o.on("--port PORT", Integer, "Bind port (default: #{Config::DEFAULT_DEV_PORT})") { |v| opts[:port] = v }
@@ -193,20 +225,21 @@ module Lilac
           add_target_options(o, opts)
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
-        parser.parse!(@argv)
-        opts
       end
 
       def parse_build_opts
         opts = {}
-        parser = OptionParser.new do |o|
+        build_opts_parser(opts).parse!(@argv)
+        opts
+      end
+
+      def build_opts_parser(opts = {})
+        OptionParser.new do |o|
           o.banner = "Usage: lilac build [options]"
           add_path_options(o, opts)
           add_target_options(o, opts)
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
-        parser.parse!(@argv)
-        opts
       end
 
       # Build / dev target selection. `--target full` produces dist HTML
@@ -255,7 +288,8 @@ module Lilac
           Tip: place the mruby-wasm runtime under public/vendor/. Run
           `lilac doctor` to check the setup.
 
-          Run `lilac <command> --help` for command-specific options.
+          Run `lilac help <command>` or `lilac <command> --help` for
+          command-specific options.
         HELP
       end
 
