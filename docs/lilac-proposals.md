@@ -385,8 +385,13 @@ form       既存の binding 群を集めて validation / submit / reset /
 scanner 実装 + wasm_spec(`test_directive_bind_runtime.rb`)+ receipt
 example の data-bind 移行は完了(2026-05-18)。続いて後続提案
 ([`it.path` 全廃 ...](#itpath-全廃--value-binding-bare-ident-scope--data-prop--auto-fill))
-により example はさらに簡素化(2026-05-19)。確定判断 §15 への昇格は spec
-doc(form-spec / directive-spec / design.md)の本文書き換えと併せて行う。
+により example はさらに簡素化(2026-05-19)。
+
+`lilac-directive-spec.md` §3 / §5 / §6.2 / §8 に **data-bind directive と
+form 統合 directive との関係** を反映済み(2026-05-19)。残りの未反映 spec
+は `lilac-form-spec.md` §1, §11.8, §12(form gem 視点での data-bind 位置付
+け)と `lilac-design.md` §4.5(「form を中心に据える代償」節の更新)。
+これらと併せて確定判断 §15 への昇格を行う。
 
 ---
 
@@ -677,16 +682,35 @@ literal を混ぜたい場合:
 
 ### ステータス
 
-未判断。実装規模は中程度(Value.parse / Evaluator / Scanner / Props で
-100-200 行、example migration / spec 改訂は別途)。判断の論点は:
+**実装完了 + spec 一部反映済み**(2026-05-19):
 
-- **per-row component の auto-fill が implicit すぎないか**: 「data-each
-  の中の data-component は item から自動で prop を受ける」というルールが
-  reader にとって学びやすいか
+- runtime 実装: `Value::BareIdent` 追加、`Evaluator` / `Scanner` の dispatch
+  拡張、`PropAutoFill` / `ItemField` モジュール抽出。`it.path` は両形 accept
+  + dev_mode で deprecation warn を残しつつ段階廃止
+- wasm_spec: `test_directive_bare_ident_runtime.rb`(bare ident 解決 /
+  auto-fill / row reuse / scope 外 silent skip / it.path 互換+ warn の
+  8 assertions)。既存 618 tests 全 pass
+- example 移行: receipt / kanban / todo / search の `it.path` 用法を撤去
+  (`data-prop-X="it.Y"` は auto-fill 経由に置換)
+- spec 反映済み: `lilac-directive-spec.md` §3(BareIdent grammar)/ §5
+  (directive 一覧)/ §6.2(`data-bind` 仕様)/ §8(衝突規則)、
+  `lilac-props-spec.md` §7.5(`it.path` deprecation)/ §7.6(auto-fill 機構)
+- 未反映 spec: `lilac-form-spec.md`(form gem 視点での data-bind / auto-fill
+  の位置付け)、`lilac-design.md` §4.5
+
+判断の論点(decisions §16 昇格時に再評価):
+
+- **per-row component の auto-fill が implicit すぎないか**: receipt /
+  kanban / todo / search で実装プロトタイプを動かした結果、reader にとって
+  違和感は少なかった(prop 宣言が SSOT として機能、`data-prop-X="it.Y"`
+  の forest が消える効果が大きい)
 - **bare ident in value-binding directive の scope-context 依存**: 同じ
-  `data-text="name"` が context によって有効 / 無効が変わることへの違和感
-- **`it` 互換期間の長さ**: 既存 docs / 教材が `it.field` 前提なので一定
-  期間の co-existence は必要
+  `data-text="name"` が context によって解釈が変わる件は spec §3 で
+  明文化済み。今のところ utility としての ergonomics 改善が違和感を上回る
+- **`it` 互換期間の長さ**: 段階廃止の判定基準は本提案の「実装的課題 #6」
+  に明示(example 移行 + spec canonical 化 + 1 minor release 以上の warn 期間)
 
-これらを実装プロトタイプ(receipt の per-row component を auto-fill 化、
-kanban の data-prop-* を整理)で検証してから判断昇格を判断する。
+残作業:
+- form-spec / design.md の更新
+- decisions §16 への昇格(本提案を「確定」化)+ Appendix 年表追記
+- `IT_PATH` の最終削除は上記 3 条件が揃ってから次 minor release

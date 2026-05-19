@@ -198,13 +198,14 @@ ruby_hash_key  ::= [a-zA-Z_][a-zA-Z0-9_]*         # data-class の bare hash key
 
 # Value patterns
 ivar           ::= '@' ident                      # @count, @todos
-it_path        ::= 'it' ( '.' ident )?            # it, it.title, it.valid?
+bare_ident     ::= ident                          # description (iteration item field, value-binding 系のみ)
+it_path        ::= 'it' ( '.' ident )?            # DEPRECATED — bare_ident に置換予定。it, it.title, it.valid?
 class_name     ::= class_ident ( '::' class_ident )*   # Counter, Admin::UserCard
 
 # Hash literal (data-class only)
 hash_literal   ::= '{' ( hash_entry (',' hash_entry)* )? '}'
 hash_entry     ::= hash_key ':' hash_value
-hash_value     ::= ivar | it_path
+hash_value     ::= ivar | bare_ident | it_path
 
 # hash_key は directive 別 (後述)
 ```
@@ -213,17 +214,33 @@ hash_value     ::= ivar | it_path
 
 ### 書けるもの
 
-| 値 | 形式 |
-|---|---|
-| `@count` | ivar |
-| `it` | iteration item |
-| `it.title` | 1 段の attribute access |
-| `it.valid?` | predicate (`?` 許可) |
-| `increment` | method 名 (event handler) |
-| `Counter` | class 名 |
-| `Admin::UserCard` | namespaced class |
-| `canvas` | ref 名 (lowercase) |
-| `{ active: @is_active }` | hash literal (data-class 用) |
+| 値 | 形式 | 解釈 context |
+|---|---|---|
+| `@count` | ivar | host component の signal(全 context) |
+| `description` | bare ident | 現在 iteration item の `description` field(`data-each` body の value-binding 系 directive のみ) |
+| `valid?` | bare ident + predicate | 同上(`?` 許可) |
+| ~~`it`~~ | iteration item | **DEPRECATED**(`it.path` 全廃に向けた段階廃止。dev_mode で warn) |
+| ~~`it.title`~~ | 1 段の attribute access | 同上(`description` のように bare ident で書き換え) |
+| ~~`it.valid?`~~ | predicate (`?` 許可) | 同上 |
+| `increment` | method 名 (event handler) | host の method(`data-on-*` 等) |
+| `Counter` | class 名 | 登録 component 名(`data-component`) |
+| `Admin::UserCard` | namespaced class | 同上 |
+| `canvas` | ref 名 (lowercase) | DOM ref 識別子(`data-ref`) |
+| `{ active: @is_active }` | hash literal (data-class 用) | data-class の key:value マップ |
+
+bare ident は **directive 種別と scope** に応じて意味が変わる。同じ
+`name` という値が:
+
+- `data-key="name"` → iteration item の field 名(従来から)
+- `data-text="name"` (data-each body 内) → iteration item の `name` field
+- `data-text="name"` (data-each body 外) → **parse 成功するが silent skip**
+  (item context が無いため bind 不能。`it.path` の慣行と同じ)
+- `data-on-click="name"` → host の `name` method
+- `data-component="name"` → 登録 component 名(class 名規則と互換)
+- `data-prop-name="todo"` → literal "todo"(data-prop-* は literal fallback を保持)
+
+詳細は §5 と §6 の各 directive 仕様、および §8 「複数 directive 合成規則」を
+参照。
 
 ### 書けないもの (build error)
 
@@ -233,12 +250,14 @@ hash_value     ::= ivar | it_path
 | `it.user.name` | it からの dot は 1 段だけ |
 | `it.title.upcase` | method chain |
 | `it.save!` | bang は全 directive で禁止 |
+| `user.name` | bare ident からの dot 禁止(field access は 1 段だけ) |
 | `save?` (data-on-X) | event handler に predicate suffix 不可 |
 | `it.foo()` | parens / 引数 |
 | `it.title.length > 5` | 比較演算子 |
 | `!@flag` | 否定演算子 (`data-hide` を使う) |
 | `"hi #{@name}"` | 文字列補間 |
 | `@items[0]` | bracket subscription |
+| `1bad` (value-binding) | 数字始まり = identifier ではない(parse error) |
 
 ### Validator
 
@@ -275,22 +294,27 @@ class Admin::UserCard < Lilac::Component; end
 
 ## 5. Directive 一覧
 
+値の型欄の `bare_ident` は **`data-each` body 内のみ valid**(scope 外は
+silent skip)。`it_path` は **deprecated**(段階廃止、dev_mode で warn)で、
+新規コードは bare ident で書く。
+
 | Directive | 値の型 | Build 後 (例) |
 |---|---|---|
 | `data-component="C"` | class_name | autoregister 経由 mount |
 | `data-ref="x"` | ref_ident | explicit ref capture |
-| `data-text="@s"` | ivar / it_path | `bind refs.gN, text: @s` |
-| `data-unsafe-html="@s"` | ivar / it_path | `bind refs.gN, html: @s` |
-| `data-show="@s"` | ivar / it_path | lil-hidden を falsy 時に付与 |
-| `data-hide="@s"` | ivar / it_path | lil-hidden を truthy 時に付与 |
+| `data-text="@s"` | ivar / bare_ident / ~~it_path~~ | `bind refs.gN, text: @s` |
+| `data-unsafe-html="@s"` | ivar / bare_ident / ~~it_path~~ | `bind refs.gN, html: @s` |
+| `data-bind="@s"` | ivar / bare_ident のみ(両者とも writable Signal を指す必要あり)。**`it_path` は受理しない**(setter を持たない記法を弾く) | `bind_input refs.gN, @s` ([§6.2](#62-data-bind--two-way-input-binding)) |
+| `data-show="@s"` | ivar / bare_ident / ~~it_path~~ | lil-hidden を falsy 時に付与 |
+| `data-hide="@s"` | ivar / bare_ident / ~~it_path~~ | lil-hidden を truthy 時に付与 |
 | `data-on-X="m"` | method_ident | `refs.gN.on(:X) { \|ev\| m(...) }` |
-| `data-attr-X="@s"` | ivar / it_path | `bind refs.gN, attr: { "X" => @s }` |
+| `data-attr-X="@s"` | ivar / bare_ident / ~~it_path~~ | `bind refs.gN, attr: { "X" => @s }` |
 | `data-arg-X="it.id"` | ivar / it_path (同要素に `data-component` 必須、**DOM 経由**) | `t.data(:X, it.id)` (子は `root.data(:X)` で読む。ivar に取れば snapshot、event 毎に読めば live) |
-| `data-prop-X="..."` | literal / ivar / it_path (同要素に `data-component` 必須、子に `prop :X` 宣言が必要。`@ivar` / `it_path` の式解決は主に `data-each` 配下の row component 向け) | child の `@X` Signal を auto-init。子は `@X` / `props.X` / `instance.X` の 3 経路で値を読める。詳細 [`lilac-props-spec.md`](./lilac-props-spec.md) |
-| `data-css-X="@s"` | ivar / it_path | `element.style.setProperty("--X", @s.to_s)` (CSS custom property 設定、`--` は自動 prepend) |
-| `data-each="@c"` | ivar / it_path | `bind_list refs.gN, @c do \|it, t\| ... end` |
+| `data-prop-X="..."` | literal / ivar / ~~it_path~~ (同要素に `data-component` 必須、子に `prop :X` 宣言が必要。bare_ident は **literal として扱う** — iteration item field を渡したい場合は auto-fill 経由 [props-spec](./lilac-props-spec.md) 参照) | child の `@X` Signal を auto-init。子は `@X` / `props.X` / `instance.X` の 3 経路で値を読める。詳細 [`lilac-props-spec.md`](./lilac-props-spec.md) |
+| `data-css-X="@s"` | ivar / bare_ident / ~~it_path~~ | `element.style.setProperty("--X", @s.to_s)` (CSS custom property 設定、`--` は自動 prepend) |
+| `data-each="@c"` | ivar / ~~it_path~~ | `bind_list refs.gN, @c do \|it, t\| ... end` |
 | `data-key="id"` | key_field (同要素に `data-each` 必須) | `key: ->(it) { it.id }` |
-| `data-class="{a: @s}"` | hash_literal | `bind refs.gN, class: { "a" => @s }` |
+| `data-class="{a: @s}"` | hash_literal (value 側は ivar / bare_ident / ~~it_path~~) | `bind refs.gN, class: { "a" => @s }` |
 
 ### Form 統合 directive(別 spec 参照)
 
@@ -303,17 +327,26 @@ input / button の form 連携は **`docs/lilac-form-spec.md` Section 11** で
 | `data-field="<name>"` | field の UI 自動 wire | [form-spec §11.3](./lilac-form-spec.md) |
 | `data-button="<name>"` | named action button | [form-spec §11.5](./lilac-form-spec.md) |
 
-### 廃止された directive
+### Deprecated directive 値
 
-以下は **Phase D で削除済み**(旧仕様の参考のため記載):
+- **`it.field` / `it`** — `it.path` 構文は廃止予定(`data-text="it.name"` →
+  `data-text="name"`、`data-prop-X="it.Y"` → child の prop 宣言 + auto-fill
+  経由)。dev_mode で deprecation warn を出す。詳細は
+  [`lilac-proposals.md` の "`it.path` 全廃" 提案](./lilac-proposals.md)、
+  および §6.2
 
-- `data-value="@s"` (ivar only) → form 経由 (`data-field`) に統合。汎用
-  signal binding は命令的 `bind_input refs.X, @signal` を escape hatch
-  として使う
-- `data-checked="@s"` (ivar only) → 同上。checkbox/radio は
-  `f.field :name, type: :checkbox` で form 経由
+### 過去に削除された directive
 
-旧コードからの migration は form-spec §11.8 参照。
+以下は **Phase D で削除** → **Phase E で `data-bind` として復活統合**:
+
+- `data-value="@s"` → 復活: `data-bind="@s"`(value-binding 系として
+  unified、§6.2 参照)
+- `data-checked="@s"` → 復活: `data-bind="@s"`(input type が checkbox
+  なら自動で `:checked` property を選ぶ、§6.2 参照)
+
+Form-scope binding(validation / submit を伴う input)は引き続き
+`data-field` 経由が canonical(form-spec §11.3)。`data-bind` と
+`data-field` の使い分けは form-spec §1 と §11 を参照。
 
 ---
 
@@ -377,77 +410,132 @@ def add_todo(ev)
 end
 ```
 
-### 6.2 `data-value` / `data-checked` — **削除済み**(Phase D)
+### 6.2 `data-bind` — two-way input binding
 
-**ステータス**: Phase D で **削除**。CLI codegen / runtime scanner どちら
-からも dispatch が消えており、HTML にこれらの属性を書いても **何も起き
-ない**(普通の data-* 属性として残るが Lilac は無視)。新規 / 既存どちらの
-code でも使わない。
+**ステータス**: Phase E で **導入**。Phase D で削除された `data-value` /
+`data-checked` を **形を変えて統合**(input type 自動判別 + form 非依存)
+した directive。
 
-旧仕様(歴史参照用):
+#### 適用要素 と DOM property 自動選択
 
-| Directive | 適用要素 | 値の型 | 用途 |
+| 要素 | type | bind 先 property | event |
 |---|---|---|---|
-| `data-value` | `<input>` (text 系), `<textarea>`, `<select>` | **`@ivar` のみ** (writable signal) | 双方向 text bind |
-| `data-checked` | `<input type=checkbox>`, `<input type=radio>` | **`@ivar` のみ** (writable bool signal) | 双方向 boolean bind |
+| `<input>` | `text` / `number` / `email` / `password` / etc. | `:value` | `input` |
+| `<input>` | `checkbox` | `:checked` | `change` |
+| `<input>` | `radio` | (未サポート、raise) | — |
+| `<input>` | `file` | (未サポート、raise — `files` property は script から read-only) | — |
+| `<textarea>` | — | `:value` | `input` |
+| `<select>` | — | `:value` | `change` |
+| その他の要素 | — | raise(`<div data-bind>` 等は誤用) | — |
 
-#### 廃止の理由
+#### 値の文法
 
-input/checkbox の declarative binding は **form 経由が canonical**(form-spec
-§1, §11 参照)。`data-value` / `data-checked` の汎用 ivar binding は廃止し、
-全 input binding を form の `f.field` + HTML の `data-field` に集約する。
+| 形式 | 例 | 意味 |
+|---|---|---|
+| `ivar` | `data-bind="@qty"` | host component の `@qty` Signal を bind |
+| `bare_ident`(data-each body 内のみ) | `data-bind="qty"` | 現在 iteration item の `qty` field を bind。**field の値が `Lilac::Signal` で無ければ raise**(plain value には setter が無い) |
+| **`it_path`** | `data-bind="it.qty"` | **受理しない**(他 directive と異なり、deprecation 期間も無く即 `Lilac::Error`)。`it.path` の解釈経路では「item field の Signal」を取り出せず、bind_input に渡せないため。bare ident で書き換えること |
 
-理由:
-- 「同じことをやる 2 つの directive」(`data-value` vs `data-field`)を
-  維持する mental cost
-- form 経由なら validation / touched / dirty / error が「ついで」に得られる
-- single-input ケースも `form.field :query, initial: ""` の 1 行宣言で済む(form-spec §5)
+両受理形式とも **解決後の値が writable `Lilac::Signal`** である必要がある。
+`Computed` や plain scalar は raise する(双方向 sync には setter が必須)。
 
-#### Migration (旧 → 新)
+#### form-scope binding との関係
+
+`data-bind` は **form 非依存** の two-way binding directive。validation /
+submit / reset / error UI など form-scope の機能が要らない場合に使う。
+
+| 要件 | 推奨書き方 |
+|---|---|
+| DOM ↔ signal の同期だけ | `data-bind="@X"` |
+| form の validation / submit + 値が `<input>` 内 | `f.field :X` + `<input data-field="X">`(form-spec §11.3) |
+| form の validation / submit + 値が `<input>` の外(子 component / 外部 signal) | `f.field :X, source: @X`(form-spec §10) |
+
+詳細は [`lilac-form-spec.md`](./lilac-form-spec.md) §1 と §11 を参照。
+
+#### Collision: `data-bind` と `data-field` の併用は禁止
+
+同一要素に両方書くと **両方が同じ input value を取り合う effect** を二重に
+設置することになり、挙動が破綻する。Compat layer が `Lilac::Error` を
+raise する(§8 参照)。
+
+#### 命令的 escape hatch
+
+`data-bind` で表現できない高度な用途(動的 property 切替、独自の event 名、
+非標準 input element 等)では、命令的に
+`bind_input refs.X, @signal, property: :value` を直接書く経路も維持される
+(`lilac-spec.md` の bind_input 節参照)。日常的な input binding は
+declarative directive(`data-bind` / `data-field`)で書くのが原則。
+
+#### 移行(`data-value` / `data-checked` 旧コードからの書き換え)
 
 ```html
-<!-- 旧 -->
+<!-- 旧(Phase D で削除済み)-->
 <input data-value="@query">
 <input type="checkbox" data-checked="@dark_mode">
-```
 
-```ruby
-@query = signal("")
-@dark_mode = signal(false)
-```
-
-→
-
-```html
 <!-- 新 -->
-<input data-field="query">
-<input type="checkbox" data-field="dark_mode">
+<input data-bind="@query">
+<input type="checkbox" data-bind="@dark_mode">
 ```
 
-```ruby
-form.field :query, initial: ""
-form.field :dark_mode, initial: false, type: :checkbox
-```
-
-`@query` / `@dark_mode` ivar は不要(値は `form[:query].value` /
-`form[:dark_mode].value` で取れる)。
-
-escape hatch として命令的 `bind_input refs.X, @signal` は残す(form を
-通さず純粋に signal と input を bind したい advanced 用途用)。
+Ruby 側は `@query = signal("")` / `@dark_mode = signal(false)` を host
+component に declare するだけ(form-scope に乗せたい場合は
+`f.field :query, initial: ""` 等を使う)。
 
 #### iteration item の編集 UI
 
-旧 spec で「`it_path` は read-only、編集は data-attr-checked + data-on-change で」
-としていた pattern は引き続き有効。**read-only display + event handler** の
-組合せ:
+`data-each` body 内では bare ident で item field に直接 bind 可能。item は
+各 field を Signal で nest した hash として持つ:
+
+```html
+<ul data-each="@todos">
+  <li>
+    <input type="checkbox" data-bind="done">
+    <input type="text" data-bind="title">
+  </li>
+</ul>
+```
+
+```ruby
+@todos = signal([
+  { "id" => 1, "title" => signal("buy milk"), "done" => signal(false) },
+  ...
+])
+```
+
+items に Signal を nest しない設計(plain hash の配列)を取りたい場合は、
+**per-row 子 component を立てて props auto-fill 経由でローカル signal を持つ**
+方が自然(props-spec の auto-fill 節参照):
+
+```html
+<ul data-each="@todos">
+  <li data-component="TodoRow">  <!-- @id / @title / @done が auto-fill される -->
+    <input type="checkbox" data-bind="@done">
+    <input type="text" data-bind="@title">
+  </li>
+</ul>
+```
+
+```ruby
+class TodoRow < Lilac::Component
+  prop :id, Integer
+  prop :title, String
+  prop :done, Lilac::Boolean
+end
+```
+
+#### 旧 read-only + event handler パターン(引き続き有効)
+
+`data-bind` 以前から推奨されてきた「read-only display + event handler」の
+pattern も無効化はされていない。複雑な変換を挟みたい場合等に依然有効:
 
 ```html
 <ul data-each="@todos">
   <li>
     <input type="checkbox"
-           data-attr-checked="it.done"
+           data-attr-checked="done"
            data-on-change="toggle_done">
-    <span data-text="it.title"></span>
+    <span data-text="title"></span>
   </li>
 </ul>
 ```
@@ -455,7 +543,7 @@ escape hatch として命令的 `bind_input refs.X, @signal` は残す(form を
 ```ruby
 def toggle_done(todo, _ev)
   @todos.update do |list|
-    list.map { |t| t.id == todo.id ? t.with(done: !t.done) : t }
+    list.map { |t| t["id"] == todo["id"] ? t.merge("done" => !t["done"]) : t }
   end
 end
 ```
@@ -1113,13 +1201,18 @@ end
 | `data-text` + `data-unsafe-html` | **build error** (両方が child content を奪い合う) |
 | `data-text` + `data-each` | **build error** (each は children を生成、text は中身を上書き) |
 | `data-show` + `data-hide` | **build error** (redundant, pick one) |
-| `data-value` + `data-checked` | **build error** (form control の primary state は 1 つだけ) |
+| `data-bind` + `data-field` | **build error** (form-scope binding と form 非依存 binding が同じ input value を取り合う、§6.2 参照) |
 | `data-component` + `data-each` 同要素 | **build error** ("wrap with another element") |
 | `data-component` + `data-ref` | OK (ref は mount root) |
 | `data-component` + `data-show` / `data-hide` | OK |
 | `data-component` + `data-on-X` | OK (root element の event) |
 | `data-arg-X` + `data-attr-data-X` 同名 X (両方 `data-X` を書く) | **build error** (DOM attribute の二重 writer) |
 | `data-arg-X` 同一 X を 1 要素に複数 | **build error** (HTML attribute の重複) |
+
+過去に存在した `data-value` + `data-checked` collision は両 directive 廃止
+(Phase D)で対象消滅。後継の `data-bind` は input type を自動判別するため、
+`data-bind` 同士の collision は概念上発生しない(同一要素に複数の `data-bind`
+は HTML attribute 重複として別の error)。
 
 ### `lil-hidden` 衝突
 
