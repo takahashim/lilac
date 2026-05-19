@@ -1,60 +1,54 @@
 module Lilac
   module Directives
-    # Runtime compat checks. Mirrors `Lilac::CLI::DirectiveCompatibility`
-    # but with the runtime severity policy: ergonomics violations are
-    # warn+skip, correctness/security violations raise.
+    # Runtime compat checks.
+    #
+    # Pairs with cli/lib/lilac/directives/compat.rb but is *not* a
+    # diff-0 duplicate — the build-time half raises on every
+    # violation, this runtime half applies warn+skip for ergonomics
+    # violations and raises only on correctness/security violations.
+    # The collision data both halves share lives in `compat_rules.rb`
+    # (which IS a diff-0 duplicate). See decisions §17.
     #
     # Called by Scanner once per element, after directive extraction
     # but before dispatch. Returns the set of directive kinds to skip
     # (after warning). May raise `Lilac::Error` on hard violations.
     module Compat
       class << self
+        # `directives` is Array<[kind, name, value]>. `tag_name` is the
+        # element tag (lowercased). `attrs` is a Hash of element
+        # attributes (lowercase keys, string values). Returns Array of
+        # kinds to skip; may raise Lilac::Error.
+        def check!(directives, tag_name:, attrs:, element_descriptor:)
+          kinds = directives.map { |k, _, _| k }
+          skip = []
 
-      # `directives` is Array<[kind, name, value]>. `tag_name` is the
-      # element tag (lowercased). `attrs` is a Hash of element
-      # attributes (lowercase keys, string values). Returns Set of
-      # kinds to skip; may raise Lilac::Error.
-      def check!(directives, tag_name:, attrs:, element_descriptor:)
-        kinds = directives.map { |k, _, _| k }
-        skip = []
+          # Hard collisions (correctness) — raise. COLLISION_PAIRS
+          # lives in compat_rules.rb (SSOT shared with build-time).
+          COLLISION_PAIRS.each do |pair, message|
+            check_collision!(kinds, pair, message, element_descriptor)
+          end
 
-        # Hard collisions (correctness) — raise.
-        check_collision!(kinds, :text, :each, element_descriptor)
-        check_collision!(kinds, :text, :unsafe_html, element_descriptor)
-        check_collision!(kinds, :unsafe_html, :each, element_descriptor)
-        check_collision!(kinds, :show, :hide, element_descriptor)
-        check_collision!(kinds, :component, :each, element_descriptor)
-        # data-bind = form-independent two-way; data-field = form-scope
-        # registration + UI wiring. Double-wiring would cause two effects
-        # to fight for the same input value, so make the conflict explicit.
-        check_collision!(kinds, :bind, :field, element_descriptor)
+          # data-key without data-each — warn + skip the orphan key.
+          if kinds.include?(:key) && !kinds.include?(:each)
+            warn_skip("data-key", tag_name, element_descriptor,
+                      "is only meaningful when paired with data-each on the same element")
+            skip << :key
+          end
 
-        # data-key without data-each — warn + skip the orphan key.
-        if kinds.include?(:key) && !kinds.include?(:each)
-          warn_skip("data-key", tag_name, element_descriptor,
-                    "is only meaningful when paired with data-each on the same element")
-          skip << :key
+          skip
         end
 
-        skip
-      end
+        def check_collision!(kinds, pair, message, element_descriptor)
+          return unless pair.all? { |k| kinds.include?(k) }
+          raise Lilac::Error,
+                "directive collision: #{message} (#{element_descriptor})"
+        end
 
-      def check_collision!(kinds, a, b, element_descriptor)
-        return unless kinds.include?(a) && kinds.include?(b)
-        raise Lilac::Error,
-              "directive collision: data-#{kind_label(a)} and data-#{kind_label(b)} " \
-              "cannot coexist on the same element (#{element_descriptor})"
-      end
-
-      def kind_label(kind)
-        kind.to_s.chomp("_").tr("_", "-")
-      end
-
-      def warn_skip(attr, tag, element_descriptor, reason)
-        Lilac.logger.warn(
-          "#{attr} on <#{tag}> #{reason}; skipping binding (#{element_descriptor})"
-        )
-      end
+        def warn_skip(attr, tag, element_descriptor, reason)
+          Lilac.logger.warn(
+            "#{attr} on <#{tag}> #{reason}; skipping binding (#{element_descriptor})"
+          )
+        end
       end
     end
   end

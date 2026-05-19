@@ -104,7 +104,7 @@ class TestDirectiveCodegen < Minitest::Test
 
   def test_data_bind_rejects_dotted_value
     # Dotted forms (legacy `it.qty`, method chains) no longer parse as a
-    # DirectiveValue, so data-bind surfaces a generic "invalid value"
+    # Lilac::Directives::Value, so data-bind surfaces a generic "invalid value"
     # build error.
     err = assert_raises(Lilac::CLI::Codegen::Error) do
       gen([bind(value: "it.qty", line: 7)], source_path: "row.lil")
@@ -543,8 +543,8 @@ class TestDirectiveCodegen < Minitest::Test
 
   def test_codegen_propagates_collision_check_failure
     # `text + unsafe_html` on the same ref_id triggers
-    # DirectiveCompatibility, surfaced before emit runs.
-    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
+    # Lilac::Directives::Compat, surfaced before emit runs.
+    err = assert_raises(Lilac::Directives::Compat::Error) do
       gen(
         [
           text(value: "@x", ref_id: "lil0"),
@@ -559,8 +559,8 @@ class TestDirectiveCodegen < Minitest::Test
 
   def test_codegen_propagates_form_scope_check_failure
     # data-form on a non-<form> element is a scope violation; codegen
-    # surfaces the underlying DirectiveCompatibility::Error.
-    err = assert_raises(Lilac::CLI::DirectiveCompatibility::Error) do
+    # surfaces the underlying Lilac::Directives::Compat::Error.
+    err = assert_raises(Lilac::Directives::Compat::Error) do
       gen(
         [
           Lilac::CLI::Directive.new(kind: :form, name: nil, value: "signup",

@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 require_relative "script_analyzer"
-require_relative "hash_literal_parser"
 require_relative "lint_warning"
 require_relative "source_location"
+require_relative "../directives" # Lilac::Directives::ClassParser
 
 module Lilac
   module CLI
@@ -272,8 +272,8 @@ module Lilac
         when :class_
           pairs =
             begin
-              HashLiteralParser.parse(directive.value)
-            rescue HashLiteralParser::Error
+              Lilac::Directives::ClassParser.parse(directive.value)
+            rescue Lilac::Directives::ClassParser::Error
               # Codegen will surface the parse error as a build error;
               # we silently skip lint here so the user sees one clear
               # message instead of two competing ones.

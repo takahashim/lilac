@@ -204,7 +204,7 @@ class TestTemplateAST < Minitest::Test
   def test_data_component_with_data_each_records_both_directives_on_same_ref
     # When data-component coexists with another directive (here
     # data-each), both records appear with a shared ref_id so the
-    # collision check in DirectiveCompatibility can see them together.
+    # collision check in Lilac::Directives::Compat can see them together.
     html = %(<ul data-component="X" data-each="@items"></ul>)
     result = parse(html)
     kinds = result.directives.map(&:kind)

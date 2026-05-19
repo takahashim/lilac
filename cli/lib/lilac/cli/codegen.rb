@@ -2,10 +2,7 @@
 
 require_relative "build_error"
 require_relative "component_name"
-require_relative "directive_value"
-require_relative "value_grammar"
-require_relative "hash_literal_parser"
-require_relative "directive_compatibility"
+require_relative "../directives" # Lilac::Directives::* (Value / Grammar / ClassParser / Compat)
 
 module Lilac
   module CLI
@@ -88,7 +85,7 @@ module Lilac
         # Composition + applicability checks. Run before key_map so
         # composition violations are reported with their own messages
         # rather than getting masked by a downstream parse/emit error.
-        DirectiveCompatibility.check!(@directives, file: @file)
+        Lilac::Directives::Compat.check!(@directives, file: @file)
 
         # data-key directives are paired with their data-each by
         # ref_id; build the lookup once so emit_each doesn't have to
@@ -219,8 +216,8 @@ module Lilac
       # data-bind value parser. Accepts ivar or bare ident; both must
       # resolve to a writable Signal at runtime.
       def read_bind_value_or_raise(directive)
-        value = DirectiveValue.parse(directive.value)
-        return value if value.is_a?(DirectiveValue::Ivar) || value.is_a?(DirectiveValue::BareIdent)
+        value = Lilac::Directives::Value.parse(directive.value)
+        return value if value.is_a?(Lilac::Directives::Value::Ivar) || value.is_a?(Lilac::Directives::Value::BareIdent)
 
         raise Error.new(
           "Invalid value for data-bind: #{directive.value.inspect} " \
@@ -286,12 +283,12 @@ module Lilac
         ]
       end
 
-      # Parses the directive's raw value into a `DirectiveValue` (Ivar
+      # Parses the directive's raw value into a `Lilac::Directives::Value` (Ivar
       # or BareIdent), raising a build error on invalid input. Caller
       # uses the returned object's polymorphic `reactive_read` /
       # `bind_source` / `to_s` rather than re-classifying the string.
       def read_value_or_raise(directive, attr_name)
-        value = DirectiveValue.parse(directive.value)
+        value = Lilac::Directives::Value.parse(directive.value)
         return value if value
 
         raise Error.new(
@@ -307,7 +304,7 @@ module Lilac
       # the method can act on the row.
       def emit_on(directive, context)
         method_name = directive.value.to_s.strip
-        unless ValueGrammar.method_ident?(method_name)
+        unless Lilac::Directives::Grammar.method_ident?(method_name)
           raise Error.new(
             "Invalid value for data-on-#{directive.name}: " \
             "#{directive.value.inspect} (expected a method name; " \
@@ -330,7 +327,7 @@ module Lilac
       # sanitizer on href/src/action/formaction.
       def emit_attr(directive, context)
         name = directive.name.to_s
-        if ValueGrammar.banned_attr?(name)
+        if Lilac::Directives::Grammar.banned_attr?(name)
           raise Error.new(
             "data-attr-#{name} targets a banned attribute (on*/srcdoc/style).",
             at: directive.source_location(@file),
@@ -351,7 +348,7 @@ module Lilac
       # signal values clear the CSS variable.
       def emit_css(directive, context)
         name = directive.name.to_s
-        unless ValueGrammar.kebab_name?(name)
+        unless Lilac::Directives::Grammar.kebab_name?(name)
           raise Error.new(
             "data-css-#{name}: X must be kebab-lowercase ([a-z][a-z0-9-]*) and not start with `-`.",
             at: directive.source_location(@file),
@@ -374,15 +371,15 @@ module Lilac
       def emit_class(directive, context)
         pairs =
           begin
-            HashLiteralParser.parse(directive.value)
-          rescue HashLiteralParser::Error => e
+            Lilac::Directives::ClassParser.parse(directive.value)
+          rescue Lilac::Directives::ClassParser::Error => e
             raise Error.new(
               "data-class: #{e.message}",
               at: directive.source_location(@file),
             )
           end
         parsed = pairs.map do |key, raw|
-          value = DirectiveValue.parse(raw)
+          value = Lilac::Directives::Value.parse(raw)
           unless value
             raise Error.new(
               "data-class: invalid value #{raw.inspect} for key #{key.inspect} " \
@@ -462,7 +459,7 @@ module Lilac
       # data-field / data-button.
       def parse_form_ident!(directive, label)
         name = directive.value.to_s.strip
-        unless ValueGrammar.method_ident?(name)
+        unless Lilac::Directives::Grammar.method_ident?(name)
           raise Error.new(
             "#{label}=#{directive.value.inspect}: expected a bare identifier",
             at: directive.source_location(@file),
@@ -541,7 +538,7 @@ module Lilac
 
       def valid_key_field?(field)
         # Reuse method_ident? — same grammar (bare ident, no `?`/`!`).
-        ValueGrammar.method_ident?(field)
+        Lilac::Directives::Grammar.method_ident?(field)
       end
 
       # Custom DOM events can have hyphens (`card-deleted`); keep them

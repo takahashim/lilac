@@ -1,49 +1,24 @@
 # frozen_string_literal: true
 
-require_relative "build_error"
-require_relative "hash_literal_parser"
-
 module Lilac
-  module CLI
+  module Directives
     # Build-time validation of directive composition rules. Called by
     # Codegen.run after directive collection but before code emission so
     # violations surface as a build error rather than a runtime failure
     # on the user's page.
     #
+    # Duplicate pair (build-time / runtime). See decisions §17. The
+    # build-time half raises on every violation; the runtime half
+    # (runtime/mruby-lilac-directives/mrblib/lilac_directives_compat.rb)
+    # applies warn+skip for ergonomics violations.
+    #
     # Currently checks pair collisions, tag-level applicability, and
     # `<input>` type-attribute constraints. Not yet enforced:
     #   - data-arg-X validations — data-arg has no emitter yet
-    module DirectiveCompatibility
-      class Error < BuildError; end
-
-      # Directive pairs that may not coexist on the same element. Each
-      # row is [Array<kind>, message]. data-value / data-checked were
-      # removed in Phase D and revived as :bind in Phase E (directive-spec
-      # §6.2). The :bind / :field pair is added here so the form-independent
-      # two-way binding and form-scope binding can't fight over the same
-      # input.
-      COLLISION_PAIRS = [
-        [
-          %i[text unsafe_html],
-          "data-text and data-unsafe-html cannot coexist (both write the element body)",
-        ],
-        [
-          %i[text each],
-          "data-text and data-each cannot coexist (data-each generates children; data-text would overwrite them)",
-        ],
-        [
-          %i[show hide],
-          "data-show and data-hide cannot coexist (use one; the inverse is implicit)",
-        ],
-        [
-          %i[component each],
-          "data-component and data-each cannot coexist (wrap with another element — put the child component inside the iteration body)",
-        ],
-        [
-          %i[bind field],
-          "data-bind and data-field cannot coexist (both wire the input value — pick one: data-bind for form-independent binding, data-field for form-scope binding)",
-        ],
-      ].freeze
+    module Compat
+      # `COLLISION_PAIRS` lives in `compat_rules.rb` (the duplicate-pair
+      # SSOT). This file consumes it via the constant lookup below.
+      class Error < Lilac::CLI::BuildError; end
 
       def self.check!(directives, file:)
         directives.group_by(&:ref_id).each_value do |dirs_on_element|
@@ -125,8 +100,8 @@ module Lilac
 
         pairs =
           begin
-            HashLiteralParser.parse(class_dir.value)
-          rescue HashLiteralParser::Error
+            ClassParser.parse(class_dir.value)
+          rescue ClassParser::Error
             # Malformed data-class — let emit_class raise the parse
             # error with its own location-tagged message instead.
             return
