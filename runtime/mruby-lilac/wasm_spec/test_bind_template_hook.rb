@@ -54,6 +54,13 @@ Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" d
   end
 
   Spec.assert "errors inside bind_template_hook are routed through the logger, not the mount path" do
+    # Capture the logger output so the intentional "boom" doesn't show
+    # up as noise in test runs. Also lets us assert the error reached
+    # the logger (the contract this test enforces).
+    captured = []
+    prev_logger = Lilac.logger
+    Lilac.logger = ->(severity, msg, err) { captured << [severity, msg.to_s, err] }
+
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"></div>'
     klass = Class.new(Lilac::Component) do
@@ -67,8 +74,14 @@ Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" d
     root = body.call(:querySelector, "[data-component=\"C\"]")
     # Component is still mounted; only the hook errored.
     Spec.assert_true !Lilac.find_for_element(root).nil?
+    # The error reached the logger (rather than escaping the mount path).
+    errors = captured.select { |s, _, _| s == :error }
+    Spec.assert_true errors.any? { |_, _, err| err && err.message.include?("boom from bind_template_hook") },
+                     "expected bind_template_hook error to be routed through Lilac.logger.error"
+
     Lilac.reset!
     body[:innerHTML] = ""
+    Lilac.logger = prev_logger
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 end
