@@ -3,7 +3,7 @@
 require "test_helper"
 
 class TestValueGrammar < Minitest::Test
-  # `@ivar` / `it.field` value-shape predicates now live on
+  # `@ivar` / bare-ident value-shape predicates now live on
   # DirectiveValue.parse — see test_directive_value.rb.
 
   # ---- method_ident? ---------------------------------------------

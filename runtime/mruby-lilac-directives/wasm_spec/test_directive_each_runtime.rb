@@ -1,10 +1,10 @@
 Spec.describe "data-each (runtime scanner)" do
-  Spec.assert "data-each + data-text='it.name' renders one row per item, reactively" do
+  Spec.assert "data-each + data-text='name' renders one row per item, reactively" do
     body = JS.global[:document][:body]
     body[:innerHTML] = <<~HTML
       <div data-component="each-rt">
         <ul data-ref="list" data-each="@items" data-key="id">
-          <li data-text="it.name"></li>
+          <li data-text="name"></li>
         </ul>
       </div>
     HTML
@@ -87,7 +87,7 @@ Spec.describe "data-each (runtime scanner)" do
     body[:innerHTML] = <<~HTML
       <div data-component="each-nokey-rt">
         <ul data-each="@items">
-          <li data-text="it.name"></li>
+          <li data-text="name"></li>
         </ul>
       </div>
     HTML
@@ -117,9 +117,9 @@ Spec.describe "data-each (runtime scanner)" do
       <div data-component="each-nested-rt">
         <ul data-ref="outer" data-each="@groups" data-key="id">
           <li>
-            <span class="g-name" data-text="it.name"></span>
-            <ul data-each="it.items" data-key="id">
-              <li class="g-item" data-text="it.label"></li>
+            <span class="g-name" data-text="name"></span>
+            <ul data-each="items" data-key="id">
+              <li class="g-item" data-text="label"></li>
             </ul>
           </li>
         </ul>
@@ -154,12 +154,12 @@ Spec.describe "data-each (runtime scanner)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
-  Spec.assert "data-each on Data-attribute items (it.field via public_send)" do
+  Spec.assert "data-each on Data-attribute items (bare ident via public_send)" do
     body = JS.global[:document][:body]
     body[:innerHTML] = <<~HTML
       <div data-component="each-data-rt">
         <ul data-each="@todos" data-key="id">
-          <li data-text="it.title"></li>
+          <li data-text="title"></li>
         </ul>
       </div>
     HTML

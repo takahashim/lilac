@@ -3,44 +3,38 @@
 module Lilac
   module CLI
     # The right-hand side of a directive that takes a reactive value.
-    # Three kinds exist, all single-identifier (no dot / no expression):
+    # Two kinds exist, both single-identifier (no dot / no expression):
     #
     #   - `@ivar` — host component's Signal/Computed. Inside a
     #     `computed { ... }` block needs `.value` to subscribe; bind ref,
     #     prop: source feeds it directly.
     #   - bare ident — a field of the current iteration item. Only
-    #     meaningful inside a `data-each` body (per-row scope). Reads as
-    #     `it.<name>` in emitted Ruby (the codegen emits inside the
-    #     bind_list block where `it` is the iteration variable).
-    #   - `it[.field]` — DEPRECATED. Legacy path form. Codegen still
-    #     accepts it (Phase E migration window); runtime emits dev_mode
-    #     warning. Will be removed once examples / spec migrate.
+    #     meaningful inside a `data-each` body (per-row scope). Codegen
+    #     emits `Lilac::ItemField.read(it, :<name>)` so Hash items (the
+    #     common JSON-decoded shape) work without NoMethodError.
     #
     # Downstream codegen treats them differently:
     #
     #   - Inside a `computed { ... }` block, ivars need `.value` to
-    #     subscribe; it_path / bare_ident pass through verbatim
-    #     (resolved to `it.X` against the per-row `it`). → `reactive_read`.
+    #     subscribe; bare_ident passes through verbatim (resolved against
+    #     the per-row `it`). → `reactive_read`.
     #   - The kwarg form `bind ref, prop: source` calls `source.value`
-    #     internally; ivars feed it directly, it_path / bare_ident
-    #     need wrapping in `computed { ... }`. → `bind_source`.
+    #     internally; ivars feed it directly, bare_ident needs wrapping
+    #     in `computed { ... }`. → `bind_source`.
     #
-    # `DirectiveValue.parse` returns `Ivar`, `ItPath`, `BareIdent`, or
-    # `nil` for invalid input — callers raise their own build error on
-    # nil with an appropriate `attr_name` / source-location context.
-    # Match precedence: `@ivar` first, then `it[.path]` (legacy, before
-    # bare so `it` itself is captured as ItPath not BareIdent), then
-    # bare ident (everything else that looks like a Ruby identifier).
+    # `DirectiveValue.parse` returns `Ivar`, `BareIdent`, or `nil` for
+    # invalid input — callers raise their own build error on nil with an
+    # appropriate `attr_name` / source-location context. Match
+    # precedence: `@ivar` first, then bare ident (everything else that
+    # looks like a Ruby identifier).
     class DirectiveValue
       IVAR       = /\A@[a-zA-Z_]\w*\??\z/.freeze
-      IT_PATH    = /\Ait(?:\.[a-zA-Z_]\w*\??)?\z/.freeze
       BARE_IDENT = /\A[a-zA-Z_]\w*\??\z/.freeze
 
       def self.parse(raw)
         s = raw.to_s.strip
         case s
         when IVAR       then Ivar.new(s)
-        when IT_PATH    then ItPath.new(s)
         when BARE_IDENT then BareIdent.new(s)
         end
       end
@@ -63,10 +57,6 @@ module Lilac
       end
 
       def ivar?
-        false
-      end
-
-      def it_path?
         false
       end
 
@@ -95,41 +85,27 @@ module Lilac
       end
     end
 
-    class DirectiveValue::ItPath < DirectiveValue
-      def reactive_read
-        @raw
-      end
-
-      def bind_source
-        "computed { #{@raw} }"
-      end
-
-      def it_path?
-        true
-      end
-    end
-
     # Bare identifier referencing a field of the current iteration item.
     # Only emitted inside `data-each` bind_list blocks where `it` is the
-    # iteration variable; codegen always rewrites `bare_ident` as
-    # `it.<name>` so the runtime path matches the equivalent legacy
-    # `it.path` form (the two classes produce identical emitted Ruby
-    # — only the source HTML differs).
+    # iteration variable; codegen emits `Lilac::ItemField.read(it, :name)`
+    # so Hash items (the common JSON-decoded shape) work without
+    # NoMethodError.
     class DirectiveValue::BareIdent < DirectiveValue
       def reactive_read
-        "it.#{@raw}"
+        "Lilac::ItemField.read(it, :#{@raw})"
       end
 
       def bind_source
-        "computed { it.#{@raw} }"
+        "computed { #{reactive_read} }"
       end
 
       # Raw Signal reference for data-bind. The bind_list block exposes
-      # `it`, so `it.title` resolves at runtime to the per-row field
-      # value — which must itself be a writable Signal for bind_input
-      # to wire correctly (the runtime asserts this; build-time can't).
+      # `it`, so `Lilac::ItemField.read(it, :title)` resolves at runtime
+      # to the per-row field value — which must itself be a writable
+      # Signal for bind_input to wire correctly (the runtime asserts
+      # this; build-time can't).
       def signal_ref
-        "it.#{@raw}"
+        reactive_read
       end
 
       def bare_ident?

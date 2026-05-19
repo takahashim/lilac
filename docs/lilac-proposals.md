@@ -303,11 +303,8 @@ form       既存の binding 群を集めて validation / submit / reset /
   「各行を per-row 子 component で表現し、その component 内で `data-bind`
   + ローカル signal を持つ」として解決(行内に validation が要るときだけ
   各行で `f.field source:` を持つ)。さらに踏み込んで「item に Signal を
-  nest して per-row component すら不要」という path もあり得るが、そちらは
-  本提案の方針とは別軸(grammar 自体の `it.path` 廃止)を含むので独立提案
-  として扱う。詳細は下記の
-  [`it.path` 全廃 + value-binding bare-ident scope + data-prop-* auto-fill](#itpath-全廃--value-binding-bare-ident-scope--data-prop--auto-fill)
-  を参照
+  nest して per-row component すら不要」という path は別軸の grammar 判断
+  ([`lilac-decisions.md` §16](./lilac-decisions.md))として確定済み
 
 利用者の判断基準:
 
@@ -334,6 +331,9 @@ form       既存の binding 群を集めて validation / submit / reset /
   呼ぶ違和感」も解消(`data-bind` で済む)
 - form gem 側 API が増えない(`f.field source:` で外部 signal 借用は既に
   ある)。新規概念は `data-bind` directive 1 つだけ
+- decisions §16 の bare ident 拡張(`data-bind="qty"` で iteration item の
+  Signal field を bind)と組み合わせると、per-row component なしでも
+  data-each 内 input の two-way binding が書ける
 
 ### 現状の workaround
 
@@ -344,54 +344,33 @@ form       既存の binding 群を集めて validation / submit / reset /
 
 いずれも declarative directive で書ける状態ではない。
 
-### 実装的課題
-
-1. `data-bind` directive の scanner 実装(input type 判別 + 双方向 sync
-   effect 設置)。`bind_input` の thin wrapper として実装すれば本体ロジック
-   は再利用可能
-2. `data-bind` と `data-field` の同一 element 上の共存ルール(原則は
-   conflict error、directive-spec §9.2.2 衝突ルールに追記)
-3. CLI cross-ref linter の対応(`data-bind` の ivar 参照を component の
-   `prop` / `signal` 宣言と突き合わせる新ルール)
-4. decisions §2 を `(superseded by §N)` でマークし、新 § で「form は
-   binding の集約 layer」と判断を明文化
-5. 影響 spec: `lilac-form-spec.md` §1, §11.8, §12 / `lilac-directive-spec.md`
-   §5, §6.2 / `lilac-design.md` §4.5
-6. 例題への波及: `lilac-receipt.html` の per-row 子 component が不要に
-   なる(行を `data-bind` 直接で書ける)。`lilac-form.html` は変更不要
-   (form gem 経由のまま)
-
 ### 関連する確定判断 / 後続提案
 
 - decisions §2 (Form を input bind の中心機構に) — 本案は §2 を
   **部分的に覆す**。「form 中心」ではなく「form は集約 layer」へ
 - decisions §4 (Symbol leak 制約) — `data-bind` は ivar 参照なので
-  Symbol leak 問題と無縁。動的 collection の Symbol 化問題を回避する
-  経路として機能
+  Symbol leak 問題と無縁
 - decisions §10 (stateful 子 input component の form 組み込み) — 子
   component を field 化する経路は維持。本案はそれと **直交** する新経路の
   追加
+- decisions §16 (`it.path` 全廃 + value-binding bare-ident scope) — 本案で
+  導入された `data-bind` を起点に、grammar 全体から path 構文を消す方向に
+  発展した(`data-bind` は §16 で bare ident 形も受けるよう拡張済み)
 - form-spec §2 (将来検討: 動的 collection / field array) — 本案で
   「field array は不要、行ごとの `data-bind` で表現」という方針転換が
   可能に
-- **proposals
-  [`it.path` 全廃 + value-binding bare-ident scope + data-prop-* auto-fill](#itpath-全廃--value-binding-bare-ident-scope--data-prop--auto-fill)**
-  (本 doc 内、後続提案) — 本案で導入される `data-bind` を起点に、grammar
-  全体から path 構文を消す方向に発展。`data-bind` が `@ivar` のみ受け入れる
-  という本案の制約は、後続提案で bare ident 形を受けるよう拡張される
 
 ### ステータス
 
 scanner 実装 + wasm_spec(`test_directive_bind_runtime.rb`)+ receipt
-example の data-bind 移行は完了(2026-05-18)。続いて後続提案
-([`it.path` 全廃 ...](#itpath-全廃--value-binding-bare-ident-scope--data-prop--auto-fill))
-により example はさらに簡素化(2026-05-19)。
+example の data-bind 移行は完了(2026-05-18)。decisions §16 の bare ident
+拡張で example はさらに簡素化(2026-05-19)。
 
 `lilac-directive-spec.md` §3 / §5 / §6.2 / §8 に **data-bind directive と
 form 統合 directive との関係** を反映済み(2026-05-19)。残りの未反映 spec
 は `lilac-form-spec.md` §1, §11.8, §12(form gem 視点での data-bind 位置付
 け)と `lilac-design.md` §4.5(「form を中心に据える代償」節の更新)。
-これらと併せて確定判断 §15 への昇格を行う。
+これらと併せて確定判断への昇格を行う。
 
 ---
 
@@ -468,249 +447,213 @@ end
 
 ---
 
-## `it.path` 全廃 + value-binding bare-ident scope + data-prop-* auto-fill
+## `lilac build --target compiled` 統合(Vite 流の dev/prod 二段構え)
 
 ### 動機
 
-`it.path` は Lilac directive grammar の中で **唯一の path 構文** で、他の
-値(`@ivar` / bare identifier)とは別格の異物として浮いている。grammar
-table を見ると:
+`lilac-compiled.wasm`(mruby compiler / eval 抜きの最小 variant、現状 brotli
+~168 KB)と `@takahashim/lilac-compiled` npm package(`boot({ bytecode })`
+helper)は既に完成済みだが、**`lilac build` 側に `.mrb` 生成 path が無く**、
+両者をつなぐ最後の 1 ピースが欠けている。`lilac build` の現状出力は dist
+HTML に `<script type="text/ruby">` で source を埋め込み、`lilac-full.wasm`
+で runtime `vm.evalScript()` する経路のみ。
 
-| directive 種別 | 受け入れる値 |
-|---|---|
-| value-binding (data-text / data-bind / data-attr-* / ...) | `@ivar` / `it[.field]` ← path |
-| data-each | `@ivar` / `it[.field]` ← path |
-| data-class (key / value) | `@ivar` / `it[.field]` ← path |
-| data-prop-* | `@ivar` / `it[.field]` / literal ← path |
-| handler/scope (data-on-* / data-component / data-key / ...) | bare identifier |
+production deploy 視点では:
+- bundle size: full(brotli 247 KB)→ compiled(brotli 168 KB)で **−32%**
+- 攻撃面: compiled は mruby parser を bundle しないので **runtime parser 由来の脆弱性** が消える
+- mount cost: pre-compiled bytecode の load は source eval より速い
 
-`it.field` だけが dot 付き path で grammar の純度を崩している。HTML 内に
-「コードを書かない」原則からすると、path 構文は最小限にしたい。
+dev 体験視点では:
+- 現状 `lilac dev` は wsv ベースの live reload で、`.lil` 編集 → SSE reload まで数十 ms。mrbc を kick すると 100-200 ms 追加。**dev は full、prod は compiled** で切り分けるのが妥当(Vite 流の dev/prod 二段構え)
 
-receipt example の bind_list → data-each → data-bind 移行作業
-(2026-05-18, `examples/lilac-receipt.html`)を通じて per-row binding の
-摩擦が再確認され、`it.path` 廃止の方向に複数 round の議論を経て収束した
-(2026-05-19)。
+`lilac build --target compiled` を実装することで、**user は同じ source で
+"dev は速い、prod は小さい" を両立**できる。
 
-検討して **却下された案**:
-- `^field` 等の sigil — 視覚的に ugly
-- `as id, name, ...` (destructuring) — code-like
-- `data-each-fields` qualifier attribute — destructuring の別形
-- `data-each-*` directive family — directive 数が倍増
-- quoted literal (`data-prop-status="'todo'"`) — 視覚的に ugly
-- 純粋な暗黙スコープ — 「スコープ可視性」が不足
-
-### 提案
-
-3 つの相互補完する変更を 1 セットで導入する。
-
-#### Part 1: value-binding directive に bare ident を許す(data-each scope 内のみ)
-
-対象 directive: `data-text` / `data-bind` / `data-attr-*` / `data-css-*` /
-`data-show` / `data-hide` / `data-class`(key / value 両方)
-
-- **data-each body 内**: bare ident = current iteration item の field 名
-- **data-each scope 外**: bare ident は parse error(現状維持)
-- `@ivar` = host component の signal(全 context で従来通り)
-
-```html
-<tbody data-each="@items">
-  <tr>
-    <td><input data-bind="description"></td>     <!-- bare = item field -->
-    <td><input data-bind="qty"></td>
-    <td data-text="line_total"></td>
-    <td><button data-on-click="remove">×</button></td>  <!-- handler は従来通り method 名 -->
-  </tr>
-</tbody>
-```
-
-これは `data-key="id"` が既に行っている「iteration context での bare
-ident = field 名」を value-binding directive にも拡張する形。
-
-#### Part 2: data-prop-* は iteration field access を持たない(literal fallback は維持)
-
-- `@ivar` → host signal value(従来通り)
-- bare ident → literal(従来通り)
-- `it.path` → **削除**
-- bare ident を item field として解釈する経路は **持たない**(literal の
-  解釈を優先)
-
-```html
-<!-- literal: 従来通り -->
-<div data-component="KanbanColumn" data-prop-status="todo">
-
-<!-- host ivar: 従来通り -->
-<div data-component="X" data-prop-current="@msg">
-
-<!-- iteration field 渡しは data-prop-X="it.Y" 経由ではなく Part 3 に委譲 -->
-```
-
-#### Part 3: data-each 直下の data-component は item から prop auto-fill
-
-`data-component` 要素が `data-each` body に置かれている場合、child
-component の `prop` 宣言は **item の同名 field から auto-init** される
-(explicit `data-prop-X` で override 可)。
+### 提案: Vite 流の dev/prod 二段構え
 
 ```ruby
-class LineRow < Lilac::Component
-  prop :id, Integer
-  prop :description, String
-  prop :qty, String
-  prop :unit_price, String
-  # data-each の中で mount されたら、各 prop が item の同名 key から auto-init
+# lilac.config.rb
+Lilac::CLI.configure do |c|
+  c.dev_target   = :full       # lilac dev: full variant、source eval、mrbc 不要
+  c.build_target = :compiled   # lilac build: compiled variant、.mrb 出力
+
+  # mrbc の場所(未指定なら ENV["MRBC"] → ENV["MRUBY_WASM_RUNTIME_PATH"]
+  # 下の build/host/bin/mrbc → $PATH の順で探索)
+  # c.mrbc_path = "/path/to/mrbc"
 end
 ```
 
-```html
-<tbody data-each="@items">
-  <tr data-component="LineRow">
-    <!-- @id = item["id"]、@description = item["description"]、... auto -->
-  </tr>
-</tbody>
-```
+#### Phase 1: `lilac build --target compiled`(最小実装)
 
-literal を混ぜたい場合:
+1. **新規 `BytecodeBuilder` クラス**(`cli/lib/lilac/cli/bytecode_builder.rb`)
+   - mrbc 探索ロジック
+   - Ruby source の concat(codegen bindings + component class + `Lilac.start`)
+   - subprocess で `mrbc -o dist/app.<hash>.mrb tmp.rb` 実行
+   - error 時は mrbc stderr を `BuildError` に整形して raise
 
-```html
-<tr data-component="LineRow" data-prop-mode="edit">
-  <!-- @id / @description / ... は item から auto、@mode = "edit" literal で override -->
-</tr>
-```
+2. **`Builder` の target 分岐**
+   - `:full`(現状): `<script type="text/ruby">` を dist HTML に埋め込み、
+     `vm.evalScript("#ruby-source")` の boot 用 module script を inject
+   - `:compiled`(新規): Ruby source は HTML に書かず、`.mrb` を dist に
+     書き出し、`boot({ bytecode: fetch("./app.<hash>.mrb") })` の boot
+     module script を inject
 
-**data-prop-* の lookup 順序**(child が `prop :X` を宣言している場合):
-1. 同要素に `data-prop-X="..."` が明示されていればそれを使う
-2. iteration context にあり item が key "X" を持てば `item["X"]` を使う
-3. prop 宣言に `default:` があればそれを使う
-4. else: required prop missing error
+3. **Content-hash 付き `.mrb` filename**
+   - `Digest::SHA256.hexdigest(bytecode_bytes)[0, 8]` で短縮 hash
+   - filename: `app.<hash>.mrb`
+   - cache busting: 内容変化で filename が変わる(Vite の慣行と同じ)
 
-#### `it` / `it.field` の削除
+4. **`lilac-compiled.wasm` の vendor**
+   - dist 出力先に `vendor/lilac-compiled.wasm`(または content-hash 付き)
+     をコピー
+   - dist HTML が import する `boot` helper 経由で wasm をロード
+   - npm package 経由 (`@takahashim/lilac-compiled`) を import するか、
+     `lilac-compiled.wasm` + `boot` helper を vendor 同梱するかは設定可能
 
-`Value.parse` から `IT_PATH` を削除。移行期間中は両方 accept + dev_mode
-で `it.*` 使用に対して warn、移行完了後は parse error 化。
+5. **`dist/.lilac-manifest.json`**(Vite の `manifest.json` と同形式)
+   - 論理名 → physical path のマッピング
+   - 外部 framework integration から参照可能
+   - 例:
+     ```json
+     {
+       "app.mrb":            "app.a3f29b21.mrb",
+       "wasm":               "vendor/lilac-compiled.wasm",
+       "vendor-js":          "vendor/lilac-compiled/index.js"
+     }
+     ```
+
+#### Phase 2: dev server の compiled モード(後続)
+
+`c.dev_target = :compiled` の場合に `lilac dev` がやること:
+
+- 起動時に初回 mrbc 実行 → `.mrb` 生成
+- `Watcher` 経由で `.lil` / `.html` 変更検出
+- 変更時に **mrbc 再実行** → `.mrb` 更新 → SSE で reload signal
+- 既存 `Wsv::Server` + `/__lilac/livereload` SSE pub/sub の構造はそのまま
+  (lilac dev は既に wsv backed なので、追加するのは mrbc invocation だけ)
+
+mrbc 起動コストは ~100-200 ms。Vite の HMR ほど速くはないが、`lilac dev`
+の SSE reload と同等の体感。**dev でも compiled flow の挙動を試したい**
+利用者(scaffold で `--target compiled` を選んだ初日等)向け。
+
+Phase 1 では `c.dev_target = :compiled` を error にし、Phase 2 で解禁する。
+
+#### Phase 3: scaffold + docs
+
+- `lilac new my-app --target compiled` で:
+  - `lilac.config.rb` に `c.build_target = :compiled` をセット
+  - `pages/index.html` の boot script を `boot({ bytecode })` 経路に
+  - `README.md` を compiled flow 用に書き換え
+- `docs/lilac-spec.md` の `lilac build` 章に target 分岐を追記
+- `docs/lilac-decisions.md` の Appendix 年表に新 § を追加
+
+#### サーバ backend: wsv 一本化
+
+`lilac dev` の server backend は **wsv 一本化** を維持(現状の `DevServer`
+が既に `Wsv::Server` 経由)。compiled target でも:
+
+- 静的 file 配信(`.html` / `.wasm` / `.mrb` / `index.js` 等)= wsv のメイン
+  機能
+- SSE 経由 live reload = wsv の SSE primitive(`Wsv::Response::SseBuilder`)
+  を借りて構築済み
+- TLS(`--tls`)/ SPA fallback(`--spa`)/ CORS(`--cors`)等の wsv オプション
+  は config で素通し設定できるよう拡張
+
+別途 server library を追加する選択肢(Puma / Rack / Webrick)は採らない。
+wsv は Lilac チームが書いた / Ruby stdlib only で zero-dep / TLS と SSE が
+組み込まれていて、`make serve` でも既に使用中。**wsv 一本化** が運用コスト
+最少。
 
 ### 利点
 
-- **`it.path` 完全廃止**: grammar table から path 構文が消え、すべての
-  directive 値が「**単一 identifier**(`@ivar` または bare ident)」に統一
-- **新文法 / sigil / destructuring / quoted literal のいずれも追加なし**:
-  「HTML 内にコードを書かない」原則と完全整合
-- `data-key="id"` の既存慣行を value-binding directive にも自然に延長
-- **per-row component pattern が軽くなる**: `data-prop-X="it.Y"` の forest
-  が消え、child の prop 宣言が item interface の SSOT に
-- **self-documenting**: child component の `prop :X` 宣言を読めば「この
-  row component が item の何を使うか」が一目で分かる
-- data-prop-* の literal fallback は無傷(`data-prop-status="todo"` 等の
-  静的設定は無変更)
+- **bundle size**: prod の brotli 247 KB → 168 KB(−32%)。React+ReactDOM
+  並みのサイズで Lilac app を deploy できる
+- **dev 速度を犠牲にしない**: `lilac dev` は full variant + source eval の
+  まま、mrbc を kick しない。Vite の「dev は esbuild、prod は rollup」と
+  同じ原理で **同一 source / 異なる artifact**
+- **runtime parser 由来の攻撃面が消える**: prod に `mruby-compiler` /
+  `mruby-eval` を bundle しないので、user 入力を Ruby として eval する経路
+  が物理的に存在しない
+- **cache 戦略**: content-hash 付き `.mrb` で browser cache が確実に
+  invalidate される。長期 cache header(`Cache-Control: max-age=31536000,
+  immutable`)を安全に付けられる
+- **modern frontend tooling との familiarity**: Vite / esbuild ユーザに
+  とって `target` config と manifest.json の存在が直感的
+- **CLI codegen 経路の "本気の使い道" ができる**: 現状 `Lilac::Bindings::*`
+  を emit する CLI codegen は `:auto` がデフォルトで recommended-only。
+  compiled target ではこれが **唯一の経路**(runtime scanner 無し)になり、
+  CLI codegen の価値が明確化
 
 ### 現状の workaround
 
-- 現状は `it.field` の path 構文を使う(他に手段が無い)。directive
-  grammar table 内で path 形式は `it.X` のみで、これが grammar の唯一の
-  異物として認識されていた
+- `lilac build` 後の dist HTML から `<script type="text/ruby">` を手作業で
+  取り出し、`mrbc` で `.mrb` 化、HTML を手動編集 — 1 ページなら現実的だが
+  複数ページ / 複数 component で運用にならない
+- 別言語(`tools/build-compiled.rb` 等)で full な builder を再実装 — 重複
+  メンテになる
+
+いずれも片手間運用なので、`lilac build --target compiled` の native support
+が欲しい。
 
 ### 実装的課題
 
-1. **`Value.parse` に `BareIdent` を追加**: 識別子のみの値を新型
-   `Value::BareIdent` として parse
-2. **`Evaluator#read` の `BareIdent` 解決**: 現在 item の hash key を引く
-   (item が nil または key 不在なら raise / dev_mode warn)
-3. **value-binding 系 dispatch が `BareIdent` 受領**: dispatch_value_bind /
-   dispatch_bind / dispatch_attr / dispatch_css / dispatch_visibility /
-   dispatch_class の 6 経路を更新
-4. **data-prop-* の dispatch は `BareIdent` を受領しない**: literal 解釈を
-   優先するため `Value.parse` を経由しないか、`BareIdent` 結果を無視して
-   literal fallback を走らせる
-5. **Component mount in iteration context**: data-each の per-item block で
-   child component を mount するとき、scanner が item を `Props.build` に
-   渡し、`prop :X` 宣言ごとに「data-prop-X attribute が無ければ
-   `item["X"]` を fallback として使う」ロジックを追加
-6. **`it` / `it.field` の段階廃止**: 移行期は parser に `IT_PATH` を残し、
-   dev_mode で `Lilac.logger.warn("data-X='it.Y' is deprecated; use bare
-   ident or prop auto-fill")` を出す。**「Phase 完了」の判定基準**は
-   以下 3 条件すべてが揃った時点:
-   - (a) `examples/` 配下の全 `.html` から `it.path` 用法が消えている
-     (`grep -rn 'it\.' examples/ | grep data-` で 0 件)
-   - (b) `lilac-directive-spec.md` §3(値の文法)が `BareIdent` を
-     canonical として記述しており、`it.path` は「(deprecated, removed
-     in vN.M)」の歴史節としてのみ言及されている
-   - (c) deprecation warning を出す minor version を最低 1 つ release し、
-     利用者が手元コード migration に踏み切れる猶予期間(目安: 1 minor
-     release ≈ 数ヶ月)を経ている
-
-   3 条件達成後の次 minor version bump で `IT_PATH` を `Value.parse` から
-   削除する。本提案が decisions §N に昇格する際、(c) の具体 version 番号
-   (例: v0.13 で warn 開始、v0.14 で削除)を年表で固定する
-7. **wasm_spec 追加**: bare ident in value-binding inside data-each /
-   auto-fill on child component / data-each scope 外で bare ident が error
-   になること / it.* 廃止後の error
-8. **CLI cross-ref linter**: bare ident の field name は item schema が
-   静的に分からないので soft warn 程度(host ivar 名との shadow チェックは
-   可能)
-9. **既存 example の migration**:
-   - `examples/lilac-kanban.html`: `data-prop-id="it.id"` 等 → 削除、
-     KanbanCard の prop 宣言 + auto-fill 経由
-   - `examples/lilac-receipt.html`: 同様。LineRow も prop 経由で auto-fill、
-     value-binding 内の bare ident 利用
-   - `examples/lilac-todo.html` / `lilac-multipage.html`: data-prop-X="it.Y"
-     を grep して機械置換
-10. **spec doc 更新**:
-    - `lilac-directive-spec.md` §3 (値の文法): `BareIdent` 形を追加、scope
-      規則を明文化、§5 / §6 の各 directive 仕様で iteration context 内
-      bare ident の意味を追記
-    - `lilac-props-spec.md`: auto-fill 機構を新 § で記述、lookup priority
-      を表で示す
-    - `lilac-form-spec.md` §2 「将来検討: 動的 collection / field array」:
-      本提案で per-row component の boilerplate が軽くなる旨を追記
+1. **mrbc 探索ロジック**: `ENV["MRBC"]` → `ENV["MRUBY_WASM_RUNTIME_PATH"]/
+   mruby/build/host/bin/mrbc` → `$PATH` 上の mrbc → 全部失敗で abort。
+   doctor サブコマンドにも check を追加
+2. **Ruby source の concat 順序**: `Lilac::Bindings::*` モジュール → user の
+   component class → `Lilac.register` / `Lilac.start` 呼出し、の順を守ら
+   ないと NameError。`Builder` の既存 emit 順を踏襲
+3. **mrbc subprocess の error 整形**: stderr に source line 付きで出るので
+   `at: SourceLocation.new(file: tmp.rb, line: N)` に詰め直して
+   `BuildError` raise
+4. **content-hash 計算 + filename rewrite**: `mrbc` 実行後の bytes を SHA256
+   → 短縮 hash → rename → dist HTML 内の `fetch("./app.<hash>.mrb")`
+   placeholder を書き換え
+5. **wasm vendor 戦略**: 2 通り選べるように
+   - (a) `vendor/lilac-compiled.wasm` を dist 出力に copy(self-contained
+     deploy)
+   - (b) `import { boot } from "@takahashim/lilac-compiled"` で npm 経由
+     (CDN / npm registry に乗る、最小 dist)
+   - config の `c.compiled_vendor_strategy = :copy | :npm` で切替
+6. **manifest emission**: `dist/.lilac-manifest.json` を build 最後に書き
+   出す。schema は Vite と同形式(`{ "logical-path": { "file": "actual-path",
+   "src": "source-path" } }`)
+7. **CLI test 追加**: 既存 `test_builder.rb` に target=:compiled の
+   integration test を 1 case(mrbc を mock せず実呼び出し、ENV から path
+   取得)
+8. **Phase 2 の dev server 拡張**: `DevServer#rebuild` 内に mrbc invocation
+   を加える。debounce window で連続変更を merge する既存 logic はそのまま
+9. **既存 example の compiled-flow 対応確認**: kanban / receipt / todo /
+   counter 等が compiled target でも動作することを wasm_spec / E2E test で
+   parity 化(directive scanner が無い前提で codegen bindings が同じ DOM
+   結果を出すこと)
 
 ### 関連する確定判断 / 既存提案
 
-- **decisions §3** (directive 値の文法を厳格に保つ) — bare ident as field
-  reference は identifier-only 原則の拡張で、原則とは整合。`it.path` 廃止
-  により grammar table がより純粋に
-- **decisions §12 / §14** (Props 機構) — Part 3 は Props auto-init の
-  **source 種別を 1 つ追加**(現在は data-prop-X attribute のみ、本提案で
-  iteration item も source に)。decisions §14 の「prop の意味拡張」と
-  方向性が一致
-- **decisions §11** (scanner one-pass + 2-phase processing) — Part 3 の
-  auto-fill は phase A(field/button)の前に走る必要あり。scanner の処理
-  順への追加点 1 つ
-- **proposals 「Form と two-way binding の関係再整理」** — `data-bind`
-  directive(その提案で導入)も本提案で bare ident 形を獲得
-- **proposals 「data-bind の it-path 拡張」**(旧) — **本提案で吸収・置換**
-  された(`it.path` 自体が廃止になるので、data-bind の it-path 対応は不要
-  に。代わりに bare ident で書ける)
+- **decisions §1**(Runtime canonical 化)— 本案は CLI を「optional な
+  最適化 layer」として位置付けた §1 の方針と整合。dev は runtime canonical、
+  prod は CLI codegen で最適化、という原案の延長
+- **decisions §5**(HTML helper / bind_list legacy mode の廃止)— 本案で
+  CLI codegen 経路の役割が明確化され、§5 で残した template node モード等
+  の存在意義もより明瞭に
+- **decisions §6**(CLI と runtime の lint severity 整合)— compiled target
+  では CLI が canonical(runtime scanner 不在)になるので、cross-ref lint
+  の severity がそのまま production gate になる
 
 ### ステータス
 
-**実装完了 + spec 一部反映済み**(2026-05-19):
+未判断。実装規模は中規模(本 doc 内 Phase 1 で ~620 行、Phase 2 / 3 含めて
+~900 行)。判断の論点:
 
-- runtime 実装: `Value::BareIdent` 追加、`Evaluator` / `Scanner` の dispatch
-  拡張、`PropAutoFill` / `ItemField` モジュール抽出。`it.path` は両形 accept
-  + dev_mode で deprecation warn を残しつつ段階廃止
-- wasm_spec: `test_directive_bare_ident_runtime.rb`(bare ident 解決 /
-  auto-fill / row reuse / scope 外 silent skip / it.path 互換+ warn の
-  8 assertions)。既存 618 tests 全 pass
-- example 移行: receipt / kanban / todo / search の `it.path` 用法を撤去
-  (`data-prop-X="it.Y"` は auto-fill 経由に置換)
-- spec 反映済み: `lilac-directive-spec.md` §3(BareIdent grammar)/ §5
-  (directive 一覧)/ §6.2(`data-bind` 仕様)/ §8(衝突規則)、
-  `lilac-props-spec.md` §7.5(`it.path` deprecation)/ §7.6(auto-fill 機構)
-- 未反映 spec: `lilac-form-spec.md`(form gem 視点での data-bind / auto-fill
-  の位置付け)、`lilac-design.md` §4.5
+- **wasm vendor 戦略のデフォルト**: `:copy`(self-contained)か `:npm`
+  (依存ベース)か。framework 想定利用者(Ruby 開発者で npm に馴染みが薄い
+  ことを想定)を考えると `:copy` がデフォルト、`:npm` が opt-in
+- **mrbc dependency の扱い**: `lilac-cli` gem が `wasi-sdk` / `mruby-wasm-
+  runtime` への path を assume する現状を spec で固定するか、もう一段
+  抽象化(mrbc を Ruby gem として配布等)するか
+- **Phase 区切り**: Phase 1 だけで MVP として実用可能か、Phase 2 まで
+  揃わないと release できないか。proposals doc 上は分離するが実装は同時
+  でも可
 
-判断の論点(decisions §16 昇格時に再評価):
-
-- **per-row component の auto-fill が implicit すぎないか**: receipt /
-  kanban / todo / search で実装プロトタイプを動かした結果、reader にとって
-  違和感は少なかった(prop 宣言が SSOT として機能、`data-prop-X="it.Y"`
-  の forest が消える効果が大きい)
-- **bare ident in value-binding directive の scope-context 依存**: 同じ
-  `data-text="name"` が context によって解釈が変わる件は spec §3 で
-  明文化済み。今のところ utility としての ergonomics 改善が違和感を上回る
-- **`it` 互換期間の長さ**: 段階廃止の判定基準は本提案の「実装的課題 #6」
-  に明示(example 移行 + spec canonical 化 + 1 minor release 以上の warn 期間)
-
-残作業:
-- form-spec / design.md の更新
-- decisions §16 への昇格(本提案を「確定」化)+ Appendix 年表追記
-- `IT_PATH` の最終削除は上記 3 条件が揃ってから次 minor release
+Phase 1 の最小実装(receipt / counter 等で動作する compiled flow)を作って
+動作確認 → 残作業の精度を上げてから判断昇格、という流れを推奨。

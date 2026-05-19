@@ -55,14 +55,31 @@ module Lilac
       # `directives` is an Array<Directive>; pass `[]` (or omit) for
       # the empty case which returns "" so the build output stays
       # untouched.
-      def self.generate(component_name:, directives:, source_path: nil)
-        new(component_name: component_name, directives: directives, source_path: source_path).run
+      #
+      # `emit_include:` controls the trailing `<Class>.include(Lilac::
+      # Bindings::<Class>)` line. The default (`true`) is what the
+      # `:full` target wants — the include lets the override apply even
+      # when the codegen output is the only consumer of the Bindings
+      # module. The `:compiled` target sets `false` and relies on the
+      # framework's `Component#lookup_codegen_bindings` to dispatch by
+      # name, because for compiled output the module-definition tag
+      # arrives AFTER `Lilac.start` (which runs mid-script) and an
+      # explicit include line would either run too late OR refer to a
+      # not-yet-defined class.
+      def self.generate(component_name:, directives:, source_path: nil, emit_include: true)
+        new(
+          component_name: component_name,
+          directives: directives,
+          source_path: source_path,
+          emit_include: emit_include,
+        ).run
       end
 
-      def initialize(component_name:, directives:, source_path:)
+      def initialize(component_name:, directives:, source_path:, emit_include: true)
         @component_name = ComponentName.new(component_name)
         @directives = directives
         @file = source_path ? File.basename(source_path) : "(template)"
+        @emit_include = emit_include
       end
 
       def run
@@ -97,11 +114,13 @@ module Lilac
         ruby_class = @component_name.ruby_class
         module_path = "Lilac::Bindings::#{ruby_class}"
 
+        include_line = @emit_include ? "#{ruby_class}.include(#{module_path})\n" : ""
+
         <<~RUBY
           #{open_module(module_path)}
           #{indent(method_bodies.join("\n\n"), 2)}
           #{close_module(module_path)}
-          #{ruby_class}.include(#{module_path})
+          #{include_line}
         RUBY
       end
 
@@ -161,7 +180,7 @@ module Lilac
       end
 
       # data-text="@s" → `bind refs.lilN, text: @s`. Value must be
-      # ivar or it_path (read-only); arbitrary expressions are rejected
+      # ivar or bare ident (read-only); arbitrary expressions are rejected
       # at build time.
       def emit_text(directive, context)
         value = read_value_or_raise(directive, "data-text")
@@ -186,10 +205,8 @@ module Lilac
       # (or :checked for checkbox inputs). Form-independent two-way
       # binding: the value must be `@ivar` or bare identifier (inside
       # data-each); both must resolve at runtime to a writable Signal.
-      # `it.path` is intentionally **rejected** here even during the
-      # broader it.path migration window — it has no setter side, so
-      # bind_input would have nothing to write to. See directive-spec
-      # §6.2 for the full grammar and form-scope collision rule.
+      # See directive-spec §6.2 for the full grammar and form-scope
+      # collision rule.
       def emit_bind(directive, context)
         value = read_bind_value_or_raise(directive)
         property = bind_property_or_raise(directive)
@@ -199,16 +216,15 @@ module Lilac
         ]
       end
 
-      # data-bind value parser. Rejects it_path (no setter side) at
-      # build time; runtime mirrors the same rejection.
+      # data-bind value parser. Accepts ivar or bare ident; both must
+      # resolve to a writable Signal at runtime.
       def read_bind_value_or_raise(directive)
         value = DirectiveValue.parse(directive.value)
         return value if value.is_a?(DirectiveValue::Ivar) || value.is_a?(DirectiveValue::BareIdent)
 
         raise Error.new(
           "Invalid value for data-bind: #{directive.value.inspect} " \
-          "(expected `@ivar` or bare identifier; `it.path` is rejected because it has no setter — " \
-          "use bare ident with a per-row Signal field instead)",
+          "(expected `@ivar` or bare identifier pointing at a writable Signal)",
           at: directive.source_location(@file),
         )
       end
@@ -250,10 +266,10 @@ module Lilac
       # data-show / data-hide → toggle the reserved `lil-hidden` class
       # based on the signal. `data-show` adds the class when falsy
       # (show on truthy); `data-hide` adds it when truthy. Always wraps
-      # the value in `computed { ... }` so ivar (`@s.value`) and
-      # it_path (`it.x` — Data attribute access) flow through the same
-      # shape — the only difference between the two directives is the
-      # `!` negation prefix, parameterized as `negation:`.
+      # the value in `computed { ... }` so ivar (`@s.value`) and bare
+      # ident (item-field lookup) flow through the same shape — the
+      # only difference between the two directives is the `!` negation
+      # prefix, parameterized as `negation:`.
       def emit_show(directive, context)
         emit_visibility(directive, context, "data-show", negation: "!")
       end
@@ -270,9 +286,9 @@ module Lilac
         ]
       end
 
-      # Parses the directive's raw value into a `DirectiveValue` (Ivar,
-      # BareIdent, or ItPath), raising a build error on invalid input.
-      # Caller uses the returned object's polymorphic `reactive_read` /
+      # Parses the directive's raw value into a `DirectiveValue` (Ivar
+      # or BareIdent), raising a build error on invalid input. Caller
+      # uses the returned object's polymorphic `reactive_read` /
       # `bind_source` / `to_s` rather than re-classifying the string.
       def read_value_or_raise(directive, attr_name)
         value = DirectiveValue.parse(directive.value)
@@ -280,7 +296,7 @@ module Lilac
 
         raise Error.new(
           "Invalid value for #{attr_name}: #{directive.value.inspect} " \
-          "(expected `@ivar` or bare identifier; `it.path` is deprecated)",
+          "(expected `@ivar` or bare identifier)",
           at: directive.source_location(@file),
         )
       end
@@ -370,7 +386,7 @@ module Lilac
           unless value
             raise Error.new(
               "data-class: invalid value #{raw.inspect} for key #{key.inspect} " \
-              "(expected `@ivar` or `it.path`)",
+              "(expected `@ivar` or bare identifier)",
               at: directive.source_location(@file),
             )
           end
@@ -469,7 +485,16 @@ module Lilac
         key_field = @key_map[ref_id]
         key_expr =
           if key_field
-            "->(it) { it.#{key_field} }"
+            # Mirror runtime scanner's `build_key_proc` exactly: Hash
+            # items try Symbol key first, then String key; everything
+            # else uses `public_send`. The earlier `->(it) { it.<field> }`
+            # form blew up on Hash items with `NoMethodError: undefined
+            # method '<field>' for Hash` — and `data-each` over Hash
+            # items is the common shape (JSON-decoded data, kanban /
+            # receipt examples).
+            sym = key_field.to_sym.inspect
+            str = key_field.inspect
+            "->(it) { it.is_a?(Hash) ? (it.key?(#{sym}) ? it[#{sym}] : it[#{str}]) : it.public_send(#{sym}) }"
           else
             # No data-key specified — fall back to object_id, stable
             # per item for the lifetime of a render cycle.
@@ -478,7 +503,7 @@ module Lilac
         tpl_name = @component_name.each_template_name(ref_id)
         [
           "# #{@file}:#{directive.line} — data-each=#{collection.inspect}#{key_field ? " data-key=#{key_field.inspect}" : ""}",
-          %(bind_list #{context.refs_expr}.#{ref_id}, #{collection}, key: #{key_expr}, template: #{tpl_name.inspect} do |it, t|),
+          %(bind_list #{context.refs_expr}.#{ref_id}, #{collection.bind_source}, key: #{key_expr}, template: #{tpl_name.inspect} do |it, t|),
           %(  bind_template_hook__each_#{ref_id}(it, t)),
           "end",
         ]

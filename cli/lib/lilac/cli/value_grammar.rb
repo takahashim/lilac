@@ -8,7 +8,7 @@ module Lilac
     # pattern is anchored (\A...\z) on its public predicate so callers
     # always match the whole string.
     #
-    # Reactive *values* (`@ivar` / `it.field`) live on `DirectiveValue`
+    # Reactive *values* (`@ivar` / bare ident) live on `DirectiveValue`
     # so they can carry their kind as polymorphism rather than as a
     # string-prefix check.
     module ValueGrammar

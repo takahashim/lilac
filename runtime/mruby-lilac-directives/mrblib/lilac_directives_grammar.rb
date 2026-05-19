@@ -6,7 +6,7 @@ module Lilac
     # `Lilac::CLI::ValueGrammar` 1:1 but ported to runtime, relying on
     # mruby-regexp-compat for the Regexp engine.
     #
-    # Reactive *values* (`@ivar` / `it.field`) live on `DirectiveValue`
+    # Reactive *values* (`@ivar` / bare ident) live on `DirectiveValue`
     # so they can carry their kind polymorphically rather than as a
     # string-prefix check.
     #
@@ -19,8 +19,8 @@ module Lilac
     # behave like MRI's (see runtime/mruby-lilac/mrblib/html.rb:60).
     module Grammar
       # `?` predicate suffix allowed (used by `@active?` ivars and
-      # `it.done?` field reads). Bang `!` is rejected — the regex
-      # stops before any trailing `!`.
+      # bare-ident predicate field reads). Bang `!` is rejected — the
+      # regex stops before any trailing `!`.
       METHOD_IDENT = /^[a-zA-Z_][a-zA-Z0-9_]*$/
 
       # X part of `data-attr-X` / `data-css-X`: kebab-lowercase,

@@ -1,27 +1,27 @@
 module Lilac
   module Directives
-    # Resolves a parsed `Value` (Ivar / BareIdent / ItPath) against a
-    # host component and an optional iteration item.
+    # Resolves a parsed `Value` (Ivar / BareIdent) against a host
+    # component and an optional iteration item.
     #
     # Public surface:
     #
     #   - `bind_source(value, item)` — returns an object suitable as a
     #     `bind ref, prop: source` argument. For Ivar, that's the Signal
     #     itself (host.bind calls `.value` inside an effect). For
-    #     BareIdent / ItPath, that's a `host.computed { ... }` so the
-    #     binding stays reactive across item changes.
+    #     BareIdent, that's a `host.computed { ... }` so the binding
+    #     stays reactive across item changes.
     #
     #   - `read_raw(value, item)` — canonical resolver. Returns whatever
     #     the value points at (Signal object for Ivar, raw stored value
-    #     for BareIdent / ItPath — which itself may be a Signal if the
-    #     item stores Signals, or a plain scalar otherwise).
+    #     for BareIdent — which itself may be a Signal if the item stores
+    #     Signals, or a plain scalar otherwise).
     #
     #   - `read(value, item)` — thin wrapper over `read_raw` that
     #     unwraps Ivar's Signal via `.value`. Ivar is asymmetric
     #     intentionally: by convention every `@ivar` directive value
     #     points at a Signal so the binding layer wants the current
-    #     scalar; BareIdent / ItPath give back whatever the item stored,
-    #     and unwrapping happens (or doesn't) inside the bind effect.
+    #     scalar; BareIdent gives back whatever the item stored, and
+    #     unwrapping happens (or doesn't) inside the bind effect.
     class Evaluator
       def initialize(host)
         @host = host
@@ -29,7 +29,7 @@ module Lilac
 
       def bind_source(value, item)
         return lookup_ivar(value) if value.is_a?(Value::Ivar)
-        # ItPath / BareIdent → wrap in reactive computed so the binding
+        # BareIdent → wrap in reactive computed so the binding
         # re-evaluates when the iteration item reference changes.
         @host.computed { read_raw(value, item) }
       end
@@ -38,9 +38,6 @@ module Lilac
         case value
         when Value::Ivar
           lookup_ivar(value)
-        when Value::ItPath
-          field = value.field
-          field ? ItemField.read(item, field) : item
         when Value::BareIdent
           ItemField.read(item, value.field)
         end

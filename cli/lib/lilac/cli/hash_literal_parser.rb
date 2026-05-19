@@ -10,7 +10,7 @@ module Lilac
     # Returns Array<[key_string, value_string]> in source order. Keys are
     # returned as plain strings (quotes stripped); values are the raw
     # text between `:` and the next `,` / `}`, leaving value-grammar
-    # validation (ivar / it_path) to the caller (`Codegen.emit_class`).
+    # validation (ivar / bare ident) to the caller (`Codegen.emit_class`).
     #
     # Why a hand-rolled parser and not e.g. JSON.parse: quoted keys may
     # contain `:` (Tailwind variants like `'hover:bg-blue-500'`), so a
@@ -112,7 +112,7 @@ module Lilac
         body
       end
 
-      # Values are ivar (`@x`) / it_path (`it.x`) — neither contains the
+      # Values are ivar (`@x`) / bare ident (`x`) — neither contains the
       # hash delimiters `,` / `}` nor whitespace, so we stop at the first
       # whitespace or delimiter. ValueGrammar validation happens at
       # codegen so the raw substring is returned verbatim here.

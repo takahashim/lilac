@@ -1,11 +1,10 @@
 # Tests for `data-prop-X="<expr>"` — parent → child prop passing where
-# the value can be a `@ivar` (parent signal current value) or `it.field`
-# (current iteration item). The parent's per-row scanner resolves the
-# expression at clone-time and writes the scalar back to the attribute,
-# so the child's `Props.build` sees a static literal.
+# the value can be a `@ivar` (parent signal current value). Per-row
+# iteration fields flow into child props via auto-fill (PropAutoFill)
+# rather than explicit `data-prop-*="<field>"` markup.
 
 Spec.describe "data-prop-* expression resolution" do
-  Spec.assert "it.field is resolved at clone-time inside data-each" do
+  Spec.assert "iteration item fields auto-fill child props at clone-time" do
     body = JS.global[:document][:body]
 
     child_klass = Class.new(Lilac::Component) do
@@ -25,7 +24,7 @@ Spec.describe "data-prop-* expression resolution" do
     Lilac.register("expr-parent-it", parent_klass)
     Lilac.register("expr-child-it", child_klass)
 
-    body[:innerHTML] = '<div data-component="expr-parent-it"><ul data-each="@items" data-key="id"><li data-component="expr-child-it" data-prop-id="it.id" data-prop-title="it.title"></li></ul></div>'
+    body[:innerHTML] = '<div data-component="expr-parent-it"><ul data-each="@items" data-key="id"><li data-component="expr-child-it"></li></ul></div>'
 
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
@@ -103,7 +102,7 @@ Spec.describe "data-prop-* expression resolution" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
-  Spec.assert "Integer prop type coercion applies after expression resolution" do
+  Spec.assert "Integer prop type coercion applies after auto-fill" do
     body = JS.global[:document][:body]
 
     child_klass = Class.new(Lilac::Component) do
@@ -119,7 +118,7 @@ Spec.describe "data-prop-* expression resolution" do
     Lilac.register("expr-parent-coerce", parent_klass)
     Lilac.register("expr-child-coerce", child_klass)
 
-    body[:innerHTML] = '<div data-component="expr-parent-coerce"><ul data-each="@items" data-key="id"><li data-component="expr-child-coerce" data-prop-n="it.n"></li></ul></div>'
+    body[:innerHTML] = '<div data-component="expr-parent-coerce"><ul data-each="@items" data-key="id"><li data-component="expr-child-coerce"></li></ul></div>'
 
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await

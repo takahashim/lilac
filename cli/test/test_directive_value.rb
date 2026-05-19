@@ -9,7 +9,7 @@ class TestDirectiveValue < Minitest::Test
     v = Lilac::CLI::DirectiveValue.parse("@count")
     assert_kind_of Lilac::CLI::DirectiveValue::Ivar, v
     assert v.ivar?
-    refute v.it_path?
+    refute v.bare_ident?
     assert_equal "@count", v.to_s
   end
 
@@ -37,35 +37,6 @@ class TestDirectiveValue < Minitest::Test
     assert_nil Lilac::CLI::DirectiveValue.parse("@1count")
   end
 
-  # ---- it_path parsing -------------------------------------------
-
-  def test_parses_bare_it
-    v = Lilac::CLI::DirectiveValue.parse("it")
-    assert_kind_of Lilac::CLI::DirectiveValue::ItPath, v
-    refute v.ivar?
-    assert v.it_path?
-    assert_equal "it", v.to_s
-  end
-
-  def test_parses_one_dot_it_path
-    v = Lilac::CLI::DirectiveValue.parse("it.title")
-    assert v.it_path?
-    assert_equal "it.title", v.to_s
-  end
-
-  def test_parses_predicate_field_it_path
-    v = Lilac::CLI::DirectiveValue.parse("it.valid?")
-    assert v.it_path?
-  end
-
-  def test_rejects_two_dot_it_path
-    assert_nil Lilac::CLI::DirectiveValue.parse("it.user.name")
-  end
-
-  def test_rejects_method_call_it_path
-    assert_nil Lilac::CLI::DirectiveValue.parse("it.foo()")
-  end
-
   # ---- bare_ident parsing ----------------------------------------
 
   def test_parses_bare_ident
@@ -74,7 +45,6 @@ class TestDirectiveValue < Minitest::Test
     v = Lilac::CLI::DirectiveValue.parse("description")
     assert_kind_of Lilac::CLI::DirectiveValue::BareIdent, v
     refute v.ivar?
-    refute v.it_path?
     assert v.bare_ident?
     assert_equal "description", v.to_s
   end
@@ -83,13 +53,6 @@ class TestDirectiveValue < Minitest::Test
     v = Lilac::CLI::DirectiveValue.parse("valid?")
     assert v.bare_ident?
     assert_equal "valid?", v.to_s
-  end
-
-  def test_it_takes_precedence_over_bare_ident
-    # `it` alone matches IT_PATH before BARE_IDENT.
-    v = Lilac::CLI::DirectiveValue.parse("it")
-    assert v.it_path?
-    refute v.bare_ident?
   end
 
   def test_rejects_dotted_bare_ident
@@ -112,29 +75,19 @@ class TestDirectiveValue < Minitest::Test
     assert_equal "@count.value", v.reactive_read
   end
 
-  def test_it_path_reactive_read_returns_raw
-    v = Lilac::CLI::DirectiveValue.parse("it.title")
-    assert_equal "it.title", v.reactive_read
-  end
-
   def test_ivar_bind_source_is_raw_signal
     v = Lilac::CLI::DirectiveValue.parse("@count")
     assert_equal "@count", v.bind_source
   end
 
-  def test_it_path_bind_source_wraps_in_computed
-    v = Lilac::CLI::DirectiveValue.parse("it.title")
-    assert_equal "computed { it.title }", v.bind_source
-  end
-
-  def test_bare_ident_reactive_read_resolves_against_it
+  def test_bare_ident_reactive_read_uses_item_field_lookup
     v = Lilac::CLI::DirectiveValue.parse("title")
-    assert_equal "it.title", v.reactive_read
+    assert_equal "Lilac::ItemField.read(it, :title)", v.reactive_read
   end
 
   def test_bare_ident_bind_source_wraps_in_computed
     v = Lilac::CLI::DirectiveValue.parse("title")
-    assert_equal "computed { it.title }", v.bind_source
+    assert_equal "computed { Lilac::ItemField.read(it, :title) }", v.bind_source
   end
 
   # ---- signal_ref (data-bind codegen) ----------------------------
@@ -148,10 +101,11 @@ class TestDirectiveValue < Minitest::Test
   end
 
   def test_bare_ident_signal_ref_reads_item_field
-    # Inside a data-each bind_list block, `it` is the iteration variable
-    # and `it.qty` resolves to the per-row Signal stored on the item.
+    # Inside a data-each bind_list block, `Lilac::ItemField.read(it, :qty)`
+    # resolves to the per-row Signal stored on the item (Hash-aware
+    # lookup matches the runtime scanner path).
     v = Lilac::CLI::DirectiveValue.parse("qty")
-    assert_equal "it.qty", v.signal_ref
+    assert_equal "Lilac::ItemField.read(it, :qty)", v.signal_ref
   end
 
   # ---- inspect / interpolation -----------------------------------

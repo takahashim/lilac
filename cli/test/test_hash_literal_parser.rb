@@ -47,12 +47,11 @@ class TestHashLiteralParser < Minitest::Test
     assert_equal [["active", "@a"], ["disabled", "@d"], ["btn-primary", "@p"]], pairs
   end
 
-  def test_it_path_value
-    assert_equal [["done", "it.done"]], Lilac::CLI::HashLiteralParser.parse("{ done: it.done }")
-  end
-
-  def test_it_value_bare
-    assert_equal [["valid", "it"]], Lilac::CLI::HashLiteralParser.parse("{ valid: it }")
+  def test_bare_ident_value
+    # Bare-ident values reference the current iteration item's field;
+    # the parser keeps them as raw strings — grammar checking happens
+    # in Codegen.emit_class.
+    assert_equal [["done", "done"]], Lilac::CLI::HashLiteralParser.parse("{ done: done }")
   end
 
   # ---- whitespace tolerance --------------------------------------

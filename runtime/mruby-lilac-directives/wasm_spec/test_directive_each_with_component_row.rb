@@ -22,7 +22,7 @@ Spec.describe "data-each row that is itself a data-component" do
     Lilac.register("each-cmp-list", list_klass)
     Lilac.register("each-cmp-item", item_klass)
 
-    body[:innerHTML] = '<div data-component="each-cmp-list"><ul data-each="@items" data-key="id"><li data-component="each-cmp-item" data-prop-title="it.title"><span class="t" data-text="@title"></span></li></ul></div>'
+    body[:innerHTML] = '<div data-component="each-cmp-list"><ul data-each="@items" data-key="id"><li data-component="each-cmp-item"><span class="t" data-text="@title"></span></li></ul></div>'
 
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
@@ -53,7 +53,7 @@ Spec.describe "data-each row that is itself a data-component" do
     Lilac.register("reuse-list", list_klass)
     Lilac.register("reuse-item", item_klass)
 
-    body[:innerHTML] = '<div data-component="reuse-list"><ul data-each="@items" data-key="id"><li data-component="reuse-item" data-prop-title="it.title"><span class="t" data-text="@title"></span></li></ul></div>'
+    body[:innerHTML] = '<div data-component="reuse-list"><ul data-each="@items" data-key="id"><li data-component="reuse-item"><span class="t" data-text="@title"></span></li></ul></div>'
 
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
@@ -92,7 +92,7 @@ Spec.describe "data-each row that is itself a data-component" do
     Lilac.register("dispatch-list", list_klass)
     Lilac.register("dispatch-item", item_klass)
 
-    body[:innerHTML] = '<div data-component="dispatch-list"><ul data-each="@items" data-key="id"><li data-component="dispatch-item" data-prop-title="it.title"><button data-on-click="click_me">x</button></li></ul></div>'
+    body[:innerHTML] = '<div data-component="dispatch-list"><ul data-each="@items" data-key="id"><li data-component="dispatch-item"><button data-on-click="click_me">x</button></li></ul></div>'
 
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
@@ -128,7 +128,7 @@ Spec.describe "data-each row that is itself a data-component" do
     Lilac.register("reorder-list", list_klass)
     Lilac.register("reorder-item", item_klass)
 
-    body[:innerHTML] = '<div data-component="reorder-list"><ul data-each="@items" data-key="id"><li data-component="reorder-item" data-attr-data-id="it.id" data-prop-title="it.title"><span class="t" data-text="@title"></span></li></ul></div>'
+    body[:innerHTML] = '<div data-component="reorder-list"><ul data-each="@items" data-key="id"><li data-component="reorder-item" data-attr-data-id="id"><span class="t" data-text="@title"></span></li></ul></div>'
 
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
@@ -186,7 +186,7 @@ Spec.describe "data-each row that is itself a data-component" do
     Lilac.register("rm-list", list_klass)
     Lilac.register("rm-item", item_klass)
 
-    body[:innerHTML] = '<div data-component="rm-list"><ul data-each="@items" data-key="id"><li data-component="rm-item" data-prop-title="it.title"></li></ul></div>'
+    body[:innerHTML] = '<div data-component="rm-list"><ul data-each="@items" data-key="id"><li data-component="rm-item"></li></ul></div>'
 
     Lilac.start
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await

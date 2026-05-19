@@ -78,10 +78,10 @@ Spec.describe "data-class (runtime scanner)" do
   end
 
   Spec.assert "ClassParser smoke (bare and quoted keys + values)" do
-    pairs = Lilac::Directives::ClassParser.parse("{ active: @on, 'btn-primary': @p, \"x:y\": it.z }")
+    pairs = Lilac::Directives::ClassParser.parse("{ active: @on, 'btn-primary': @p, \"x:y\": flagged }")
     Spec.assert_equal 3, pairs.length
     Spec.assert_equal ["active", "@on"], pairs[0]
     Spec.assert_equal ["btn-primary", "@p"], pairs[1]
-    Spec.assert_equal ["x:y", "it.z"], pairs[2]
+    Spec.assert_equal ["x:y", "flagged"], pairs[2]
   end
 end

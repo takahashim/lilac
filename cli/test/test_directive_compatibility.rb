@@ -131,7 +131,7 @@ class TestDirectiveCompatibility < Minitest::Test
 
   def test_data_class_substring_gn_hidden_in_value_does_not_false_positive
     # Re-parse guards against substring matches inside values (which are
-    # ivar / it_path only and can't carry that string anyway, but
+    # ivar / bare ident only and can't carry that string anyway, but
     # defense in depth).
     Lilac::CLI::DirectiveCompatibility.check!(
       [

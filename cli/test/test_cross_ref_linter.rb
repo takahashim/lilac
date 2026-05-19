@@ -69,14 +69,13 @@ class TestCrossRefLinter < Minitest::Test
     refute_includes out, "Did you mean"
   end
 
-  # ---- it_path is not checked against signals ------------------
+  # ---- bare ident is not checked against signals ----------------
 
-  def test_it_path_value_inside_iteration_scope_does_not_trigger_signal_warning
-    # it_path is not a signal reference, so the script-vs-template
-    # signal check doesn't fire. (At top level it would trigger the
-    # separate "it outside data-each" warning — see below.)
-    # Reference @items in the outer data-each so the dead-signal
-    # lint doesn't fire on it either.
+  def test_bare_ident_value_inside_iteration_scope_does_not_trigger_signal_warning
+    # bare ident is an iteration-item field reference, not a signal
+    # reference, so the script-vs-template signal check doesn't fire.
+    # Reference @items in the outer data-each so the dead-signal lint
+    # doesn't fire on it either.
     each_dir = Lilac::CLI::Directive.new(
       kind: :each, name: nil, value: "@items", ref_id: "lil0",
       line: 1, element_tag: "ul", scope_id: nil,
@@ -86,7 +85,7 @@ class TestCrossRefLinter < Minitest::Test
       line: 1, element_tag: "ul", scope_id: nil,
     )
     inside_each = Lilac::CLI::Directive.new(
-      kind: :text, name: nil, value: "it.title", ref_id: "lil1",
+      kind: :text, name: nil, value: "title", ref_id: "lil1",
       line: 1, element_tag: "span", scope_id: "lil0",
     )
     count, = lint(
@@ -170,28 +169,6 @@ class TestCrossRefLinter < Minitest::Test
     )
     assert_includes out, "Signal @coutn"
     assert_includes out, "Did you mean: @count?"
-  end
-
-  # ---- it outside data-each (lint) ------------------------------
-
-  def test_it_path_at_top_level_emits_warning
-    # `it` only binds inside a data-each iteration body; using it at
-    # top level (scope_id nil) means the generated code would crash.
-    _, out = lint(
-      script: "",
-      directives: [dir(:text, value: "it.title", line: 3)],
-    )
-    assert_includes out, "x.lil:3"
-    assert_includes out, "`it` referenced outside a data-each"
-  end
-
-  def test_it_path_inside_data_each_scope_is_fine
-    each_scope_dir = Lilac::CLI::Directive.new(
-      kind: :text, name: nil, value: "it.title", ref_id: "lil1",
-      line: 4, element_tag: "span", scope_id: "lil0",
-    )
-    count, = lint(script: "", directives: [each_scope_dir])
-    assert_equal 0, count
   end
 
   # ---- data-each without data-key (lint) ------------------------

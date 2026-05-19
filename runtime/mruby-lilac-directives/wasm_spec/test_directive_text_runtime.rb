@@ -51,7 +51,7 @@ Spec.describe "data-text / data-unsafe-html (runtime scanner)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
-  Spec.assert "invalid value (not @ivar / it.path / bare ident) routes via Lilac.logger.error" do
+  Spec.assert "invalid value (not @ivar / bare ident) routes via Lilac.logger.error" do
     captured = []
     prev_logger = Lilac.logger
     Lilac.logger = ->(level, msg, err) { captured << [level, msg.to_s, err ? err.message : nil] }

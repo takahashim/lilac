@@ -34,13 +34,14 @@ class TestDirectiveCodegen < Minitest::Test
     assert_includes out, "bind refs.lil0, text: @count"
   end
 
-  def test_data_text_with_it_path_wraps_in_computed
+  def test_data_text_with_bare_ident_wraps_in_computed
     # `bind ref, text: source` calls `source.value` internally — fine for
-    # an ivar (Signal), broken for `it.title` (plain String). Wrapping
-    # in `computed { ... }` makes the value flow through a Computed
-    # whose `.value` returns the field.
-    out = gen([text(value: "it.title")])
-    assert_includes out, "bind refs.lil0, text: computed { it.title }"
+    # an ivar (Signal), broken for a plain field value (e.g. String).
+    # Bare-ident references read the per-row field via
+    # `Lilac::ItemField.read(it, :name)` inside a `computed { ... }` so
+    # the value flows through a Computed whose `.value` returns the field.
+    out = gen([text(value: "title")])
+    assert_includes out, "bind refs.lil0, text: computed { Lilac::ItemField.read(it, :title) }"
   end
 
   def test_data_text_strips_surrounding_whitespace
@@ -58,7 +59,7 @@ class TestDirectiveCodegen < Minitest::Test
   end
 
   def test_data_text_rejects_method_chain
-    assert_raises(Lilac::CLI::Codegen::Error) { gen([text(value: "it.title.upcase")]) }
+    assert_raises(Lilac::CLI::Codegen::Error) { gen([text(value: "title.upcase")]) }
   end
 
   def test_data_text_rejects_bang
@@ -98,16 +99,18 @@ class TestDirectiveCodegen < Minitest::Test
     # Inside a data-each body the bind_list block exposes `it`; bare
     # ident emits `it.qty` so the runtime field-lookup path matches.
     out = gen([bind(value: "qty")])
-    assert_includes out, "bind_input refs.lil0, it.qty, property: :value"
+    assert_includes out, "bind_input refs.lil0, Lilac::ItemField.read(it, :qty), property: :value"
   end
 
-  def test_data_bind_rejects_it_path
+  def test_data_bind_rejects_dotted_value
+    # Dotted forms (legacy `it.qty`, method chains) no longer parse as a
+    # DirectiveValue, so data-bind surfaces a generic "invalid value"
+    # build error.
     err = assert_raises(Lilac::CLI::Codegen::Error) do
       gen([bind(value: "it.qty", line: 7)], source_path: "row.lil")
     end
     assert_includes err.message, "row.lil:7"
     assert_includes err.message, "data-bind"
-    assert_includes err.message, "no setter"
   end
 
   def test_data_bind_rejects_literal
@@ -216,7 +219,7 @@ class TestDirectiveCodegen < Minitest::Test
   end
 
   def test_data_unsafe_html_rejects_method_chain
-    assert_raises(Lilac::CLI::Codegen::Error) { gen([unsafe_html(value: "it.body.html_safe")]) }
+    assert_raises(Lilac::CLI::Codegen::Error) { gen([unsafe_html(value: "body.html_safe")]) }
   end
 
   # data-value / data-checked were removed in Phase D (form-spec §10.8).
@@ -244,15 +247,12 @@ class TestDirectiveCodegen < Minitest::Test
     assert_includes out, %(bind refs.lil0, class: { "lil-hidden" => computed { @is_loading.value } })
   end
 
-  def test_data_show_with_it_path_omits_dot_value
-    # `it.x` is plain Data attribute access — no `.value` to subscribe.
-    out = gen([show(value: "it.visible")])
-    assert_includes out, %(bind refs.lil0, class: { "lil-hidden" => computed { !it.visible } })
-  end
-
-  def test_data_hide_with_bare_it
-    out = gen([hide(value: "it")])
-    assert_includes out, %(bind refs.lil0, class: { "lil-hidden" => computed { it } })
+  def test_data_show_with_bare_ident_uses_item_field_lookup
+    # Bare ident references the current iteration item's field via
+    # `Lilac::ItemField.read(it, :name)` — no `.value` to subscribe
+    # (item fields aren't Signals).
+    out = gen([show(value: "visible")])
+    assert_includes out, %(bind refs.lil0, class: { "lil-hidden" => computed { !Lilac::ItemField.read(it, :visible) } })
   end
 
   def test_data_show_rejects_method_chain
@@ -271,9 +271,9 @@ class TestDirectiveCodegen < Minitest::Test
     assert_includes out, %(bind refs.lil0, attr: { "href" => @url })
   end
 
-  def test_data_attr_supports_it_path_wraps_in_computed
-    out = gen([attr_dir(name: "data-id", value: "it.id")])
-    assert_includes out, %(bind refs.lil0, attr: { "data-id" => computed { it.id } })
+  def test_data_attr_supports_bare_ident_wraps_in_computed
+    out = gen([attr_dir(name: "data-id", value: "id")])
+    assert_includes out, %(bind refs.lil0, attr: { "data-id" => computed { Lilac::ItemField.read(it, :id) } })
   end
 
   def test_data_attr_rejects_inline_event_handler
@@ -312,9 +312,9 @@ class TestDirectiveCodegen < Minitest::Test
     assert_includes out, %(effect { refs.lil0.set_style("--theme-color", @bg.value) })
   end
 
-  def test_data_css_with_it_path_omits_dot_value
-    out = gen([css(name: "progress", value: "it.percent")])
-    assert_includes out, %(effect { refs.lil0.set_style("--progress", it.percent) })
+  def test_data_css_with_bare_ident_uses_item_field_lookup
+    out = gen([css(name: "progress", value: "percent")])
+    assert_includes out, %(effect { refs.lil0.set_style("--progress", Lilac::ItemField.read(it, :percent)) })
   end
 
   def test_data_css_rejects_uppercase_name
@@ -372,9 +372,9 @@ class TestDirectiveCodegen < Minitest::Test
     assert_includes out, %("active" => @a, "btn-primary" => @p)
   end
 
-  def test_data_class_it_path_value_wraps_in_computed
-    out = gen([class_dir(value: "{ done: it.done }")])
-    assert_includes out, %("done" => computed { it.done })
+  def test_data_class_bare_ident_value_wraps_in_computed
+    out = gen([class_dir(value: "{ done: done }")])
+    assert_includes out, %("done" => computed { Lilac::ItemField.read(it, :done) })
   end
 
   def test_data_class_invalid_value_raises_with_location
@@ -414,19 +414,24 @@ class TestDirectiveCodegen < Minitest::Test
       [
         each_dir(value: "@todos", ref_id: "lil0"),
         key_dir(value: "id", ref_id: "lil0"),
-        scoped_text(value: "it.title", ref_id: "lil1", scope_id: "lil0"),
+        scoped_text(value: "title", ref_id: "lil1", scope_id: "lil0"),
       ],
     )
+    # The key proc mirrors runtime scanner's `build_key_proc`: Hash items
+    # use sym → str key fallback, others use `public_send`. Plain
+    # `it.<field>` would NoMethodError on Hash items (JSON-decoded data),
+    # which is the most common shape for data-each collections.
+    expected_key_proc = "->(it) { it.is_a?(Hash) ? (it.key?(:id) ? it[:id] : it[\"id\"]) : it.public_send(:id) }"
     assert_includes out,
-                    %(bind_list refs.lil0, @todos, key: ->(it) { it.id }, ) +
+                    %(bind_list refs.lil0, @todos, key: #{expected_key_proc}, ) +
                     %(template: "lil-each-counter-lil0" do |it, t|)
     assert_includes out, "bind_template_hook__each_lil0(it, t)"
     assert_includes out, "def bind_template_hook__each_lil0(it, t)"
-    assert_includes out, "bind t.refs.lil1, text: computed { it.title }"
+    assert_includes out, "bind t.refs.lil1, text: computed { Lilac::ItemField.read(it, :title) }"
   end
 
   def test_data_each_without_data_key_falls_back_to_object_id
-    out = gen([each_dir(value: "@items"), scoped_text(value: "it.label")])
+    out = gen([each_dir(value: "@items"), scoped_text(value: "label")])
     assert_includes out, "key: ->(it) { it.object_id }"
   end
 
@@ -436,7 +441,7 @@ class TestDirectiveCodegen < Minitest::Test
     out = gen(
       [
         each_dir(value: "@items"),
-        scoped_text(value: "it.label"),
+        scoped_text(value: "label"),
       ],
     )
     assert_includes out, "def bind_template_hook"
@@ -448,19 +453,22 @@ class TestDirectiveCodegen < Minitest::Test
       [
         each_dir(value: "@categories", ref_id: "lil0"),
         key_dir(value: "id", ref_id: "lil0"),
-        # Inner each lives in outer's scope, addressed via t.refs
-        each_dir(value: "it.items", ref_id: "lil3", scope_id: "lil0"),
+        # Inner each lives in outer's scope, addressed via t.refs.
+        # Bare ident `items` resolves to the per-row field via
+        # `Lilac::ItemField.read(it, :items)` inside the bind_list block.
+        each_dir(value: "items", ref_id: "lil3", scope_id: "lil0"),
         key_dir(value: "id", ref_id: "lil3", scope_id: "lil0"),
         # Inner each body
-        scoped_text(value: "it.title", ref_id: "lil4", scope_id: "lil3"),
+        scoped_text(value: "title", ref_id: "lil4", scope_id: "lil3"),
       ],
     )
     assert_includes out, "def bind_template_hook__each_lil0(it, t)"
     assert_includes out, "def bind_template_hook__each_lil3(it, t)"
+    expected_key_proc = "->(it) { it.is_a?(Hash) ? (it.key?(:id) ? it[:id] : it[\"id\"]) : it.public_send(:id) }"
     assert_includes out,
-                    %(bind_list t.refs.lil3, it.items, key: ->(it) { it.id }, ) +
+                    %(bind_list t.refs.lil3, computed { Lilac::ItemField.read(it, :items) }, key: #{expected_key_proc}, ) +
                     %(template: "lil-each-counter-lil3" do |it, t|)
-    assert_includes out, "bind t.refs.lil4, text: computed { it.title }"
+    assert_includes out, "bind t.refs.lil4, text: computed { Lilac::ItemField.read(it, :title) }"
   end
 
   def test_data_on_inside_data_each_passes_it_to_handler
@@ -523,12 +531,12 @@ class TestDirectiveCodegen < Minitest::Test
         Lilac::CLI::Directive.new(kind: :text, name: nil, value: "@title",
                       ref_id: "lilT", line: 1, element_tag: "h1", scope_id: nil),
         each_dir(value: "@todos"),
-        scoped_text(value: "it.title"),
+        scoped_text(value: "title"),
       ],
     )
     assert_includes out, "bind refs.lilT, text: @title"
     assert_includes out, "bind_list refs.lil0, @todos"
-    assert_includes out, "bind t.refs.lil1, text: computed { it.title }"
+    assert_includes out, "bind t.refs.lil1, text: computed { Lilac::ItemField.read(it, :title) }"
   end
 
   # ---- compatibility integration ---------------------------------

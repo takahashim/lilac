@@ -126,12 +126,12 @@ module Lilac
         end
       end
 
-      # For each `data-prop-*` attribute whose value parses as `@ivar` or
-      # `it.field`, evaluate it against the current scope and write the
-      # resolved scalar back as the attribute value. Pure literals (parse
-      # failure OR bare ident — see below) are left untouched. Called
-      # just before descent stops at a nested `data-component`, so the
-      # child's `Props.build` reads a fully-resolved literal.
+      # For each `data-prop-*` attribute whose value parses as `@ivar`,
+      # evaluate it against the current scope and write the resolved
+      # scalar back as the attribute value. Pure literals (parse failure
+      # OR bare ident — see below) are left untouched. Called just before
+      # descent stops at a nested `data-component`, so the child's
+      # `Props.build` reads a fully-resolved literal.
       #
       # **Bare-ident exclusion**: `data-prop-*` keeps the long-standing
       # convention that unparseable values (`data-prop-status="todo"`)
@@ -141,9 +141,9 @@ module Lilac
       # field flow into child components goes through `PropAutoFill`
       # invoked at the end of this method.
       def resolve_props(el, item)
-        # First pass: evaluate existing data-prop-* expressions (Ivar /
-        # ItPath) so item context flows even if the user wrote the
-        # attribute explicitly with `it.X`.
+        # First pass: evaluate existing data-prop-* @ivar expressions so
+        # host signal values are baked into attribute literals before the
+        # child's Props.build reads them.
         names_js = el.call(:getAttributeNames)
         n = names_js[:length].to_i
         i = 0
@@ -152,7 +152,7 @@ module Lilac
           if attr_name.start_with?("data-prop-")
             raw = el.call(:getAttribute, attr_name).to_s
             value = Value.parse(raw)
-            if value && !value.is_a?(Value::BareIdent)
+            if value.is_a?(Value::Ivar)
               resolved = @evaluator.read(value, item)
               el.call(:setAttribute, attr_name, resolved.to_s)
             end
@@ -320,12 +320,12 @@ module Lilac
         end
       end
 
-      # Both `it.path` (legacy) and `BareIdent` (new) reference fields on
-      # the current iteration item, so they need silent-skip when scanning
-      # outside any `data-each` body (e.g., the host root scan that
-      # precedes / accompanies per-row scans).
+      # BareIdent references a field on the current iteration item, so
+      # it needs silent-skip when scanning outside any `data-each` body
+      # (e.g., the host root scan that precedes / accompanies per-row
+      # scans).
       def requires_item?(value)
-        value.is_a?(Value::ItPath) || value.is_a?(Value::BareIdent)
+        value.is_a?(Value::BareIdent)
       end
 
       def dispatch_value_bind(raw_value, el, item, attr_label, prop)
@@ -348,7 +348,7 @@ module Lilac
         unless value.is_a?(Value::Ivar) || value.is_a?(Value::BareIdent)
           raise Lilac::Error,
                 "data-bind requires @ivar or bare ident pointing at a writable " \
-                "Signal (got #{raw_value.inspect}); it.path / literals have no setter"
+                "Signal (got #{raw_value.inspect}); literals have no setter"
         end
         signal = @evaluator.read_raw(value, item)
         unless signal.is_a?(Lilac::Signal)
@@ -415,9 +415,10 @@ module Lilac
                 "data-css-X / RefElement#set_style for style."
         end
         value = parse_value_or_raise(raw_value, "data-attr-#{attr_name}")
-        # Skip ItPath bindings when scanning without iteration context
-        # (= the child component is scanning its own root, but `it` was a
-        # parent-iteration concern already dispatched by the parent).
+        # Skip bare-ident bindings when scanning without iteration context
+        # (= the child component is scanning its own root, but the item
+        # field was a parent-iteration concern already dispatched by the
+        # parent).
         return if item.nil? && requires_item?(value)
         ref = wrap_ref(el)
         @host.bind(ref, attr: { attr_name => @evaluator.bind_source(value, item) })
@@ -497,7 +498,7 @@ module Lilac
           # On row reuse, the child component is already mounted with its
           # initial prop values baked in — push fresh values through
           # `update_prop` so its prop Signals reflect the new item. This
-          # covers two sources: (a) explicit data-prop-X="@ivar"/it.path
+          # covers two sources: (a) explicit data-prop-X="@ivar"
           # expressions captured at template extraction time, and (b)
           # auto-fill props (declared on the child class but not on the
           # template, populated from the iteration item on first mount).
@@ -514,11 +515,11 @@ module Lilac
       end
 
       # Scan the row template's first element for `data-prop-*` attributes
-      # whose value parses as `@ivar` / `it.field`. Returns
-      # `{attr_name => Value}`. Empty hash if the row is not a
-      # data-component or has no parseable prop expressions. BareIdent
-      # is excluded — `data-prop-*` keeps the literal interpretation for
-      # unparseable/bare values (see `resolve_props` for the rationale).
+      # whose value parses as `@ivar`. Returns `{attr_name => Value}`.
+      # Empty hash if the row is not a data-component or has no parseable
+      # prop expressions. BareIdent is excluded — `data-prop-*` keeps the
+      # literal interpretation for unparseable/bare values (see
+      # `resolve_props` for the rationale).
       def extract_row_prop_exprs(tpl)
         out = {}
         row_tpl_el = tpl[:content][:firstElementChild]
@@ -532,7 +533,7 @@ module Lilac
           if attr_name.start_with?("data-prop-")
             raw = row_tpl_el.call(:getAttribute, attr_name).to_s
             v = Value.parse(raw)
-            out[attr_name] = v if v && !v.is_a?(Value::BareIdent)
+            out[attr_name] = v if v.is_a?(Value::Ivar)
           end
           i += 1
         end
@@ -595,7 +596,7 @@ module Lilac
       end
 
       # data-class hash literal: parse into pairs, validate each value
-      # as ivar/it_path, then bind via the existing class: hash form.
+      # as ivar / bare ident, then bind via the existing class: hash form.
       def dispatch_class(raw_value, el, item)
         pairs =
           begin
@@ -640,13 +641,13 @@ module Lilac
         end
       end
 
-      # Generic accept-anything (ivar or it.path) parse.
+      # Generic accept-anything (ivar or bare ident) parse.
       def parse_value_or_raise(raw_value, attr_label)
         value = Value.parse(raw_value)
         unless value
           raise Lilac::Error,
                 "Invalid value for #{attr_label}: #{raw_value.inspect} " \
-                "(expected `@ivar` or `it.path`)"
+                "(expected `@ivar` or bare ident)"
         end
         value
       end

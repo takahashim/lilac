@@ -17,14 +17,15 @@ Spec.describe "smoke test: directive scanner loaded" do
     Spec.assert_false Lilac::Directives::Grammar.banned_attr?("aria-label")
   end
 
-  Spec.assert "Value.parse classifies ivar and it.path" do
+  Spec.assert "Value.parse classifies ivar and bare ident" do
     v1 = Lilac::Directives::Value.parse("@count")
     Spec.assert_true v1.is_a?(Lilac::Directives::Value::Ivar)
-    v2 = Lilac::Directives::Value.parse("it.title")
-    Spec.assert_true v2.is_a?(Lilac::Directives::Value::ItPath)
+    v2 = Lilac::Directives::Value.parse("title")
+    Spec.assert_true v2.is_a?(Lilac::Directives::Value::BareIdent)
     v3 = Lilac::Directives::Value.parse("@active?")
     Spec.assert_true v3.is_a?(Lilac::Directives::Value::Ivar)
     Spec.assert_equal nil, Lilac::Directives::Value.parse("nope()")
+    Spec.assert_equal nil, Lilac::Directives::Value.parse("a.b")
   end
 
   Spec.assert "String#split semantics (mruby-regexp-compat polymorphism)" do

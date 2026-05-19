@@ -127,7 +127,7 @@ class TestTemplateAST < Minitest::Test
     html = <<~HTML
       <div>
         <template data-template="row">
-          <li data-text="it.title"></li>
+          <li data-text="title"></li>
         </template>
       </div>
     HTML
@@ -162,7 +162,7 @@ class TestTemplateAST < Minitest::Test
   def test_directives_inside_data_each_carry_outer_ref_id_as_scope
     html = <<~HTML
       <ul data-each="@todos" data-key="id">
-        <li><span data-text="it.title"></span></li>
+        <li><span data-text="title"></span></li>
       </ul>
     HTML
     result = parse(html)
@@ -173,7 +173,7 @@ class TestTemplateAST < Minitest::Test
   end
 
   def test_data_each_body_is_extracted_into_synthetic_template
-    html = %(<ul data-each="@items"><li><span data-text="it.label"></span></li></ul>)
+    html = %(<ul data-each="@items"><li><span data-text="label"></span></li></ul>)
     result = parse(html)
 
     assert_equal 1, result.synthetic_templates.length
@@ -181,7 +181,7 @@ class TestTemplateAST < Minitest::Test
     each_dir = result.directives.find { |d| d.kind == :each }
     assert_equal each_dir.ref_id, st.ref_id
     assert_includes st.html, "<li>"
-    assert_includes st.html, %(data-text="it.label")
+    assert_includes st.html, %(data-text="label")
     # Outer container survives, but the iteration body is stripped from
     # the main HTML — the runtime bind_list repopulates per item.
     assert_includes result.html, "<ul"
@@ -218,9 +218,9 @@ class TestTemplateAST < Minitest::Test
     html = <<~HTML
       <ul data-each="@categories" data-key="id">
         <li>
-          <h3 data-text="it.name"></h3>
-          <ul data-each="it.items" data-key="id">
-            <li data-text="it.title"></li>
+          <h3 data-text="name"></h3>
+          <ul data-each="items" data-key="id">
+            <li data-text="title"></li>
           </ul>
         </li>
       </ul>
@@ -236,8 +236,8 @@ class TestTemplateAST < Minitest::Test
     assert_equal 2, result.synthetic_templates.length
 
     text_dirs = result.directives.select { |d| d.kind == :text }
-    h3_dir = text_dirs.find { |d| d.value == "it.name" }
-    li_dir = text_dirs.find { |d| d.value == "it.title" }
+    h3_dir = text_dirs.find { |d| d.value == "name" }
+    li_dir = text_dirs.find { |d| d.value == "title" }
     assert_equal outer.ref_id, h3_dir.scope_id
     assert_equal inner.ref_id, li_dir.scope_id
 
@@ -245,7 +245,7 @@ class TestTemplateAST < Minitest::Test
     # but not the inner <li> (extracted into its own template).
     outer_st = result.synthetic_templates.find { |st| st.ref_id == outer.ref_id }
     assert_includes outer_st.html, "<ul"
-    refute_includes outer_st.html, "data-text=\"it.title\""
+    refute_includes outer_st.html, "data-text=\"title\""
   end
 
   # ---- data-ref duplicate detection ------------------------------
@@ -294,7 +294,7 @@ class TestTemplateAST < Minitest::Test
     html = <<~HTML
       <div data-ref="row" data-text="@title">
         <ul data-each="@items">
-          <li data-ref="row" data-text="it.label"></li>
+          <li data-ref="row" data-text="label"></li>
         </ul>
       </div>
     HTML

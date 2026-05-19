@@ -82,7 +82,6 @@ module Lilac
 
         warnings += lint_undeclared_signals(analysis, directives, component_name, file, out)
         warnings += lint_undefined_methods(analysis, directives, component_name, file, out)
-        warnings += lint_it_outside_each(directives, file, out)
         warnings += lint_each_without_key(directives, file, out)
         warnings += lint_reserved_ref_names(refs_map, file, out)
         warnings += lint_dead_signals(analysis, directives, component_name, file, out)
@@ -201,17 +200,6 @@ module Lilac
         warnings
       end
 
-      def self.lint_it_outside_each(directives, file, out)
-        warnings = 0
-        directives.each do |directive|
-          next unless uses_it_path?(directive) && directive.scope_id.nil?
-
-          emit_it_outside_each_warning(out, directive, file)
-          warnings += 1
-        end
-        warnings
-      end
-
       def self.lint_each_without_key(directives, file, out)
         keyed = directives.select { |d| d.kind == :key }.map(&:ref_id)
         warnings = 0
@@ -271,7 +259,7 @@ module Lilac
       end
 
       # All ivars referenced by a single directive. For most kinds the
-      # directive value is itself the ivar (or an it_path which we
+      # directive value is itself the ivar (or a bare ident which we
       # skip). For data-class, multiple ivars hide inside the hash.
       def self.ivars_in_directive(directive)
         case directive.kind
@@ -303,31 +291,6 @@ module Lilac
         directive.value.to_s.strip
       end
 
-      # Returns true if the directive references `it` or `it.field`
-      # (used by the it-outside-each check). data-class can carry
-      # multiple values; any one being it_path is enough.
-      def self.uses_it_path?(directive)
-        case directive.kind
-        when :text, :unsafe_html, :show, :hide, :attr, :css, :each
-          starts_with_it?(directive.value)
-        when :class_
-          pairs =
-            begin
-              HashLiteralParser.parse(directive.value)
-            rescue HashLiteralParser::Error
-              return false
-            end
-          pairs.any? { |_, v| starts_with_it?(v) }
-        else
-          false
-        end
-      end
-
-      def self.starts_with_it?(value)
-        s = value.to_s.strip
-        s == "it" || s.start_with?("it.")
-      end
-
       def self.collect_referenced_ivars(directives)
         directives.flat_map { |d| ivars_in_directive(d) }.uniq
       end
@@ -355,15 +318,6 @@ module Lilac
                 "in #{component_name}. Possible typo or external delegation.",
           declared_label: "Declared methods", declared: declared,
           suggestion: guess && "Did you mean: #{guess}?",
-        ))
-      end
-
-      def self.emit_it_outside_each_warning(out, directive, file)
-        emit(out, LintWarning.new(
-          at: directive.source_location(file),
-          body: "`it` referenced outside a data-each. `it` only binds inside an iteration " \
-                "body; this directive will fail at runtime.",
-          suggestion: "Use an `@ivar` here, or move this element inside a `data-each` element.",
         ))
       end
 

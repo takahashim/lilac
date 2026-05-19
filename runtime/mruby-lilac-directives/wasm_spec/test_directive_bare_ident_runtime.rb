@@ -244,39 +244,4 @@ Spec.describe "bare ident value (data-each scope)" do
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end
 
-  Spec.assert "it.path still works (deprecated) and warns in dev_mode" do
-    captured = []
-    prev_logger = Lilac.logger
-    Lilac.logger = ->(level, msg, err) { captured << [level, msg.to_s, err ? err.message : nil] }
-    # Reset the per-process dedup so this test sees the warning fresh.
-    Lilac::Directives::Value::DEPRECATED_IT_WARNED.clear
-
-    body = JS.global[:document][:body]
-    body[:innerHTML] = '<div data-component="it-legacy-rt">' \
-      '<ul><li data-each="@tags" data-key="id">' \
-      '<span data-text="it.name"></span></li></ul></div>'
-
-    klass = Class.new(Lilac::Component) do
-      attr_reader :tags
-      define_method(:setup) do
-        @tags = signal([{ "id" => 1, "name" => "x" }])
-      end
-    end
-
-    Lilac.register("it-legacy-rt", klass)
-    Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
-
-    span = body.call(:querySelector, "span")
-    Spec.assert_equal "x", span[:textContent].to_s
-
-    warns = captured.select { |entry| entry[0] == :warn }
-    Spec.assert_true warns.any? { |w| w[1].include?("deprecated") },
-                     "expected deprecation warning for it.path use"
-
-    Lilac.reset!
-    body[:innerHTML] = ""
-    Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
-  end
 end

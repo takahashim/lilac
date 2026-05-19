@@ -8,7 +8,7 @@ module Lilac
     # Returns Array<[key_string, value_string]> in source order. Keys
     # are returned as plain strings (quotes stripped); values are the
     # raw text between `:` and the next `,` / `}`, leaving value-
-    # grammar validation (ivar / it_path) to the caller (Scanner).
+    # grammar validation (ivar / bare ident) to the caller (Scanner).
     #
     # Quoted keys may contain `:` (Tailwind variants like
     # `'hover:bg-blue-500'`), so a naive split-on-colon would break.
@@ -112,7 +112,7 @@ module Lilac
         body
       end
 
-      # Values are ivar (`@x`) / it_path (`it.x`) — neither contains
+      # Values are ivar (`@x`) / bare ident (`x`) — neither contains
       # the hash delimiters `,` / `}` nor whitespace, so stop at the
       # first whitespace or delimiter. Grammar validation happens in
       # the caller (Scanner.dispatch_class via Value.parse).
