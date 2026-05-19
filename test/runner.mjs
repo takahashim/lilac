@@ -64,6 +64,7 @@ console.log(`[runner] loading spec_helper.rb`);
 vm.eval(await readFile(helperPath, "utf8"));
 
 const specDirs = [
+  ["mruby-regexp-compat",    resolve(lilacRoot, "runtime/mruby-regexp-compat/wasm_spec")],
   ["mruby-lilac",            resolve(lilacRoot, "runtime/mruby-lilac/wasm_spec")],
   ["mruby-lilac-directives", resolve(lilacRoot, "runtime/mruby-lilac-directives/wasm_spec")],
   ["mruby-lilac-async",      resolve(lilacRoot, "runtime/mruby-lilac-async/wasm_spec")],
