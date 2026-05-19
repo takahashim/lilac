@@ -62,6 +62,7 @@ BUILD_WASM_LILAC_COMPILED_RELEASE := $(BUILD_DIR)/lilac-compiled.release.wasm
         lilac-full lilac-full-release \
         lilac-compiled lilac-compiled-release \
         lilac-all lilac-all-release \
+        check-pair-diff \
         test node-deps clean
 
 all: lilac-full
@@ -117,12 +118,37 @@ $(BUILD_WASM_LILAC_COMPILED): $(LIBMRUBY_LILAC_COMPILED) | $(BUILD_DIR)
 $(BUILD_WASM_LILAC_COMPILED_RELEASE): $(LIBMRUBY_LILAC_COMPILED_RELEASE) | $(BUILD_DIR)
 	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_COMPILED_RELEASE),$(BUILD_WASM_LILAC_COMPILED_RELEASE))
 
+# ── duplicate-pair drift check ─────────────────────────────────────────
+# Per decisions §17, the directive grammar layer is intentionally
+# duplicated across `cli/lib/lilac/directives/` (build-time, MRI) and
+# `runtime/mruby-lilac-directives/mrblib/` (runtime, mruby-on-wasm).
+# The four bases below are byte-comparable pairs that MUST stay in
+# sync; this target fails the test run if any pair drifts so a
+# one-sided edit gets caught immediately rather than at the next time
+# someone runs `diff(1)` by hand.
+PAIR_BASES := value grammar class_parser compat_rules
+
+check-pair-diff:
+	@failed=0; \
+	for base in $(PAIR_BASES); do \
+	  cli_path="cli/lib/lilac/directives/$$base.rb"; \
+	  rt_path="runtime/mruby-lilac-directives/mrblib/lilac_directives_$$base.rb"; \
+	  if ! diff -q "$$cli_path" "$$rt_path" > /dev/null 2>&1; then \
+	    echo "✗ diff-0 pair desync: $$cli_path ↔ $$rt_path"; \
+	    diff -u "$$cli_path" "$$rt_path" || true; \
+	    failed=1; \
+	  else \
+	    echo "✓ diff 0: $$base"; \
+	  fi; \
+	done; \
+	exit $$failed
+
 # ── test ────────────────────────────────────────────────────────────────
 node_modules: package.json
 	npm install --no-audit --no-fund --silent
 	@touch node_modules
 
-test: lilac-full node_modules
+test: check-pair-diff lilac-full node_modules
 	MRUBY_WASM_PATH=$(BUILD_WASM_LILAC_FULL) \
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node test/runner.mjs
