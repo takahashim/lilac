@@ -56,8 +56,15 @@ MRuby::CrossBuild.new(build_name) do |conf|
   stub_flags = ["-isystem", shim_dir, "-include", "#{shim_dir}/wasi-shims.h"]
   # -Oz over -Os: ~5% smaller wasm; the compiled variant prioritizes
   # bundle size over throughput (apps are CLI-precompiled anyway).
-  # -flto enables cross-TU dead-code elimination at link time.
-  size_flags = release ? ["-Oz", "-flto"] : []
+  #
+  # NOTE: `-flto` was previously included but caused the same setjmp
+  # lowering bug documented in `lilac-full.rb` — the produced wasm
+  # surfaces `LinkError: env.setjmp` at instantiation. Even though
+  # `lilac-compiled` excludes `mruby-compiler` / `mruby-eval`, other
+  # mruby internals (notably `mrb_protect` / `mrb_funcall` exception
+  # paths) still go through setjmp, so the LTO interaction reproduces.
+  # Re-enable if mruby / wasi-sdk fix the underlying pass ordering.
+  size_flags = release ? ["-Oz"] : []
 
   conf.cc.flags.concat(common_flags + size_flags + sjlj_flags + stub_flags)
   conf.cxx.flags.concat(common_flags + size_flags + sjlj_flags + stub_flags)
@@ -81,6 +88,7 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem core: "mruby-array-ext"   # Array#reverse_each, dup, compact
   conf.gem core: "mruby-hash-ext"    # Hash#each, dup
   conf.gem core: "mruby-string-ext"  # String#end_with?, tr, gsub, ...
+  conf.gem core: "mruby-numeric-ext" # Integer#even?/#odd?/#step — parity with lilac-full
   conf.gem core: "mruby-enum-ext"    # Enumerable#each_with_object
   conf.gem core: "mruby-enumerator"  # Enumerator class
   conf.gem core: "mruby-kernel-ext"  # Kernel#raise variants, Object#tap

@@ -2,6 +2,7 @@
 
 require "wsv"
 require_relative "builder"
+require_relative "build_error"
 require_relative "live_reload"
 require_relative "watcher"
 
@@ -59,6 +60,13 @@ module Lilac
           public_dir: @config.public_dir,
           live_reload: true,
           codegen: @config.codegen,
+          # `dev_target` (not `build_target`) is intentional — `lilac dev`
+          # follows the dev path: `:full` skips mrbc for fast reloads,
+          # `:compiled` exercises the production mrbc + lilac-compiled
+          # flow under live reload so the dev experience matches what
+          # ships in prod.
+          target: @config.dev_target,
+          mrbc_path: @config.mrbc_path,
         ).build
       end
 
@@ -71,7 +79,10 @@ module Lilac
         rebuild!
         @live_reload.notify_all
         @out.puts "lilac dev: reloaded #{@live_reload.subscriber_count} client(s)"
-      rescue Builder::Error, SFC::ParseError => e
+      rescue Builder::Error, SFC::ParseError, BuildError => e
+        # BuildError covers BytecodeBuilder::Error (mrbc invocation
+        # failures) as well as Codegen / Compat errors. Keeps the dev
+        # loop alive — the watcher stays armed for the next save.
         @err.puts "lilac dev: build failed: #{e.message}"
       end
 

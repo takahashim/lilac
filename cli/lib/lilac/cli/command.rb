@@ -54,6 +54,8 @@ module Lilac
           pages_dir: opts[:pages],
           output_dir: opts[:output],
           public_dir: opts[:public],
+          build_target: opts[:target],
+          mrbc_path: opts[:mrbc_path],
         )
 
         builder = Builder.new(
@@ -62,10 +64,12 @@ module Lilac
           output_dir: config.output_dir,
           public_dir: config.public_dir,
           codegen: config.codegen,
+          target: config.build_target,
+          mrbc_path: config.mrbc_path,
         )
         result = builder.build
         public_suffix = result[:public_files].positive? ? " + #{result[:public_files]} static file(s)" : ""
-        @out.puts "Built #{result[:pages]} page(s) from #{result[:components]} component(s)#{public_suffix} → #{relative(config.output_dir)}"
+        @out.puts "Built #{result[:pages]} page(s) from #{result[:components]} component(s)#{public_suffix} → #{relative(config.output_dir)} (target: #{config.build_target})"
         0
       end
 
@@ -152,6 +156,10 @@ module Lilac
       def run_dev
         opts = parse_dev_opts
 
+        # `--target` for `lilac dev` controls the watch-rebuild path.
+        # Defaults to `c.dev_target` (Config DEFAULT is `:full`) — the
+        # `:compiled` path will fire `mrbc` on every change once the
+        # DevServer wiring lands (Phase 2 of the proposals.md entry).
         config = Config.load(
           root: opts[:root],
           components_dir: opts[:components],
@@ -160,6 +168,8 @@ module Lilac
           public_dir: opts[:public],
           dev_host: opts[:host],
           dev_port: opts[:port],
+          dev_target: opts[:target],
+          mrbc_path: opts[:mrbc_path],
         )
 
         server = DevServer.new(
@@ -180,6 +190,7 @@ module Lilac
           o.on("--host HOST", "Bind host (default: #{Config::DEFAULT_DEV_HOST})") { |v| opts[:host] = v }
           o.on("--port PORT", Integer, "Bind port (default: #{Config::DEFAULT_DEV_PORT})") { |v| opts[:port] = v }
           add_path_options(o, opts)
+          add_target_options(o, opts)
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
         parser.parse!(@argv)
@@ -191,10 +202,28 @@ module Lilac
         parser = OptionParser.new do |o|
           o.banner = "Usage: lilac build [options]"
           add_path_options(o, opts)
+          add_target_options(o, opts)
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
         parser.parse!(@argv)
         opts
+      end
+
+      # Build / dev target selection. `--target full` produces dist HTML
+      # with inline Ruby + lilac-full wasm (original Lilac story).
+      # `--target compiled` invokes `mrbc` to produce `.mrb` bytecode +
+      # lilac-compiled wasm (smaller production bundle, ~32% brotli).
+      # `--mrbc-path` lets the user pin a specific mrbc binary when the
+      # auto-discovery would pick the wrong one.
+      def add_target_options(o, opts)
+        o.on("--target TARGET", Config::TARGET_VALUES.map(&:to_s),
+             "Build target (#{Config::TARGET_VALUES.join(' / ')}; default: full)") do |v|
+          opts[:target] = v.to_sym
+        end
+        o.on("--mrbc-path PATH",
+             "Path to the mrbc binary (default: auto-discover)") do |v|
+          opts[:mrbc_path] = v
+        end
       end
 
       # The path-config flags `build` / `dev` / `doctor` all accept.

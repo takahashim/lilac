@@ -35,6 +35,11 @@ module Lilac
         :components_dir, :pages_dir, :public_dir, :output_dir,
         :dev_host, :dev_port,
         :codegen,
+        # build_target / dev_target: `:full` (default) ships dist HTML
+        # with inline Ruby + lilac-full wasm; `:compiled` ships .mrb
+        # bytecode + lilac-compiled wasm. mrbc_path overrides the
+        # auto-discovery in BytecodeBuilder.
+        :build_target, :dev_target, :mrbc_path,
         keyword_init: true,
       )
 
