@@ -1,0 +1,28 @@
+<template>
+  <div data-component="login-form">
+    <input data-ref="email_input" data-bind="@email">
+    <input data-ref="pw_input" data-bind="@password" type="password">
+    <span data-ref="summary" data-text="@summary"></span>
+    <button data-ref="submit">submit</button>
+    <p data-ref="msg" data-text="@msg"></p>
+  </div>
+</template>
+<script type="text/ruby">
+class LoginForm < Lilac::Component
+  def setup
+    @email = signal("")
+    @password = signal("")
+    @summary = computed { "#{@email.value}/#{@password.value.length}" }
+    @msg = signal("idle")
+    refs.submit.on(:click) do
+      if @email.value.empty? || @password.value.empty?
+        @msg.value = "missing"
+      else
+        @msg.value = "ok:#{@email.value}"
+      end
+    end
+  end
+end
+Lilac.register "LoginForm", LoginForm
+Lilac.start
+</script>

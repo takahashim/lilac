@@ -1,0 +1,21 @@
+<template>
+  <div data-component="toggle"
+       data-class="{ on: @flag, off: @flag_off }">
+    <button data-ref="toggle_btn">toggle</button>
+    <span data-ref="show_msg" data-show="@flag">visible</span>
+    <span data-ref="hide_msg" data-hide="@flag">hidden</span>
+    <a data-ref="link" data-attr-href="@url">link</a>
+  </div>
+</template>
+<script type="text/ruby">
+class Toggle < Lilac::Component
+  def setup
+    @flag = signal(false)
+    @flag_off = computed { !@flag.value }
+    @url = computed { @flag.value ? "/yes" : "/no" }
+    refs.toggle_btn.on(:click) { @flag.update { |v| !v } }
+  end
+end
+Lilac.register "Toggle", Toggle
+Lilac.start
+</script>

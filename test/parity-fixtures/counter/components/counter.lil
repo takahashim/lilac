@@ -1,0 +1,20 @@
+<template>
+  <div data-component="counter">
+    <button data-ref="dec">-</button>
+    <span data-ref="value" data-text="@count">init</span>
+    <button data-ref="inc">+</button>
+    <span data-text="@parity">x</span>
+  </div>
+</template>
+<script type="text/ruby">
+class Counter < Lilac::Component
+  def setup
+    @count = signal(0)
+    @parity = computed { @count.value.even? ? "even" : "odd" }
+    refs.inc.on(:click) { @count.update(&:succ) }
+    refs.dec.on(:click) { @count.update { |n| n - 1 } }
+  end
+end
+Lilac.register "Counter", Counter
+Lilac.start
+</script>

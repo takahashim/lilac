@@ -1,0 +1,35 @@
+<template>
+  <div data-component="tag-list">
+    <ul>
+      <li data-each="@tags" data-key="id">
+        <span data-text="label">x</span>
+      </li>
+    </ul>
+    <button data-ref="add">add</button>
+    <button data-ref="remove_first">remove first</button>
+    <button data-ref="reverse">reverse</button>
+  </div>
+</template>
+<script type="text/ruby">
+class TagList < Lilac::Component
+  def setup
+    @tags = signal([
+      { "id" => 1, "label" => "alpha" },
+      { "id" => 2, "label" => "beta" },
+      { "id" => 3, "label" => "gamma" },
+    ])
+    refs.add.on(:click) do
+      next_id = (@tags.value.map { |t| t["id"] }.max || 0) + 1
+      @tags.value = @tags.value + [{ "id" => next_id, "label" => "tag#{next_id}" }]
+    end
+    refs.remove_first.on(:click) do
+      @tags.value = @tags.value.drop(1)
+    end
+    refs.reverse.on(:click) do
+      @tags.value = @tags.value.reverse
+    end
+  end
+end
+Lilac.register "TagList", TagList
+Lilac.start
+</script>
