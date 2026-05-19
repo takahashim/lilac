@@ -78,10 +78,10 @@ puts "counter component mounted"
     </script>
 
     <script type="module">
-      import { createVM } from "../mrbgem/mruby-wasm-js/js/index.js";
+      import { createVM } from "../../mrbgem/mruby-wasm-js/js/index.js";
       const status = document.getElementById("status");
       try {
-        const vm = await createVM({ wasm: "../build/lilac-full.wasm" });
+        const vm = await createVM({ wasm: "../../build/lilac-full.wasm" });
         vm.evalScript("#ruby-source");
         status.textContent = "ready";
       } catch (err) {

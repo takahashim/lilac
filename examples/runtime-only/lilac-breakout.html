@@ -373,10 +373,10 @@ puts "breakout demo mounted"
     </script>
 
     <script type="module">
-      import { createVM } from "../mrbgem/mruby-wasm-js/js/index.js";
+      import { createVM } from "../../mrbgem/mruby-wasm-js/js/index.js";
       const boot = document.getElementById("boot");
       try {
-        const vm = await createVM({ wasm: "../build/lilac-full.wasm" });
+        const vm = await createVM({ wasm: "../../build/lilac-full.wasm" });
         // Expose so the Ruby side can sample WASM linear memory size
         // and JS-side handle count for the stats overlay.
         globalThis.__breakout_vm = vm;

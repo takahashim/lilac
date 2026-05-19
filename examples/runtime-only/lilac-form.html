@@ -220,10 +220,10 @@ puts "form demo mounted"
     </script>
 
     <script type="module">
-      import { createVM } from "../mrbgem/mruby-wasm-js/js/index.js";
+      import { createVM } from "../../mrbgem/mruby-wasm-js/js/index.js";
       const boot = document.getElementById("boot");
       try {
-        const vm = await createVM({ wasm: "../build/lilac-full.wasm" });
+        const vm = await createVM({ wasm: "../../build/lilac-full.wasm" });
         vm.evalScript("#ruby-source");
         boot.textContent = "ready — fill the form to see live validation";
       } catch (err) {

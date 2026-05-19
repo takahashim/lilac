@@ -132,10 +132,10 @@ puts "search demo mounted"
     </script>
 
     <script type="module">
-      import { createVM } from "../mrbgem/mruby-wasm-js/js/index.js";
+      import { createVM } from "../../mrbgem/mruby-wasm-js/js/index.js";
       const boot = document.getElementById("boot");
       try {
-        const vm = await createVM({ wasm: "../build/lilac-full.wasm" });
+        const vm = await createVM({ wasm: "../../build/lilac-full.wasm" });
         vm.evalScript("#ruby-source");
         boot.textContent = "ready — try typing or filtering by region";
       } catch (err) {

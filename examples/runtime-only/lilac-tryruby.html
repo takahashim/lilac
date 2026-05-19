@@ -507,7 +507,7 @@ Lilac.start
     </script>
 
     <script type="module">
-      import { createVM } from "../mrbgem/mruby-wasm-js/js/index.js";
+      import { createVM } from "../../mrbgem/mruby-wasm-js/js/index.js";
 
       const host = {
         vm: null,
@@ -558,7 +558,7 @@ Lilac.start
       globalThis.__tryRubyHost = host;
 
       try {
-        host.vm = await createVM({ wasm: "../build/lilac-full.wasm" });
+        host.vm = await createVM({ wasm: "../../build/lilac-full.wasm" });
         host.vm.evalScript("#ruby-source");
       } catch (err) {
         const status = document.querySelector("[data-ref='status']");
