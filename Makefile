@@ -85,6 +85,13 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # ── JS-host wasm (link libmruby.a into a reactor module) ────────────────
+# Args:
+#   $(1) — opt-level (e.g. -Oz for release)
+#   $(2) — release ldflags (e.g. --strip-debug)
+#   $(3) — libmruby.a path
+#   $(4) — output wasm path
+#   $(5) — extra `-Wl,--export=…` flags (target-specific symbols beyond
+#          the shared JS bridge trio)
 define LINK_JS_WASM
 $(CLANG) --target=$(TARGET) --sysroot=$(SYSROOT) \
   $(1) \
@@ -94,11 +101,23 @@ $(CLANG) --target=$(TARGET) --sysroot=$(SYSROOT) \
   -Wl,--export=js_invoke_proc \
   -Wl,--export=js_eval_handle \
   -Wl,--export=js_load_irep_handle \
+  $(5) \
   -Wl,--whole-archive $(3) -Wl,--no-whole-archive \
   -o $(4) \
   -lsetjmp
 @echo "Built $(4) ($$(du -h $(4) | cut -f1))"
 endef
+
+# Extra wasm exports for the `lilac-full` variant only: the
+# `mruby-host-compile` mrbgem (runtime/mruby-host-compile/) provides
+# compile_source / mrbc_alloc / mrbc_free so the Ruby CLI can drive the
+# wasm as an mrbc replacement via wasmtime-rb. Required by lilac-wasm-bin
+# Phase 2 — the `lilac-compiled` variant doesn't include the gem (no
+# mruby-compiler) so its link must NOT request these exports (would fail
+# with "undefined symbol").
+LILAC_FULL_EXTRA_EXPORTS := -Wl,--export=compile_source \
+                            -Wl,--export=mrbc_alloc \
+                            -Wl,--export=mrbc_free
 
 lilac-full: $(BUILD_WASM_LILAC_FULL)
 lilac-full-release: $(BUILD_WASM_LILAC_FULL_RELEASE)
@@ -108,16 +127,16 @@ lilac-all: lilac-full lilac-compiled
 lilac-all-release: lilac-full-release lilac-compiled-release
 
 $(BUILD_WASM_LILAC_FULL): $(LIBMRUBY_LILAC_FULL) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_FULL),$(BUILD_WASM_LILAC_FULL))
+	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_FULL),$(BUILD_WASM_LILAC_FULL),$(LILAC_FULL_EXTRA_EXPORTS))
 
 $(BUILD_WASM_LILAC_FULL_RELEASE): $(LIBMRUBY_LILAC_FULL_RELEASE) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_FULL_RELEASE),$(BUILD_WASM_LILAC_FULL_RELEASE))
+	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_FULL_RELEASE),$(BUILD_WASM_LILAC_FULL_RELEASE),$(LILAC_FULL_EXTRA_EXPORTS))
 
 $(BUILD_WASM_LILAC_COMPILED): $(LIBMRUBY_LILAC_COMPILED) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_COMPILED),$(BUILD_WASM_LILAC_COMPILED))
+	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_COMPILED),$(BUILD_WASM_LILAC_COMPILED),)
 
 $(BUILD_WASM_LILAC_COMPILED_RELEASE): $(LIBMRUBY_LILAC_COMPILED_RELEASE) | $(BUILD_DIR)
-	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_COMPILED_RELEASE),$(BUILD_WASM_LILAC_COMPILED_RELEASE))
+	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_COMPILED_RELEASE),$(BUILD_WASM_LILAC_COMPILED_RELEASE),)
 
 # ── duplicate-pair drift check ─────────────────────────────────────────
 # Per decisions §17, the directive grammar layer is intentionally

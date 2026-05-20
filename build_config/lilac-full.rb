@@ -107,6 +107,11 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.linker.flags << "-Wl,--allow-undefined"
   conf.linker.flags << "-Wl,--strip-debug" if release
   conf.linker.flags << "-mexec-model=reactor"
+  # The final wasm `--export=` flags (including the JS bridge trio and
+  # mruby-host-compile's compile_source / mrbc_alloc / mrbc_free) are
+  # driven by the Makefile's `LINK_JS_WASM` macro, not by these
+  # build_config linker flags — `MRuby::CrossBuild` produces
+  # libmruby.a, the wasm linking step happens in the outer Makefile.
 
   conf.linker.libraries << "setjmp"
   conf.cc.defines << "MRB_NO_BOXING"
@@ -161,6 +166,13 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem "#{runtime_dir}/mruby-lilac-async"
   conf.gem "#{runtime_dir}/mruby-lilac-router"
   conf.gem "#{runtime_dir}/mruby-lilac-form"
+
+  # Exposes `compile_source` / `mrbc_alloc` / `mrbc_free` for the
+  # lilac-cli wasm-driven build path (`WasmMrbcDriver`). Compiled
+  # only into the `full` variant — `lilac-compiled` has no
+  # `mruby-compiler`, so the export would always return status=2
+  # there.
+  conf.gem "#{runtime_dir}/mruby-host-compile"
 
   conf.bins = []
 end
