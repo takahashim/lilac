@@ -42,6 +42,28 @@ class SpecRunner
     # Requires Lilac.start + MutationObserver + bind html: signal +
     # `JS.eval_javascript("new Promise(...)").await` drain.
     "runtime/mruby-lilac/wasm_spec/test_directive_unsafe_html.rb",
+    # Session 10 batch — directive / component / bind / prop 系がまとめて
+    # unlock (foundation 8 session 投資の最大の回収場面)。同パターンの
+    # `Lilac.start + bind + .await(setTimeout(0))` で動く spec を一気に
+    # PURE_SPECS に積み増し。
+    "runtime/mruby-lilac/wasm_spec/test_directive_text.rb",
+    "runtime/mruby-lilac/wasm_spec/test_directive_attr.rb",
+    "runtime/mruby-lilac/wasm_spec/test_directive_class.rb",
+    "runtime/mruby-lilac/wasm_spec/test_directive_show_hide.rb",
+    "runtime/mruby-lilac/wasm_spec/test_directive_css.rb",
+    "runtime/mruby-lilac/wasm_spec/test_directive_on.rb",
+    "runtime/mruby-lilac/wasm_spec/test_bind_attr.rb",
+    "runtime/mruby-lilac/wasm_spec/test_bind_template_hook.rb",
+    "runtime/mruby-lilac/wasm_spec/test_component_mount.rb",
+    "runtime/mruby-lilac/wasm_spec/test_component_autoregister.rb",
+    "runtime/mruby-lilac/wasm_spec/test_component_nested.rb",
+    "runtime/mruby-lilac/wasm_spec/test_component_dynamic.rb",
+    "runtime/mruby-lilac/wasm_spec/test_set_style.rb",
+    "runtime/mruby-lilac/wasm_spec/test_expose_lookup.rb",
+    "runtime/mruby-lilac/wasm_spec/test_error_boundary.rb",
+    "runtime/mruby-lilac/wasm_spec/test_prop_as_ivar.rb",
+    "runtime/mruby-lilac/wasm_spec/test_prop_ivar_override_detection.rb",
+    "runtime/mruby-lilac/wasm_spec/test_props.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do

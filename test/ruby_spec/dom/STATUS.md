@@ -236,3 +236,51 @@ for the overall plan.
   `test_directive_attr.rb` (similar shape: small spec, single `.await`,
   signal-bound DOM mutation). If the same drain pattern works, batch
   several into one session.
+
+## Session 10 (2026-05-21): Batch unlock — directive / component / bind / prop
+
+- Target spec(s): directive_text/attr/class/show_hide (initial 4) —
+  expanded mid-session after they all passed on first try
+- Achieved:
+  - All 4 initial targets passed with no polyfill changes — the
+    Session 9 drain pattern + existing foundation cover them
+  - Broadened to a probe pass of 26 candidate DOM specs (component,
+    bind, prop, error_boundary, set_style, etc.)
+  - **14 additional specs passed on first try**, batched into PURE_SPECS
+  - 12 specs partially work or fail — recorded below for future sessions
+- Unlocked (14 new spec files / +97 sub-assertions):
+  - `test_directive_text` (2), `test_directive_attr` (2),
+    `test_directive_class` (1), `test_directive_show_hide` (2),
+    `test_directive_css` (2), `test_directive_on` (2)
+  - `test_bind_attr` (3), `test_bind_template_hook` (4)
+  - `test_component_mount` (7), `test_component_autoregister` (7),
+    `test_component_nested` (4), `test_component_dynamic` (2)
+  - `test_set_style` (4), `test_expose_lookup` (7),
+    `test_error_boundary` (10), `test_prop_as_ivar` (11),
+    `test_prop_ivar_override_detection` (5), `test_props` (18)
+
+  PURE_SPECS: 13 → 31. assertions: 246 → ~340.
+
+- Blocked by / open (12 specs not yet green; classified for future
+  sessions):
+  - `test_directive_each` (pass=0 fail=2) — list reconciliation,
+    likely needs `data-each` directive + `bind_list` deeper coverage
+  - `test_bind` (2/3), `test_bind_class_style` (2/3) — partial,
+    likely classList edge cases or attribute observation order
+  - `test_bind_input` (0/2) — `dispatchEvent(new Event("input"))`
+    + two-way binding flow not exercised yet
+  - `test_bind_list` (9/11) — mostly works; 2 list-reconciliation cases
+    remain
+  - `test_component_abort` (0 / 0) — async + AbortController flow;
+    Promise drain semantics may not yet match
+  - `test_component_timer` / `test_component_each_frame` (0 / 0) —
+    timer / rAF observability through component lifecycle
+  - `test_template` (16/19), `test_node_operations` (11/12) — small
+    gaps in template + node ops APIs
+  - `test_url_sanitizer` (3/4) — minor edge
+  - `test_persistent_signal` (2/5) — needs `localStorage` polyfill
+    (Session 15 in plan)
+- Next: Session 11 — pick one of the partial-pass specs (likely
+  `test_template` or `test_node_operations` since they're 1-3 asserts
+  shy of green) and diagnose. Or batch the bind/* family if
+  `test_bind` is a single shared cause.
