@@ -68,6 +68,17 @@ module Lilac
         scope = @host.new_scope
         if @template_name
           t = prev_t || @host.template(@template_name)
+          # Prop auto-fill for any nested `data-component` rows. On
+          # first mount we write `data-prop-*` attributes onto the
+          # detached clone so the child component's `Props.build` (run
+          # by the about-to-fire MutationObserver-driven mount) reads
+          # them. On reuse the child is already mounted, so we push
+          # updated values directly into its Signals.
+          if prev_t
+            PropAutoFill.push_row_updates(t.to_js, item, host: @host)
+          else
+            PropAutoFill.fill_row(t.to_js, item)
+          end
           @host.with_scope(scope) { @item_proc.call(item, t) }
           apply_template(k, existing, t, scope, item)
         else
