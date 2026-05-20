@@ -14,9 +14,11 @@
 # `--gc-sections` strip everything else. Removed from the historical
 # `default-no-stdio` gembox: math.gembox (mruby-math / -rational /
 # -complex / -bigint), mruby-set, mruby-objectspace, mruby-enum-lazy,
-# mruby-enum-chain, mruby-time, mruby-random — none are referenced by
-# Lilac runtime or any example (verified with grep + wasm_spec).
-# That trim saved ~150 KB raw / ~50 KB brotli (verified 2026-05-19).
+# mruby-enum-chain, mruby-random — none are referenced by Lilac runtime
+# or any example (verified with grep + wasm_spec). mruby-time was
+# removed at the same time but reinstated 2026-05-21 so examples like
+# flight-booker can use `Time.now.strftime` instead of
+# `JS.eval_javascript("new Date().toISOString()")`.
 #
 # Also dropped for the browser variant: mruby-io / hal-wasi-io /
 # mruby-wasi-dir / mruby-wasi-env. Lilac runtime / examples don't use
@@ -156,6 +158,8 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem core: "mruby-kernel-ext"    # Kernel#raise variants
   conf.gem core: "mruby-class-ext"     # Class#name (used in errors)
   conf.gem core: "mruby-catch"         # throw/catch (resource teardown)
+  conf.gem core: "mruby-time"          # Time class (avoids JS.eval_javascript for Date)
+  conf.gem core: "mruby-strftime"      # Time#strftime
 
   # mruby-sprintf is required by Kernel#sprintf and `"%s" %` style
   # interpolation in user code. mruby-metaprog is the single doorway

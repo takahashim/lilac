@@ -80,7 +80,7 @@ class FlightBooker < Lilac::Component
   ISO_DATE = /\A\d{4}-\d{2}-\d{2}\z/
 
   def setup
-    today = JS.eval_javascript("new Date().toISOString().slice(0,10)").to_s
+    today = Time.now.strftime("%Y-%m-%d")
 
     @kind   = signal("one-way")
     @start  = signal(today)
