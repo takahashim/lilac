@@ -315,3 +315,174 @@ end
 具体的需要が出てきた時点で着手。当面は Component 全体の `cleanup { }` で
 代替可能。
 
+---
+
+## `lilac-wasm-bin` gem: rubygems で `lilac build` まで完結させる
+
+### 動機
+
+`lilac-cli` を `gem install` しただけでは `lilac build`(default
+`--target compiled`)が動かない。必要物 3 種が外部依存:
+
+| 必要物 | 配布元 | rubygems で揃う? |
+|---|---|---|
+| `mrbc` バイナリ | `mruby-wasm-runtime` repo 内で build、または mruby host build | ❌ |
+| `lilac-compiled.wasm` | `@takahashim/lilac-compiled` npm package | ❌ |
+| `@takahashim/mruby-wasm-js` JS bridge | npm package | ❌ |
+
+Ruby developer の素直な流れ:
+
+```
+gem install lilac-cli
+lilac new my-app && cd my-app
+bundle install
+lilac dev      # ← 動かない (full wasm が無い)
+lilac build    # ← 動かない (mrbc + compiled wasm + bridge が無い)
+```
+
+decisions §1「ビルド不要で動くこと」の精神は `lilac dev` (default `:full`) で
+守られているはずだが、現状は dev も build も追加 setup を user に要求。
+**single tool (`gem`) で完結する path** を提供したい。
+
+### キーになる発見: `lilac-full.wasm` が mrbc を兼ねられる
+
+mrbc は要するに「mruby の parser + compiler + bytecode dump」を CLI tool
+として exposed しただけ。`lilac-full.wasm` には `mruby-compiler` が含まれて
+いるので、これを wasmtime-rb 経由で叩けば **mrbc と等価な機能を Ruby から
+直接呼べる**。`mrbc` バイナリを別途 install する必要がなくなる。
+
+これにより 3 つの外部依存が **wasm + JS bridge の 2 つに統合** され、いずれも
+1 gem に同梱可能になる。
+
+### 提案: 単一 `lilac-wasm-bin` gem + auto-fallback
+
+#### Part 1: `lilac-wasm-bin` gem (主提案)
+
+新規 gem `lilac-wasm-bin` に以下を全部同梱:
+
+```
+lilac-wasm-bin/
+├── data/
+│   ├── lilac-full.wasm        # dev / target=full 用 (~3.9MB)
+│   ├── lilac-compiled.wasm    # production target=compiled 用 (~2.7MB)
+│   └── mruby-wasm-js/         # JS bridge 一式 (~50KB)
+└── lib/lilac/wasm/bin.rb      # 上記 path を Ruby から expose
+```
+
+gemspec で `add_dependency "wasmtime"` を宣言。
+
+`lilac-cli` 側の改修:
+
+- `BytecodeBuilder.resolve_mrbc!` の discovery に **gem 経由 (lilac-full.wasm を wasmtime-rb で叩く)** path を追加。優先順位は env / config の後、外部 binary 探索より前
+- `CompiledRuntimeResolver.resolve_wasm!` の discovery に gem 経由 path を追加
+- `Doctor#check_compiled_runtime` に「lilac-wasm-bin gem が install されているか」のチェックを追加
+
+#### Part 2: Auto-fallback (orthogonal、optional)
+
+`lilac build --target compiled` が必要物を解決できない時、自動で `:full`
+target に fallback + warn する mode。`lilac-wasm-bin` も `lilac-cli` 単体も
+無い、かつ手元に npm setup も無い状態でも build が通る保証になる:
+
+```
+$ lilac build
+Warning: lilac-compiled deps not found (mrbc / lilac-compiled.wasm).
+Falling back to --target full. To build the optimized variant, run:
+  bundle add lilac-wasm-bin
+Built 6 page(s) ... target: full (auto-fallback)
+```
+
+opt-in flag (`--allow-target-fallback`) として実装する選択肢もあり(silent
+な target 変更を嫌う運用向け)。
+
+### 利点
+
+3 gem 揃った時の user 体験(目指す姿):
+
+```bash
+gem install lilac-cli lilac-wasm-bin
+lilac new my-app && cd my-app
+bundle install
+lilac dev      # ← 動く (lilac-wasm-bin の lilac-full.wasm を auto-vendor)
+lilac build    # ← 動く (compiled wasm + mrbc 機能どちらも gem から)
+```
+
+npm 触らずに完結。Ruby developer の流れに馴染む。具体的な利点:
+
+- **install 摩擦が最小**: 2 gem で全機能カバー。npm install / C toolchain 不要
+- **version coherence**: full と compiled の wasm が release timing で必ず一致(npm artifact が古いまま fallback されて壊れる問題が構造的に起きえない)
+- **mrbc 別 binary 不要**: `lilac-full.wasm` 内 mruby-compiler を兼用、`mrbc-bin` 系 gem を別途用意する必要がない
+- **deterministic compile**: 同じ wasm → 同じ bytecode、platform 非依存
+- **single mental model**: 「Lilac の wasm 関連は lilac-wasm-bin に全部入っている」で済む。doc も簡潔
+
+### 現状の workaround
+
+- 手動 `npm install @takahashim/lilac-compiled @takahashim/mruby-wasm-js`
+- `mrbc` は手動 build(`mruby-wasm-runtime` で `make` 等、または mruby host build)
+- `lilac doctor` が missing を検出して指示は出す(部分的 mitigation)
+
+いずれも Ruby developer に npm + C toolchain 知識を要求する。
+
+### 実装的課題
+
+#### A. mruby-wasm-runtime 側
+
+`lilac-full.wasm` を build-time compiler としても呼べるよう、エントリポイントを追加:
+
+- C / mruby driver で **stdin → MRB::Compiler.compile_string → MRB::Dump.dump_irep → stdout** を実行する関数を expose(`-Wl,--export=compile_source` 等)
+- `-mexec-model=reactor` は維持(browser library mode との両立)
+- driver 実装は ~50 行 C もしくは小さな .rb script を mrbgem として bundle
+
+#### B. `lilac-wasm-bin` gem の新規作成
+
+- gem skeleton(`lilac-wasm-bin.gemspec` + `Gemfile`)
+- `data/lilac-full.wasm` / `data/lilac-compiled.wasm` / `data/mruby-wasm-js/` を release ごとに同梱
+- `lib/lilac/wasm/bin.rb` に path 公開定数(`LILAC_FULL_WASM` / `LILAC_COMPILED_WASM` / `BRIDGE_DIR`)
+- gemspec で `add_dependency "wasmtime", "~> X.Y"`
+- CI: `make lilac-full && make lilac-compiled` の output を gem に詰めて `gem push`
+
+#### C. `lilac-cli` 側の改修
+
+- `Lilac::CLI::WasmMrbcDriver` を新設(`require "wasmtime"` を lazy require):
+  - lilac-full.wasm を `Wasmtime::Engine` で load
+  - WASI stdin/stdout を pipe で繋ぐ
+  - `compile_source` invoke、bytecode を回収
+  - 1 build 中は engine instance を再利用して startup overhead を抑制
+- `BytecodeBuilder.resolve_mrbc!` の discovery 順序に「gem 経由 (lilac-wasm-bin → WasmMrbcDriver)」を追加。優先度は config / env の後、PATH 探索より前
+- `CompiledRuntimeResolver.resolve_wasm!` / `resolve_bridge!` も同じ哲学で gem 経由 path を加える
+- `Doctor#check_compiled_runtime` で gem 不在を warn として表示
+
+#### D. Auto-fallback (Part 2、別 PR 可)
+
+- `Builder#build` 冒頭で resolver dry-resolve、不在なら target を `:full` に
+  swap して warn。opt-in flag `--allow-target-fallback` で守る
+
+### 関連する確定判断 / 既存提案
+
+- decisions §1(Runtime canonical / CLI optional)— 本案は「optional」を install 摩擦の意味でも実現する後続整備
+- decisions §18 / §18.5(`lilac build --target compiled` 単一コマンド deploy + 既定 = compiled)— default を compiled にしたので install 摩擦が build 経路で顕在化、本提案で吸収
+- decisions §17(codegen canonical)— mrbc が compiled target の必須路という現状を強化、本提案で配布を整備
+
+### ステータス
+
+未判断。判断の論点:
+
+- **gem name**: `lilac-wasm-bin` か `lilac-runtime` か `lilac-wasm` か。本文は `lilac-wasm-bin` で書いているが naming は要検討
+- **wasmtime-rb vs wasmer-ruby**: 同等の機能だが maintenance 状況や precompiled artifact 提供状況で選ぶ。現時点では **wasmtime-rb** (Bytecode Alliance、ruby.wasm 系で実績) を推奨
+- **gem サイズ**: ~6MB(wasm 2 種同梱)。Ruby gem としては大きめだが `sass-embedded` クラスの前例あり、許容範囲。dev 専用 user が compiled wasm を pull することの cost は disk のみ
+- **`lilac-full` と `lilac-compiled` を分離 gem にするか統合か**: 統合 (`lilac-wasm-bin` 単一)で release coherence と install simplicity が得られる。分離する動機は薄い
+- **mruby-wasm-runtime の release 同期**: lilac-wasm-bin の wasm は mruby-wasm-runtime の特定 commit からビルドされる。両者の release 同期 flow が必要
+
+実装規模(全 part):
+
+- mruby-wasm-runtime 側 driver: ~50 行 C + build_config 修正
+- lilac-wasm-bin gem: skeleton + CI ~150 行
+- lilac-cli の WasmMrbcDriver + resolver 拡張 + doctor 拡張: ~200 行
+- Auto-fallback (optional): ~30 行
+
+合計 ~430 行 + CI 整備 + mruby-wasm-runtime 側修正。3-layer 構成の前案より
+大幅に縮小(`mrbc-bin` の platform 別 build CI が消えるのが大きい)。
+
+Part 1 から着手し、release できれば Part 2 (auto-fallback) は補助機能として
+後付け可能。
+
+

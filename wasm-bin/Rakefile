@@ -1,0 +1,44 @@
+# frozen_string_literal: true
+
+require "fileutils"
+
+# Path constants — `Rakefile` lives at the gem root.
+GEM_ROOT = __dir__
+MONOREPO_ROOT = File.expand_path("..", GEM_ROOT)
+DATA_DIR = File.join(GEM_ROOT, "data")
+
+namespace :build do
+  desc "Copy lilac-full.wasm / lilac-compiled.wasm / bridge into data/ ready for `gem build`"
+  task :assets do
+    FileUtils.mkdir_p(DATA_DIR)
+
+    %w[lilac-full.wasm lilac-compiled.wasm].each do |name|
+      src = File.join(MONOREPO_ROOT, "build", name)
+      unless File.file?(src)
+        abort "missing #{src} — run `make #{name.sub('.wasm', '')}` in the monorepo first"
+      end
+      dst = File.join(DATA_DIR, name)
+      FileUtils.cp(src, dst)
+      puts "Copied #{name} → data/"
+    end
+
+    bridge_src = File.join(MONOREPO_ROOT, "mrbgem", "mruby-wasm-js", "js")
+    unless File.directory?(bridge_src)
+      abort "missing #{bridge_src} — run `make mrbgem` in the monorepo first"
+    end
+    bridge_dst = File.join(DATA_DIR, "mruby-wasm-js")
+    FileUtils.rm_rf(bridge_dst)
+    FileUtils.mkdir_p(bridge_dst)
+    Dir.glob(File.join(bridge_src, "*")).each do |entry|
+      next if File.directory?(entry)
+      FileUtils.cp(entry, bridge_dst)
+    end
+    puts "Copied mruby-wasm-js → data/"
+  end
+end
+
+desc "Remove data/ assets (re-populated by `rake build:assets`)"
+task :clobber do
+  FileUtils.rm_rf(DATA_DIR)
+  puts "Cleaned data/"
+end
