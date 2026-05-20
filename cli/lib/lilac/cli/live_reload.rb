@@ -45,9 +45,25 @@ module Lilac
         @mutex.synchronize { @subscribers.each { |q| q << message } }
       end
 
+      # Push a `event: error` SSE frame to all subscribers with the
+      # given payload encoded as JSON. The client overlay reads this
+      # via `addEventListener("error", ...)` and renders an overlay.
+      # A subsequent successful build calls `notify_all("reload")`
+      # which reloads the page and the overlay disappears on its own.
+      def notify_error(payload)
+        require "json"
+        json = JSON.generate(payload)
+        marker = [ERROR_MARKER, json]
+        @mutex.synchronize { @subscribers.each { |q| q << marker } }
+      end
+
       def subscriber_count
         @mutex.synchronize { @subscribers.length }
       end
+
+      # Sentinel object used to tag error tuples in the queue without
+      # colliding with any plausible reload-message string.
+      ERROR_MARKER = Object.new.freeze
 
       private
 
@@ -66,12 +82,19 @@ module Lilac
           # Queue#pop(timeout:) is Ruby 3.2+ — required Ruby version
           # already enforced in the gemspec.
           msg = queue.pop(timeout: KEEPALIVE_INTERVAL)
-          if msg.nil?
-            io.write(":keepalive\n\n")
-          else
-            io.write("data: #{msg}\n\n")
-          end
+          io.write(format_frame(msg))
           io.flush
+        end
+      end
+
+      def format_frame(msg)
+        case msg
+        when nil
+          ":keepalive\n\n"
+        when Array  # tagged [ERROR_MARKER, json]
+          "event: error\ndata: #{msg.last}\n\n"
+        else
+          "data: #{msg}\n\n"
         end
       end
     end

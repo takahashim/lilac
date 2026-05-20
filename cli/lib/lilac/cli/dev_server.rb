@@ -85,8 +85,15 @@ module Lilac
       rescue Builder::Error, SFC::ParseError, BuildError => e
         # BuildError covers BytecodeBuilder::Error (mrbc invocation
         # failures) as well as Codegen / Compat errors. Keeps the dev
-        # loop alive — the watcher stays armed for the next save.
+        # loop alive — the watcher stays armed for the next save. The
+        # client-side overlay (injected with LIVE_RELOAD_SCRIPT) renders
+        # the error in-page so the developer doesn't have to switch to
+        # the terminal to see why the reload didn't happen.
         @err.puts "lilac dev: build failed: #{e.message}"
+        @live_reload.notify_error(
+          type: e.class.name,
+          message: e.message,
+        )
       end
 
       # Bumping `max_connections` (wsv defaults to 8) gives the dev server

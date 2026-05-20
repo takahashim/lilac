@@ -276,8 +276,13 @@ class TestBuilder < Minitest::Test
     ).build
 
     out = read_output("index.html")
+    # SSE endpoint + reload trigger
     assert_includes out, "/__lilac/livereload"
     assert_includes out, "location.reload()"
+    # Error overlay path: must register an `error` event listener and
+    # render `__lilac_err_overlay` when a build-failure SSE arrives.
+    assert_match(/addEventListener\(["']error["']/, out)
+    assert_includes out, "__lilac_err_overlay"
   end
 
   def test_live_reload_default_off
