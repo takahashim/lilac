@@ -579,8 +579,13 @@ class TestBuilder < Minitest::Test
     build!(target: :compiled, mrbc_path: mrbc)
     out = read_output("index.html")
 
-    refute_includes out, '<script type="text/ruby">',
-                    "compiled target must strip page-inline Ruby scripts"
+    # The `<script type="text/ruby">` tag stays in the dist HTML even
+    # for compiled mode: the browser ignores `text/ruby`, the compiled
+    # wasm has no parser to execute it, so the tag is dead text — but
+    # keeping it makes "view source" / source-mirror features work and
+    # preserves symmetry with target=full.
+    assert_includes out, '<script type="text/ruby">'
+    assert_includes out, "class PageOnlyFoo"
     assert_includes out, "data-lilac-bootstrap"
 
     mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))

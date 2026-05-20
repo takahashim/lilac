@@ -232,13 +232,18 @@ module Lilac
 
         # Inline `<script type="text/ruby">` blocks in the page itself are
         # surfaced to the injection step so they're not silently dropped on
-        # the compiled target. For target=full the runtime's `evalScript`
-        # already handles them in place, so we leave the HTML untouched;
-        # for :compiled we strip the tags so the inline source moves into
-        # the .mrb bundle and out of the dist HTML.
+        # the compiled target. The tags themselves stay in the dist HTML
+        # for both targets:
+        #   - target=full — the runtime parser evaluates them in place
+        #     via `vm.evalScript`
+        #   - target=compiled — the wasm has no parser so the tags are
+        #     dead text (browser ignores `text/ruby`), but they remain
+        #     so "view source" works, and features like the 7guis
+        #     `source-display` mirror still find the page's Ruby. Size
+        #     cost is marginal (a few KB, fully compressible) and the
+        #     `.mrb` value prop (no parser in wasm) is unaffected
         extracted = SFC.extract_inline_ruby_scripts(html, path: page_path)
         page_inline_scripts = extracted[:scripts]
-        html = extracted[:stripped_html] if @target == :compiled
 
         # Page-inline `<X data-component="...">` elements are folded into
         # the same pipeline that handles `.lil` components: we register

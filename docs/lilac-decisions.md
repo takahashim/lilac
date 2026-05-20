@@ -1823,6 +1823,69 @@ framework として dual-purpose 設計は採らない:
 - `lilac-design.md` / `lilac-spec.md` に Pattern A / B の区別を反映するのは
   follow-up(本決定は decisions.md 内に閉じる)
 
+### 20.8 compiled mode でも `<script type="text/ruby">` を dist HTML に残す(2026-05-20)
+
+§18 の初版実装では target=compiled の build で `<script type="text/ruby">`
+要素を **dist HTML から strip** していた(`extract_inline_ruby_scripts` の
+`stripped_html` 経路)。意図は「parser が無い compiled wasm では browser が
+text/ruby を実行できないので残しても dead text、size 減らすために消そう」。
+
+しかし以下の不利益が後から発覚:
+
+- **source-display 系の introspection 機能が壊れる**: `examples/7guis` の
+  `boot.js` は最初の `<script type="text/ruby">` を `<code id="source-display">`
+  に mirror しているが、compiled では tag が消えているのでフォールバック
+  placeholder("// Source is compiled into the .mrb bundle. Run the full target
+  to see the original Ruby here.")を表示する分岐があった
+- **target 間の HTML 非対称**: target=full / target=compiled で dist HTML の
+  semantic が違う(同じ source から異なる HTML が出る)。"compiled は bytecode
+  経由で動く版で、それ以外は同じ" という素直な理解が成立しない
+- **view-source 体験**: compiled mode の page を開いた人が browser dev tools
+  で view-source しても Ruby が見えない。Lilac の "Templates stay as valid
+  HTML5 with `data-*` directives" / "Ruby + HTML を書いてブラウザで開く" 系の
+  方針と整合しない
+
+#### 決定
+
+**両 target で `<script type="text/ruby">` を dist HTML に保持する**。
+`extract_inline_ruby_scripts` は引き続き `.mrb` バンドル用にソース文字列を
+抽出するが、HTML の strip は行わない。
+
+target=compiled での挙動:
+
+- browser は `text/ruby` を unknown type として実行スキップ(副作用なし)
+- 同 page に並ぶ inline boot module は `loadBytecode` だけを呼ぶので script
+  tag を読まない
+- script tag は完全に dead text として残る。size 増は数 KB レベルで、HTML
+  gzip / brotli で圧縮されればさらに小さい(`.mrb` の "parser を wasm から削る"
+  価値は不変)
+
+#### 影響
+
+- `examples/7guis/public/boot.js` の compiled / full 分岐を統合: 両 target で
+  同じ source-mirror 処理(`document.querySelector('script[type="text/ruby"]')`
+  → `<code id="source-display">` にコピー)が動く
+- target=full / target=compiled の dist HTML は **bootstrap module 部分以外
+  bit-identical** に近づく(完全一致ではないが、user の書いた markup は同じ)
+- 「production minify したい」需要は HTML minifier(htmlnano / html-minifier-terser
+  等)を後段で挟む運用に委譲。CLI 側に `--strip-source` のような flag を入れる
+  予定なし(判断責務を user に押し付けず、default は keep のみ)
+
+#### 影響を受ける箇所
+
+- `cli/lib/lilac/cli/builder.rb`:
+  - `build_page` の `html = extracted[:stripped_html] if @target == :compiled`
+    を削除(`extracted[:scripts]` の取得は維持)
+  - 関連コメントを「strip 廃止、両 target で keep」に更新
+- `examples/7guis/public/boot.js`:
+  - compiled branch の placeholder フォールバックを削除、source-mirror を
+    両 target 共通で実行する形に整理
+- `cli/test/test_builder.rb`:
+  - `test_target_compiled_includes_page_inline_ruby_in_mrb` を「`.mrb` には
+    含まれる **AND** HTML にも script tag が残る」を確認する形に更新
+- 7guis の dist を再 build して compiled mode で source-display が表示される
+  ことを確認済み
+
 ---
 
 ## Appendix: 設計判断の年表

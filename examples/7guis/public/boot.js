@@ -7,9 +7,7 @@
 // `Lilac.start` at the tail of the eval loop. Boot lives in this
 // helper layer (decisions §20.6) so user Ruby stays purely declarative
 // regardless of whether the page comes from `lilac build` or from
-// hand-written runtime-only HTML — the canonical Lilac entry point
-// for any Lilac-specific boot helper is "eval all script tags, then
-// `Lilac.start`".
+// hand-written runtime-only HTML.
 //
 // `--target compiled` builds inject their own <script
 // data-lilac-bootstrap> module that handles the load. In that case the
@@ -22,18 +20,18 @@
 const status = document.getElementById("boot");
 const setStatus = (msg) => { if (status) status.textContent = msg; };
 
-if (document.querySelector("[data-lilac-bootstrap]")) {
-  // Compiled-target page; the injected bootstrap owns boot. The
-  // page-inline <script type="text/ruby"> blocks were stripped at
-  // build time and live inside the .mrb bytecode now, so the
-  // source-mirror feature can't recover them.
-  const sourceEl = document.getElementById("source-display");
-  if (sourceEl) {
-    sourceEl.textContent =
-      "// Source is compiled into the .mrb bundle. Run the full target " +
-      "to see the original Ruby here.";
-  }
-} else {
+// Both targets keep `<script type="text/ruby">` in the dist HTML
+// (compiled mode only excludes the parser from the wasm, not the
+// source from the page), so source-mirror works regardless of target.
+const sourceEl = document.getElementById("source-display");
+if (sourceEl) {
+  const rubyScript = document.querySelector('script[type="text/ruby"]');
+  if (rubyScript) sourceEl.textContent = rubyScript.textContent.trim();
+}
+
+if (!document.querySelector("[data-lilac-bootstrap]")) {
+  // Target=full path: this script owns boot — load the runtime, eval
+  // every text/ruby tag in document order, then fire Lilac.start.
   try {
     setStatus("booting…");
     const { createVM } = await import("/vendor/lilac-full/mruby-wasm-js/index.js");
@@ -41,7 +39,7 @@ if (document.querySelector("[data-lilac-bootstrap]")) {
     document.querySelectorAll('script[type="text/ruby"]')
       .forEach((s) => vm.eval(s.textContent));
     // Boot at the tail of the eval loop — the framework owns boot
-    // dispatch (decisions §20.B). Runtime-side `Lilac::Registry#start`
+    // dispatch (decisions §20.6). Runtime-side `Lilac::Registry#start`
     // is idempotent so users who additionally write `Lilac.start` in
     // their own Ruby code don't cause a double mount.
     vm.eval("Lilac.start");
@@ -49,15 +47,5 @@ if (document.querySelector("[data-lilac-bootstrap]")) {
   } catch (err) {
     console.error(err);
     setStatus("boot failed: " + err.message);
-  }
-
-  // Mirror the page's own inline Ruby into <code id="source-display">.
-  // The first <script type="text/ruby"> in document order is always the
-  // page's own block — lilac-cli appends shared component scripts after,
-  // so `querySelector` (first match) hits the page-local source.
-  const sourceEl = document.getElementById("source-display");
-  if (sourceEl) {
-    const rubyScript = document.querySelector('script[type="text/ruby"]');
-    if (rubyScript) sourceEl.textContent = rubyScript.textContent.trim();
   }
 }
