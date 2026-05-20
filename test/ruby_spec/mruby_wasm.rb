@@ -8,6 +8,7 @@ require_relative "dom/event"
 require_relative "dom/scheduler"
 require_relative "dom/observer"
 require_relative "dom/promise"
+require_relative "dom/storage"
 require_relative "dom/world"
 require_relative "dom/document"
 require_relative "dom/element"
@@ -91,15 +92,32 @@ class MrubyWasm
   def eval(source)
     handle = store_handle(source.b)
     rc = @js_eval_handle.call(handle, 0, 0)
-    # After wasm returns, the script may have left fibers suspended on
-    # `.await`. Drain microtasks + immediate timers so those fibers
-    # resume and finish before the next eval. `advance_time(0)`
-    # internally drains microtasks and fires every timer whose due_at
-    # <= now_ms, with a cascade loop for chained tasks.
-    advance_time(0)
+    # Drain pending microtasks + timers so fibers suspended on `.await`
+    # finish before the next eval. We advance through each pending
+    # timer's due_at one at a time (chained timers / promise then-then
+    # cascades all settle in this loop). Cap at 1000 iterations to
+    # guard against pathological infinite-timer recursion.
+    drain_async!
     rc
   ensure
     @handles.delete(handle) if handle
+  end
+
+  # Advance the test scheduler clock to fire each pending timer in
+  # order, draining microtasks at each step. Bounded to avoid
+  # runaways.
+  def drain_async!(max_iterations: 1000)
+    window = @handles[1]
+    return unless window.respond_to?(:scheduler)
+
+    scheduler = window.scheduler
+    scheduler.drain_microtasks
+    max_iterations.times do
+      next_at = scheduler.next_due_timer_at
+      break if next_at.nil?
+
+      scheduler.advance_time([next_at - scheduler.now_ms, 0].max)
+    end
   end
 
   # Store bytes/string under a fresh handle id; the wasm reads it back

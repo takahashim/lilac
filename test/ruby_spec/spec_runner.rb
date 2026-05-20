@@ -76,6 +76,13 @@ class SpecRunner
     # add_child でノードを copy する挙動への対処)
     "runtime/mruby-lilac/wasm_spec/test_bind_list.rb",
     "runtime/mruby-lilac/wasm_spec/test_template.rb",
+    # Session 13 unlock — localStorage / AbortController polyfill +
+    # drain_async! が eval 後に full timer drain するよう拡張 (16ms 等の
+    # setTimeout も自動進行)
+    "runtime/mruby-lilac/wasm_spec/test_persistent_signal.rb",
+    "runtime/mruby-lilac/wasm_spec/test_component_abort.rb",
+    "runtime/mruby-lilac/wasm_spec/test_component_timer.rb",
+    "runtime/mruby-lilac/wasm_spec/test_component_each_frame.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do

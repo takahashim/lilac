@@ -101,6 +101,10 @@ class MrubyWasm
         @timers.values.select(&:active).map(&:due_at).min
       end
 
+      # Public accessor for eval-time auto-drain: keep advancing the
+      # clock until no timers remain (or a safety budget runs out).
+      public :next_due_timer_at
+
       def run_due_timers
         due = @timers.values.select { |timer| timer.active && timer.due_at <= @now_ms }
         due.sort_by!(&:id)

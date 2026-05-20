@@ -31,6 +31,9 @@ class MrubyWasm
         @error_ctor = Constructor.new { |args| ErrorValue.new(args[0]) }
         @promise_ctor = PromiseConstructor.new(self)
         @mutation_observer_ctor = Constructor.new { |args| MutationObserver.new(self, args[0]) }
+        @abort_controller_ctor  = Constructor.new { |_args| AbortController.new }
+        @local_storage   = Storage.new
+        @session_storage = Storage.new
         @document = Document.new(host)
         @document.default_view = self
       end
@@ -54,11 +57,14 @@ class MrubyWasm
         when "Error"        then @error_ctor
         when "Promise"      then @promise_ctor
         when "MutationObserver" then @mutation_observer_ctor
+        when "AbortController" then @abort_controller_ctor
         when "console"      then :console     # handled by Symbol sentinel
         when "Object"       then :object_ctor # likewise
         when "Array"        then :array_ctor
         when "JSON"         then :json_ctor
         when "performance"  then { "now" => @scheduler.now_ms.to_f }
+        when "localStorage" then @local_storage
+        when "sessionStorage" then @session_storage
         else nil
         end
       end

@@ -288,5 +288,71 @@ class MrubyWasm
         end
       end
     end
+
+    # `AbortController` + `AbortSignal` subset used by
+    # `Lilac::Component#abort_signal`. Signal fires an "abort" event
+    # and flips `[:aborted]` to true when the controller's `abort()`
+    # is called; otherwise it stays inert.
+    class AbortSignal
+      include EventTarget
+
+      def initialize
+        @aborted = false
+        @reason = nil
+      end
+
+      def __js_get__(key)
+        case key
+        when "aborted" then @aborted
+        when "reason"  then @reason
+        end
+      end
+
+      def __js_set__(_key, _value)
+        nil
+      end
+
+      def __js_call__(method, args)
+        case method
+        when "addEventListener"
+          add_event_listener(args[0], args[1], args[2])
+        when "removeEventListener"
+          remove_event_listener(args[0], args[1])
+        when "dispatchEvent"
+          dispatch_event(args[0])
+        end
+      end
+
+      def __mark_aborted__(reason = nil)
+        return if @aborted
+
+        @aborted = true
+        @reason = reason
+        dispatch_event(Event.new("abort", "bubbles" => false, "cancelable" => false))
+      end
+    end
+
+    class AbortController
+      attr_reader :signal
+
+      def initialize
+        @signal = AbortSignal.new
+      end
+
+      def __js_get__(key)
+        @signal if key == "signal"
+      end
+
+      def __js_set__(_key, _value)
+        nil
+      end
+
+      def __js_call__(method, args)
+        case method
+        when "abort"
+          @signal.__mark_aborted__(args[0])
+        end
+      end
+    end
   end
 end

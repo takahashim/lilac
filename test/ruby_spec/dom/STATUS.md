@@ -386,3 +386,51 @@ for the overall plan.
 - Next: Session 13 — `test_directive_each` と `test_node_operations`
   の Template#remove via auto-mount 経路を解明。両方とも MutationObserver
   + component registry の交点なので同根の可能性あり。
+
+## Session 13 (2026-05-22): localStorage / AbortController / scheduler drain enhancement
+
+- Target spec(s): test_directive_each / test_node_operations /
+  test_persistent_signal / test_component_abort / timer / each_frame
+- Achieved:
+  1. **`drain_async!` を `eval` 末尾で実行** — `advance_time(0)` だけ
+     だと `setTimeout(r, 16)` 等の遅延付きタイマーが発火しなかった。
+     pending timer の `next_due_timer_at` まで時間を進めるループに変更
+     (1000 iteration 上限の safety budget 付き)。これで `await
+     setTimeout(N)` 全般が決定論的に解決する
+  2. **`MrubyWasm::Dom::Storage` 追加** — `localStorage` /
+     `sessionStorage` のサブセット (`getItem` / `setItem` /
+     `removeItem` / `clear` / `key` / `length`)。Window から
+     `localStorage` / `sessionStorage` を expose
+  3. **`AbortController` / `AbortSignal` 追加** — `Lilac::Component#
+     abort_signal` が `JS.global[:AbortController].new[:signal]` を
+     返すパス。Window から `AbortController` ctor を expose、signal の
+     `[:aborted]` と `addEventListener("abort", ...)` を実装
+- Template filter 試行 → **revert**: `<template>` 配下を `querySelector`
+  / `querySelectorAll` から除外する filter を実装したが、Lilac 内部の
+  `refs` lookup 等多数のパスが `<template>` を含む DOM tree で動くため、
+  35 spec が regression。filter アプローチは断念し、`test_directive_each`
+  と `test_node_operations` の Template#remove は session 14+ で別解
+  (template 内 children を本物のフラグメントに reparent する方式) を
+  検討
+- Unlocked (4 new spec files):
+  - `test_persistent_signal` (5) — localStorage 全パス
+  - `test_component_abort` (7) — alive? / abort_signal / sleep with
+    Aborted error / cleanup callbacks
+  - `test_component_timer` (8) — Component#timeout/interval
+  - `test_component_each_frame` (3) — Component#each_frame (rAF cycle)
+
+  PURE_SPECS: 37 → 41. assertions: ~410 → ~470.
+
+- Blocked by / open:
+  - `test_directive_each` (0/2) — `<template>` 配下の `<span data-ref>`
+    が `body.querySelectorAll` で見えてしまい、`titles` 集計に空文字が
+    混じる。Template content を独立 fragment にする refactor が必要
+  - `test_node_operations` (1/12) — Template tag を伴う node 操作の
+    多くが上記と同じ理由 (template 配下要素が doc tree に visible) で
+    auto-mount / find_for_element が誤動作
+- Next: Session 14 — Template tag の **content fragment 分離** refactor。
+  innerHTML setter on `<template>` で children を別の Nokogiri::Document
+  Fragment に store し、template 要素自体は空にする。これで template
+  配下が selectorに見えなくなる。`<template>` の "ライブ" 表現は無く、
+  操作は `[:content]` 経由でのみ可能、というブラウザの真の意味論に
+  揃える。
