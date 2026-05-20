@@ -50,6 +50,7 @@ MRUBY_CONFIG_MRBC_HOST      := $(CURDIR)/build_config/mrbc-host.rb
 
 LIBMRUBY_LILAC_FULL             := $(MRUBY_DIR)/build/lilac-full/lib/libmruby.a
 LIBMRUBY_LILAC_FULL_RELEASE     := $(MRUBY_DIR)/build/lilac-full-release/lib/libmruby.a
+LIBMRUBY_LILAC_FULL_HOST        := $(MRUBY_DIR)/build/lilac-full-host/lib/libmruby.a
 LIBMRUBY_LILAC_COMPILED         := $(MRUBY_DIR)/build/lilac-compiled/lib/libmruby.a
 LIBMRUBY_LILAC_COMPILED_RELEASE := $(MRUBY_DIR)/build/lilac-compiled-release/lib/libmruby.a
 LIBMRUBY_MRBC_HOST              := $(MRUBY_DIR)/build/mrbc-host/lib/libmruby.a
@@ -58,18 +59,19 @@ LIBMRUBY_MRBC_HOST_RELEASE      := $(MRUBY_DIR)/build/mrbc-host-release/lib/libm
 BUILD_DIR := $(CURDIR)/build
 BUILD_WASM_LILAC_FULL             := $(BUILD_DIR)/lilac-full.wasm
 BUILD_WASM_LILAC_FULL_RELEASE     := $(BUILD_DIR)/lilac-full.release.wasm
+BUILD_WASM_LILAC_FULL_HOST        := $(BUILD_DIR)/lilac-full-host.wasm
 BUILD_WASM_LILAC_COMPILED         := $(BUILD_DIR)/lilac-compiled.wasm
 BUILD_WASM_LILAC_COMPILED_RELEASE := $(BUILD_DIR)/lilac-compiled.release.wasm
 BUILD_WASM_MRBC_HOST              := $(BUILD_DIR)/mrbc-host.wasm
 BUILD_WASM_MRBC_HOST_RELEASE      := $(BUILD_DIR)/mrbc-host.release.wasm
 
 .PHONY: all \
-        lilac-full lilac-full-release \
+        lilac-full lilac-full-release lilac-full-host \
         lilac-compiled lilac-compiled-release \
         mrbc-host mrbc-host-release \
         lilac-all lilac-all-release \
         check-pair-diff \
-        test test-wasm test-cli test-all \
+        test test-wasm test-wasm-rb test-cli test-all \
         node-deps clean
 
 all: lilac-full
@@ -80,6 +82,9 @@ $(LIBMRUBY_LILAC_FULL):
 
 $(LIBMRUBY_LILAC_FULL_RELEASE):
 	cd $(MRUBY_DIR) && MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_FULL)
+
+$(LIBMRUBY_LILAC_FULL_HOST):
+	cd $(MRUBY_DIR) && MRUBY_WASM_EH=new rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_FULL)
 
 $(LIBMRUBY_LILAC_COMPILED):
 	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_COMPILED)
@@ -133,6 +138,7 @@ LILAC_FULL_EXTRA_EXPORTS := -Wl,--export=compile_source \
 
 lilac-full: $(BUILD_WASM_LILAC_FULL)
 lilac-full-release: $(BUILD_WASM_LILAC_FULL_RELEASE)
+lilac-full-host: $(BUILD_WASM_LILAC_FULL_HOST)
 lilac-compiled: $(BUILD_WASM_LILAC_COMPILED)
 lilac-compiled-release: $(BUILD_WASM_LILAC_COMPILED_RELEASE)
 mrbc-host: $(BUILD_WASM_MRBC_HOST)
@@ -145,6 +151,9 @@ $(BUILD_WASM_LILAC_FULL): $(LIBMRUBY_LILAC_FULL) | $(BUILD_DIR)
 
 $(BUILD_WASM_LILAC_FULL_RELEASE): $(LIBMRUBY_LILAC_FULL_RELEASE) | $(BUILD_DIR)
 	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_FULL_RELEASE),$(BUILD_WASM_LILAC_FULL_RELEASE),$(LILAC_FULL_EXTRA_EXPORTS))
+
+$(BUILD_WASM_LILAC_FULL_HOST): $(LIBMRUBY_LILAC_FULL_HOST) | $(BUILD_DIR)
+	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_FULL_HOST),$(BUILD_WASM_LILAC_FULL_HOST),$(LILAC_FULL_EXTRA_EXPORTS))
 
 $(BUILD_WASM_LILAC_COMPILED): $(LIBMRUBY_LILAC_COMPILED) | $(BUILD_DIR)
 	$(call LINK_JS_WASM,,,$(LIBMRUBY_LILAC_COMPILED),$(BUILD_WASM_LILAC_COMPILED),)
@@ -222,6 +231,13 @@ test-wasm: check-pair-diff lilac-full node_modules
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node test/runner.mjs
 
+# Ruby-side wasm spec runner — pure-mruby subset only (no DOM).
+# Drives lilac-full-host.wasm (new-EH variant) through wasmtime-rb.
+# Sibling to `test-wasm` (Node-based, covers DOM + async).
+test-wasm-rb: lilac-full-host
+	cd cli && MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
+	  bundle exec ruby -Itest -Ilib ../test/ruby_spec/spec_runner.rb
+
 # Ruby-side CLI gem tests. The gem owns its own Gemfile / Rakefile
 # under `cli/` (standard Ruby monorepo layout — see README), so the
 # convention is to `cd cli` for any `bundle exec` work. This target
@@ -291,4 +307,5 @@ npm-clean:
 clean: npm-clean
 	rm -rf $(MRUBY_DIR)/build/lilac-*
 	rm -rf $(MRUBY_DIR)/build/mrbc-host*
+	rm -rf $(MRUBY_DIR)/build/lilac-full-host*
 	rm -rf $(BUILD_DIR)

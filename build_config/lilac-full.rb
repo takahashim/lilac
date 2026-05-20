@@ -65,7 +65,16 @@ ar = "#{wasi_sdk}/bin/llvm-ar"
 target = "wasm32-wasip1"
 
 release = ENV["MRUBY_WASM_RELEASE"] == "1"
-build_name = release ? "lilac-full-release" : "lilac-full"
+# `host` variant: new EH proposal lowering (try_table) for wasmtime-rb
+# consumption. Browser path keeps legacy EH because Node + experimental
+# flags aren't a default we want to require. See test/ruby_spec/.
+host_variant = ENV["MRUBY_WASM_EH"] == "new"
+build_name =
+  if host_variant
+    release ? "lilac-full-host-release" : "lilac-full-host"
+  else
+    release ? "lilac-full-release" : "lilac-full"
+  end
 
 # Bridge mrbgems live in mruby-wasm-runtime; framework mrbgems live
 # in this repo's runtime/ subdir.
@@ -82,9 +91,13 @@ MRuby::CrossBuild.new(build_name) do |conf|
 
   common_flags = ["--target=#{target}", "--sysroot=#{sysroot}"]
   # Lower setjmp/longjmp (used by mruby for exceptions and GC mark scan)
-  # to legacy Wasm EH — accepted by all modern browsers and Node without
-  # flags.
+  # to Wasm EH. The browser path stays on legacy EH (try / catch) so it
+  # works in current Node (used by `make test`) without
+  # --experimental-wasm-exnref. The `host` variant flips to the new
+  # proposal (try_table) because wasmtime-rb's default config rejects
+  # legacy EH.
   sjlj_flags = ["-mllvm", "-wasm-enable-sjlj"]
+  sjlj_flags += ["-mllvm", "-wasm-use-legacy-eh=false"] if host_variant
   # POSIX shim headers (mrbgem/hal-wasi-io/include/) for wasi-sysroot
   # gaps. See hal-wasi-io/README.md in mruby-wasm-runtime for details.
   shim_dir = "#{mwr_mrbgem}/hal-wasi-io/include"
