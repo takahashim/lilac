@@ -33,6 +33,18 @@ module Lilac
       # instead) are banned from `data-attr-X`.
       BANNED_ATTR = /^on[a-z]+$|^srcdoc$|^style$/
 
+      # `data-*` attribute names that map to a directive (one of the
+      # `Directive::Kind` values aside from `:component`). This is the
+      # SSOT for both:
+      #   * build-time: TemplateAST uses it to identify directive-bearing
+      #     elements that need a synthetic `lilN` slot.
+      #   * runtime: `Refs` / `TemplateRefs` use it to walk the mounted
+      #     subtree in DFS and resolve `refs.lilN` positionally.
+      # Anything matching here counts toward a scope's directive-bearing
+      # index; markers like `data-ref` / `data-component` / `data-template`
+      # / `data-arg-*` are excluded.
+      DIRECTIVE_ATTR = /^data-(?:text|unsafe-html|bind|show|hide|each|key|class|form|field|button|on-.+|attr-.+|css-.+)$/
+
       class << self
         # `increment` / `add_todo`. Event-handler method names — no `?`
         # suffix so a typoed `save?` is caught at mount time.
@@ -49,6 +61,14 @@ module Lilac
 
         def banned_attr?(s)
           !!BANNED_ATTR.match?(s.to_s)
+        end
+
+        # True when `s` is a `data-*` attribute name that triggers
+        # codegen (i.e. occupies a `lilN` slot in its scope). Used by
+        # both build-time TemplateAST and runtime Refs to keep their
+        # DFS counters in lockstep.
+        def directive_attribute?(s)
+          !!DIRECTIVE_ATTR.match?(s.to_s)
         end
       end
     end

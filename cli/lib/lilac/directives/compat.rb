@@ -21,7 +21,12 @@ module Lilac
       class Error < Lilac::CLI::BuildError; end
 
       def self.check!(directives, file:)
-        directives.group_by(&:ref_id).each_value do |dirs_on_element|
+        # Group by (scope_id, ref_id) so directives that share a `lilN`
+        # NAME but live in different ref scopes (top-level vs each
+        # iteration body) are not falsely flagged as colliding. With
+        # the per-scope positional counter (decisions §19), ref_ids are
+        # only unique WITHIN a scope.
+        directives.group_by { |d| [d.scope_id, d.ref_id] }.each_value do |dirs_on_element|
           check_collisions(dirs_on_element, file)
           check_gn_hidden_conflict(dirs_on_element, file)
         end
