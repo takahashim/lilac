@@ -85,7 +85,6 @@ module Lilac
       def initialize(body_html, source_path: nil)
         @body_html = body_html
         @source_path = source_path
-        @ref_counter = 0
       end
 
       # Element tags treated as form controls by `data-field` (input /
@@ -146,7 +145,14 @@ module Lilac
         directives = []
         refs_map = {}
         synthetic_templates = []
-        walk(fragment, directives, refs_map, synthetic_templates, WalkScopes.new)
+        # `at_root: true` for the outermost walk — when the first
+        # element child of the fragment carries `data-component`, it's
+        # the component's own root (this AST run IS that component),
+        # so its directives + body belong to this component. Any deeper
+        # `data-component` element is a different component; we treat
+        # those subtrees opaquely so their directives don't leak into
+        # the current component's bind_template_hook.
+        walk(fragment, directives, refs_map, synthetic_templates, WalkScopes.new, at_root: true)
 
         Result.new(
           html: fragment.to_html,
@@ -177,7 +183,7 @@ module Lilac
       # the main fragment. Post-order guarantees that nested iterations
       # have already been extracted (with their children also cleared)
       # before the outer extraction snapshots its body.
-      def walk(node, directives, refs_map, synthetic_templates, scopes)
+      def walk(node, directives, refs_map, synthetic_templates, scopes, at_root: false)
         # `to_a` so the iteration is stable even when `unlink` mutates
         # the parent's child list during the extraction step below.
         node.element_children.to_a.each do |elem|
@@ -185,6 +191,16 @@ module Lilac
           has_each = element_directives.any? { |k, _, _| k == :each }
           has_component = element_directives.any? { |k, _, _| k == :component }
           is_form_elem = elem.name == "form"
+
+          # Nested `data-component` (not the parse's outermost element)
+          # is a different component, whose directives + body are
+          # handled by its OWN AST run. Skip the entire subtree —
+          # don't record directives, don't recurse — so the parent's
+          # codegen doesn't double-bind what the nested component will
+          # already wire at mount.
+          if has_component && !at_root
+            next
+          end
 
           # A bare `data-component` element needs no ref_id (the
           # runtime mounts via the data-component attribute) and
@@ -220,7 +236,7 @@ module Lilac
             # ref_id.
             field_input_ref =
               if element_directives.any? { |k, _, _| k == :field }
-                find_or_allocate_form_control_ref(elem, scopes.current_ref_scope)
+                find_or_allocate_form_control_ref(elem, scopes.current_ref_scope, own_ref: ref_id)
               end
             element_directives.each do |kind, name, attr_value|
               directives << Directive.new(
@@ -242,11 +258,23 @@ module Lilac
             # (e.g. `<input data-ref="email">` used only by user-side
             # `refs.email`). Still register so duplicates trip the
             # check, but don't allocate a synthetic / Directive record.
-            register_ref!(explicit, elem.line, scopes.current_ref_scope)
+            #
+            # If `find_or_allocate_form_control_ref` already wrote a
+            # synthetic `data-ref="lilN"` on this element (and recorded
+            # it in scope) skip — the synthetic name is reserved + already
+            # registered, and re-validating would trip the lilN-reserved
+            # guard in `register_ref!`.
+            unless scopes.current_ref_scope.key?(explicit)
+              register_ref!(explicit, elem.line, scopes.current_ref_scope)
+            end
           end
 
           child_scopes = scopes
-          child_scopes = child_scopes.push_ref_scope if has_each || has_component
+          # `has_component` only pushes a fresh ref scope for NESTED
+          # data-component elements — and we already `next` on those
+          # above, so we never reach this branch for them. The root
+          # data-component shares its ref scope with this AST run.
+          child_scopes = child_scopes.push_ref_scope if has_each
           child_scopes = child_scopes.push_form(current_form_scope) if is_form_elem
 
           if has_each
@@ -264,22 +292,29 @@ module Lilac
       # find the first nested form control via CSS selector and allocate a
       # synthetic ref (with `data-ref="lilN"` injected on it) so codegen
       # can address it directly.
-      def find_or_allocate_form_control_ref(elem, current_ref_scope)
+      def find_or_allocate_form_control_ref(elem, current_ref_scope, own_ref:)
         if FORM_CONTROL_TAGS.include?(elem.name)
-          return elem["data-ref"]
+          # `<input data-field="X">` — the data-field element IS the
+          # form control, so its ref_id (just allocated by
+          # assign_or_reuse_ref) is what the codegen should bind to.
+          return own_ref
         end
         control = elem.css(FORM_CONTROL_TAGS.join(", ")).first
         return nil unless control
         existing = control["data-ref"]
         return existing if existing && !existing.empty?
-        # Assign the data-ref attribute but DON'T register in current_ref_scope
-        # — the walker will descend into this control and register the ref via
-        # the explicit-ref `elsif` branch, which would double-register if we
-        # did it here too.
+        # Allocate using scope-size counter to stay in lockstep with
+        # assign_or_reuse_ref. Mutate the inner control with a `data-ref`
+        # attribute because the input itself is NOT directive-bearing
+        # (no `data-*` directive of its own), so the runtime DFS walk
+        # wouldn't reach it via positional resolution — only the
+        # `data-ref`-named lookup catches it.
+        counter = current_ref_scope.size
         loop do
-          candidate = "lil#{@ref_counter}"
-          @ref_counter += 1
+          candidate = "lil#{counter}"
+          counter += 1
           next if current_ref_scope.key?(candidate)
+          current_ref_scope[candidate] = control.line
           control["data-ref"] = candidate
           return candidate
         end
@@ -338,31 +373,44 @@ module Lilac
       # If the element already has an explicit `data-ref`, reuse it
       # (so user-chosen refs remain stable across rebuilds) but
       # register it so a duplicate in the same scope raises. Otherwise
-      # allocate a fresh synthetic name, skipping any candidate that
-      # the user already used at the same scope level.
+      # allocate a fresh synthetic name based on the scope's current
+      # size — `refs.lilN` is resolved positionally at runtime, so the
+      # name doesn't need to be written back to the DOM (decisions §19).
       def assign_or_reuse_ref(elem, current_ref_scope)
         existing = elem["data-ref"]
         if existing && !existing.empty?
+          # register_ref! enforces the `lilN`-namespace reservation +
+          # in-scope uniqueness.
           register_ref!(existing, elem.line, current_ref_scope)
           return existing
         end
 
-        # Auto-assign, skipping refs already used in this scope. The
-        # counter is monotonic per parse so we won't loop forever; the
-        # skip just handles `<div data-ref="lil3">` collisions with our
-        # synthetic lil3.
+        # Per-scope counter — synthetic refs are positional indices
+        # (0-based) within the current data-component / data-each scope.
+        # The runtime walks the same DFS order and maps `lilN` → N-th
+        # directive-bearing element. NO DOM mutation: the dist HTML
+        # carries no synthetic `data-ref` attributes for normal
+        # directive elements (decisions §19).
+        counter = current_ref_scope.size
         loop do
-          candidate = "lil#{@ref_counter}"
-          @ref_counter += 1
+          candidate = "lil#{counter}"
+          counter += 1
           next if current_ref_scope.key?(candidate)
 
           current_ref_scope[candidate] = elem.line
-          elem["data-ref"] = candidate
           return candidate
         end
       end
 
       def register_ref!(ref, line, current_ref_scope)
+        # `lilN` is reserved for codegen positional slots — see decisions §19.
+        if ref.match?(/^lil\d+$/)
+          raise Error.new(
+            "data-ref=#{ref.inspect}: the `lilN` namespace is reserved for codegen-internal directive slots.",
+            at: SourceLocation.new(file: source_file, line: line),
+            suggestion: "Use a domain name like `email` / `list` instead.",
+          )
+        end
         previous = current_ref_scope[ref]
         if previous
           raise Error.new(

@@ -15,14 +15,19 @@ class TestTemplateAST < Minitest::Test
     assert_equal "@count", d.value
     assert_equal "lil0", d.ref_id
     assert_equal "span", d.element_tag
-    assert_includes result.html, %(data-ref="lil0")
+    # decisions §19: no DOM mutation — synthetic `lilN` is a positional
+    # name that runtime resolves at mount, not a `data-ref` attribute
+    # written into the dist HTML.
+    refute_match(/data-ref="lil0"/, result.html)
   end
 
   def test_uses_explicit_data_ref_when_present
     result = parse(%(<span data-ref="status" data-text="@count">0</span>))
     d = result.directives.first
     assert_equal "status", d.ref_id
-    # No synthetic lilN added when explicit ref exists.
+    # User-declared data-ref is left in place, but no synthetic `lilN`
+    # is added (per decisions §19).
+    assert_includes result.html, %(data-ref="status")
     refute_match(/data-ref="lil0"/, result.html)
   end
 
@@ -279,13 +284,15 @@ class TestTemplateAST < Minitest::Test
     end
   end
 
-  def test_synthetic_ref_skips_user_chosen_collision
-    # The user wrote data-ref="lil0" — our auto-allocator must skip lil0
-    # and pick lil1 (or later) for the synthetic ref instead of stomping.
-    html = %(<div><span data-ref="lil0">x</span><b data-text="@v"></b></div>)
-    result = Lilac::CLI::TemplateAST.new(html).parse
-    text_dir = result.directives.find { |d| d.kind == :text }
-    refute_equal "lil0", text_dir.ref_id
+  def test_user_data_ref_with_reserved_lilN_name_is_rejected
+    # decisions §19 reserves the `lilN` namespace for codegen positional
+    # slots — runtime resolves `refs.lilN` by DFS index, so a user-named
+    # collision would silently shadow the synthetic.
+    html = %(<div><span data-ref="lil0" data-text="@v">x</span></div>)
+    err = assert_raises(Lilac::CLI::TemplateAST::Error) do
+      Lilac::CLI::TemplateAST.new(html).parse
+    end
+    assert_match(/`lilN` namespace is reserved/, err.message)
   end
 
   def test_same_ref_name_across_data_each_scopes_does_not_collide

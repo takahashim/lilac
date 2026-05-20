@@ -133,7 +133,10 @@ Spec.describe "Lilac.template" do
     Spec.assert_true err.message.include?("[A-Za-z][A-Za-z0-9_-]*")
   end
 
-  Spec.assert "invalid data-ref name raises Lilac::Error" do
+  Spec.assert "looking up an unknown ref raises Lilac::Error" do
+    # decisions §19: TemplateRefs no longer querySelector-validates the
+    # name shape — bad names just miss the cache, so the failure mode
+    # is the same "Missing" error path as a typoed legitimate name.
     body = JS.global[:document][:body]
     body[:innerHTML] = '<template data-template="row6"><div></div></template>'
     err = nil
@@ -144,7 +147,7 @@ Spec.describe "Lilac.template" do
       err = e
     end
     Spec.assert_true !err.nil?
-    Spec.assert_true err.message.include?("data-ref")
+    Spec.assert_true err.message.include?("Missing template ref")
     body[:innerHTML] = ""
     JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
   end

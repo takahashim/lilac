@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "set"
 require_relative "build_error"
 require_relative "component_name"
 require_relative "../directives" # Lilac::Directives::* (Value / Grammar / ClassParser / Compat)
@@ -95,6 +96,14 @@ module Lilac
 
         by_scope = @directives.group_by(&:scope_id)
 
+        # `@inner_scope_set` lets emit_each decide whether to emit the
+        # `bind_template_hook__each_N(it, t)` call inside its bind_list
+        # block. When the iteration body has zero directives (e.g. the
+        # only thing inside data-each is a nested data-component whose
+        # body is handled by that component's own AST), the per-each
+        # method isn't generated and calling it would NoMethodError at
+        # mount.
+        @inner_scope_set = by_scope.keys.compact.to_set
         top_body = build_scope_body(by_scope[nil] || [], Context.top_level)
         inner_scopes = by_scope.keys.compact.sort
 
@@ -498,10 +507,31 @@ module Lilac
             "->(it) { it.object_id }"
           end
         tpl_name = @component_name.each_template_name(ref_id)
+        # Only call `bind_template_hook__each_N` when there are
+        # directives in that iteration scope — otherwise the per-each
+        # method isn't generated below, and the call would
+        # NoMethodError at mount. Common shape: an `<ul data-each>`
+        # whose only child is a nested `<li data-component="row">`
+        # placeholder — the parent's iteration body has nothing to
+        # wire, and the row's bindings live on the row component
+        # itself.
+        body_call =
+          if @inner_scope_set.include?(ref_id)
+            # Iteration scope has its own directives — call the per-each
+            # method that the module also emits below.
+            "  bind_template_hook__each_#{ref_id}(it, t)"
+          else
+            # No directives in this iteration scope (e.g. the row is a
+            # nested `<X data-component="row">` whose bindings live in
+            # that component's own bind_template_hook). `bind_list`
+            # still requires a block so the reconciler can mount each
+            # cloned row, but the block body is a no-op.
+            "  # no iteration-body bindings"
+          end
         [
           "# #{@file}:#{directive.line} — data-each=#{collection.inspect}#{key_field ? " data-key=#{key_field.inspect}" : ""}",
           %(bind_list #{context.refs_expr}.#{ref_id}, #{collection.bind_source}, key: #{key_expr}, template: #{tpl_name.inspect} do |it, t|),
-          %(  bind_template_hook__each_#{ref_id}(it, t)),
+          body_call,
           "end",
         ]
       end
