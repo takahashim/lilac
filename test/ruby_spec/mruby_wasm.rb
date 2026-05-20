@@ -561,6 +561,24 @@ class MrubyWasm
   end
 
   def evaluate_js_source(src)
+    # Pattern: `setTimeout(() => globalThis.X.method(), delay)` —
+    # commonly used by Fetchy specs to schedule an abort. We can't
+    # interpret arbitrary JS, but this specific shape can be lifted
+    # into a host-side scheduler.set_timeout call.
+    if (m = src.match(/setTimeout\(\(\)\s*=>\s*globalThis\.(\w+)\.(\w+)\(\)\s*,\s*(\d+)\)/))
+      target_key, method_name, delay = m[1], m[2], m[3].to_i
+      window = @handles[1]
+      target = window.respond_to?(:globals) ? window.globals[target_key] : nil
+      if target.respond_to?(:__js_call__) && window.respond_to?(:scheduler)
+        window.scheduler.set_timeout(
+          ->(*_args) { target.__js_call__(method_name, []) },
+          delay
+        )
+      end
+      # The original returns `null` so the test's installer chain works.
+      return nil
+    end
+
     value = parse_js_expression(src)
     return value unless value == :__unsupported__
 

@@ -109,6 +109,12 @@ class SpecRunner
     "runtime/mruby-lilac-directives/wasm_spec/test_directive_text_runtime.rb",
     "runtime/mruby-lilac-directives/wasm_spec/test_scanner_walk_runtime.rb",
     "runtime/mruby-lilac-directives/wasm_spec/test_smoke_runtime.rb",
+    # Session 16-17 unlock — fetch polyfill (FetchFn/Response/Headers) +
+    # encodeURIComponent + Array.from + 多名前 stub map + setTimeout
+    # 経由の external abort pattern recognition
+    "runtime/mruby-lilac-async/wasm_spec/test_fetchy.rb",
+    "runtime/mruby-lilac-async/wasm_spec/test_resource.rb",
+    "runtime/mruby-lilac-async/wasm_spec/test_resource_signal_inject.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do

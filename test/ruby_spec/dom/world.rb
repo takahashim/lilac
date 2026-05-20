@@ -80,6 +80,13 @@ class MrubyWasm
         # Stash arbitrary keys for later reads (e.g.
         # `JS.global[:__fetchy_stub__] = map`).
         @globals[key] = value
+        # The Fetchy spec's `install_fetch_stub` resets `__fetch_count__`
+        # to 0 inside its JS installer (`globalThis.__fetch_count__ = 0;
+        # globalThis.fetch = ...`). Our polyfill ignores raw JS, so we
+        # piggy-back on the stub assignment to perform the same reset
+        # — without it the count accumulates across tests in one VM run.
+        @globals["__fetch_count__"] = 0 if %w[__fetchy_stub__ __resource_fetch_stub__ __inject_fetch_stub__].include?(key)
+        nil
       end
 
       attr_reader :globals, :scheduler
@@ -88,6 +95,17 @@ class MrubyWasm
         case method
         when "fetch"
           FetchFn.new(self).__js_call__("call", args)
+        when "encodeURIComponent"
+          # JS spec encoding: percent-encode anything except
+          # `A-Za-z0-9 - _ . ! ~ * ' ( )`. Ruby's `CGI.escape` is close
+          # but uses `+` for space, so do it manually for parity.
+          require "erb"
+          ERB::Util.url_encode(args[0].to_s)
+        when "decodeURIComponent"
+          require "erb"
+          # ERB doesn't provide decode; use CGI for symmetry.
+          require "cgi"
+          CGI.unescape(args[0].to_s)
         when "addEventListener"
           add_event_listener(args[0], args[1], args[2])
         when "removeEventListener"

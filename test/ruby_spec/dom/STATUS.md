@@ -542,3 +542,36 @@ for the overall plan.
   Promise reject chain の trace、Request cache 化の Promise re-await
   semantics 確認、Resource 内部の print debug。router (history /
   location) は Session 18 へ延期。
+
+## Session 17 (2026-05-22): Fetchy/Resource 完全 unlock
+
+- Target spec(s): test_fetchy (9/12) / test_resource (1/4) /
+  test_resource_signal_inject (3/5)
+- Achieved:
+  1. **`encodeURIComponent` / `decodeURIComponent`** を Window に追加
+     (`ERB::Util.url_encode` + `CGI.unescape`)。Fetchy.builder の
+     param 経由で URL query string が正しく組み立つようになる
+  2. **`__fetch_count__` を `__*_stub__` 設定時に reset** — spec の JS
+     installer が一緒にやっていた reset を polyfill 側で代行 (raw JS は
+     解釈できないため)。テスト間の count 累積を防ぐ
+  3. **`js_eval` に `setTimeout(() => globalThis.X.method(), N)`
+     pattern recognition** を追加。external abort 系で
+     `setTimeout(() => globalThis.__aborter__.abort(), 10)` を host
+     scheduler.set_timeout に lift。pattern matching は limited だが、
+     Lilac spec で使われる shape は covered
+  4. **Multiple stub-map names**: fetch は `__fetchy_stub__` /
+     `__resource_fetch_stub__` / `__inject_fetch_stub__` の各 fixture
+     キーを順に参照
+- Unlocked (3 new spec files):
+  - `test_fetchy` (12 sub-asserts) — Fetchy 全部 green
+  - `test_resource` (4) — Component#resource pending/ready/stale/keep_value
+  - `test_resource_signal_inject` (5) — current_run + Fetchy signal injection
+
+  PURE_SPECS: 64 → 66. assertions: ~660 → ~720.
+
+- **`runtime/mruby-lilac-async/wasm_spec/` 4/4 = 100% 達成**
+- 残り 1 spec のみ: `test_router` (8/41 sub-asserts; history / location
+  / URL polyfill が要る)
+- Next: Session 18 — `MrubyWasm::Dom::Location` / `History` / `URL`
+  polyfill + popstate / hashchange event 配線。router spec の 41
+  sub-asserts を一気に green に。これで wasm_spec 全 67 件 unlock 完了。

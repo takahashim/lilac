@@ -27,7 +27,13 @@ class MrubyWasm
         url = args[0].to_s
         init = args[1] || {}
 
-        stub_map = @window.globals["__fetchy_stub__"] || {}
+        # Each spec file installs its stub under its own global name.
+        # `test_fetchy.rb` uses `__fetchy_stub__`; `test_resource*.rb`
+        # use `__resource_fetch_stub__` and `__inject_fetch_stub__`.
+        # Check them in order — only one should be set at a time.
+        stub_map = @window.globals["__fetchy_stub__"] ||
+                   @window.globals["__resource_fetch_stub__"] ||
+                   @window.globals["__inject_fetch_stub__"] || {}
         # `js_eval`'s JS installer increments these globals; mirror so
         # specs that probe `__fetch_count__` / `__last_url__` / etc.
         # observe the same state shape they'd see from a real injector.
