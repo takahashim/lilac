@@ -9,6 +9,12 @@
 //     .then((r) => r.arrayBuffer())
 //     .then((b) => new Uint8Array(b));
 //   await boot({ bytecode });
+//
+// `boot()` fires `Lilac.start` after `loadIrep` to mount every
+// `data-component` element (decisions §20.6 / §20.7 — Pattern A boot
+// helpers own the framework boot). Runtime-side `Lilac::Registry#start`
+// is idempotent so user code that pre-emits `Lilac.start` in its
+// bytecode (legacy) stays correct.
 
 export { createVM } from "@takahashim/mruby-wasm-js";
 import { createVM } from "@takahashim/mruby-wasm-js";
@@ -27,7 +33,14 @@ const DEFAULT_WASM_URL = new URL("./lilac.wasm", import.meta.url);
  *   this variant has no runtime parser, so `source` / `script` paths
  *   are rejected.
  * @param {(vm: any) => void | Promise<void>} [opts.onReady]
- *   Callback fired after the bytecode is loaded. Receives the VM.
+ *   Callback fired after `Lilac.start` has booted the framework.
+ *   Receives the VM. "Ready" means components are mounted and the
+ *   page is interactive.
+ * @param {boolean} [opts.autoStart=true]
+ *   When `false`, skip the automatic `vm.eval("Lilac.start")` call.
+ *   Use this only for tests or specialised pre-boot setup; normal
+ *   usage relies on the helper firing boot itself (Pattern A —
+ *   decisions §20.7).
  * @returns {Promise<any>} resolved with the VM.
  */
 export async function boot(opts = {}) {
@@ -59,6 +72,13 @@ export async function boot(opts = {}) {
       ? opts.bytecode
       : new Uint8Array(opts.bytecode);
   vm.loadIrep(bytes);
+
+  // Boot the framework after bytecode is loaded so user code stays
+  // purely declarative (decisions §20.6). Idempotent on the runtime
+  // side, so legacy bytecode that already calls `Lilac.start` is fine.
+  if (opts.autoStart !== false) {
+    vm.eval("Lilac.start");
+  }
 
   if (typeof opts.onReady === "function") {
     await opts.onReady(vm);

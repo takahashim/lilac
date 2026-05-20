@@ -1713,6 +1713,95 @@ CLI tests 390 runs, all green。examples/7guis の full / compiled 両 build も
 末尾で呼ぶ。target=compiled の inline boot module が `loadBytecode` 直後に
 `vm.eval("Lilac.start")` を呼ぶ)。
 
+### 20.7 Boot pattern を上流選択として明文化 + Pattern A の 3 段グラデーション(2026-05-20)
+
+§20.6 の boot helper layer 移譲を受けて、Lilac の運用設計の **上流判断** を
+明文化する。これまで「単一 HTML か project 構造か」が user 側の最初の選択と
+誤解されがちだったが、本質はそこではなく **boot pattern (A / B) の選択** が
+最上位にあり、file 形式はその副産物。
+
+#### Pattern A / B の定義
+
+- **Pattern A**: Lilac-provided boot helper(npm `@takahashim/lilac-full` の
+  `boot()` / CLI inline bootstrap module / scaffold `boot.js` 等)が bridge
+  を所有。`createVM` → user Ruby eval → `Lilac.start` の一連を helper が回す。
+  user 側は **class 定義 + DOM だけ** 書く
+- **Pattern B**: user が自前 `<script type="module">` で `createVM` から書き、
+  `Lilac.start` も Ruby 側に明示で書く。`examples/runtime-only/*.html` がこの
+  形。bridge layer の細部(wasm memory introspection, callback handle 数の
+  expose 等)に踏み込む題材に向く
+
+runtime は両 pattern で共通(§1 canonical 不変)、変わるのは **JS-side glue
+だけ**。
+
+#### Pattern A の 3 段グラデーション
+
+Pattern A の boot helper は **入手経路** で 3 段に分かれる。deployment intent
+の順に低摩擦 → 高機能:
+
+| 入手経路 | 例 | 向いている用途 |
+|---|---|---|
+| **CDN** | `import { boot } from "https://esm.sh/@takahashim/lilac-full"` | CodePen / 静的 host / 学習デモ / `<script>` タグ 2 つで動かせる最低摩擦パス |
+| **npm install** | `import { boot } from "@takahashim/lilac-full"` | bundler / 自前 build pipeline 上で使う |
+| **CLI `lilac build`** | builder が inline bootstrap (target=compiled) / scaffold `boot.js` (target=full) を emit | multi-page project + mrbc 経由の bundle size 最適化、project 構造前提 |
+
+3 つとも boot helper layer の役割は同じ(`createVM` → script eval →
+`Lilac.start`)。違うのは:
+
+- **wasm の供給元**: CDN は package に同梱、npm はローカル `node_modules/`、
+  CLI は `dist/vendor/lilac-compiled/` に CLI が auto-vendor
+- **Ruby の供給形**: CDN / npm は inline `<script type="text/ruby">`、
+  CLI target=compiled は `.mrb` bytecode
+- **file 形式の前提**: CDN / npm は単一 HTML でも project でも可、CLI は
+  project 構造を要求
+
+#### File 形式は下流
+
+```
+deployment intent  →  boot pattern (A or B)  →  file layout
+   (どう動かす?)        (誰がbridgeを持つ?)      (単一HTML / project)
+```
+
+「7guis 形式 (project 構造) で書けば CLI で動く」は **必要条件だが本質ではない**。
+本質は Pattern A を採用すること。理論上は単一 HTML + Pattern A も可
+(`<script type="module">import { boot } from "..."; boot();</script>` だけで
+完結)、project 構造 + Pattern B も可(各 page に自前 bridge を書く)だが、
+後者は CLI と相性が悪い(自前 bridge と CLI bootstrap が衝突する)。
+
+#### 同一 file の dual-purpose は採らない
+
+Pattern A と Pattern B が同じ HTML 内に共存すると以下の理由で破綻するため、
+framework として dual-purpose 設計は採らない:
+
+- `createVM` が 2 重に走り、wasm instance を 2 個立てる
+- user 側 `<script type="module">` が `vm.evalScript("#ruby-source")` を呼ぶが、
+  CLI compiled mode では既に script tag が strip されているため失敗
+- Ruby 側で `JS.global[:__breakout_vm]` 経由で vm を取る pattern は、CLI 側
+  の bootstrap が立てた別 vm を参照することになり整合性が崩れる
+
+`examples/runtime-only/lilac-breakout.html` がまさにこのケースで、CLI に
+そのまま通すと動かない。これは bug ではなく **設計上の境界**。CLI 化したい
+場合は別 example として Pattern A 形式で書き直すのが筋。
+
+#### 影響
+
+- **doc clarity**: 「CLI を使うべきか」の判断は file 形式の好みではなく
+  deployment intent から導かれる boot pattern 選択の問題、と明確化
+- **runtime-only example の役割**: Pattern B を見せる教育的サンプルとして
+  存続意義が明示される。CLI が動かない HTML があっても "bug" ではない
+- **将来 examples**: CDN 経由 demo を `examples/cdn/` に追加する余地が
+  生まれる(npm publish 後の follow-up)。Pattern A 最低摩擦パスの実例
+
+#### 影響を受ける箇所
+
+- `npm/lilac-full/index.js` の `boot()` を §20.6 に揃える(eval 末尾で
+  `vm.eval("Lilac.start")`)。これで CDN / npm install 経由でも boot helper
+  layer の責務契約が成立する
+- `examples/runtime-only/lilac-breakout.html` 等は Pattern B のままで OK
+  (CLI 化したい場合は別 example として作る)
+- `lilac-design.md` / `lilac-spec.md` に Pattern A / B の区別を反映するのは
+  follow-up(本決定は decisions.md 内に閉じる)
+
 ---
 
 ## Appendix: 設計判断の年表
