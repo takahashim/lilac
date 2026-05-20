@@ -188,3 +188,30 @@ for the overall plan.
 - Next: Session 8 — async/promise drain (or a minimal
   `JS.eval_javascript`/Promise carve-out) so DOM specs using
   `await setTimeout(0)` can be exercised directly.
+
+## Session 8 (2026-05-21): Promise / await host bridge
+
+- Target spec(s): (foundation only)
+- Achieved:
+  - Added `test/ruby_spec/dom/promise.rb` with host-side
+    `Promise.resolve` / `Promise.reject`, `then`, `catch`, chained
+    propagation, and `Error` value wrappers
+  - `Window` now exposes `Promise`, `Error`, and `EventTarget`
+    constructors; callback/constructor handles now report
+    `typeof === "function"`
+  - `js_eval` in `test/ruby_spec/mruby_wasm.rb` now recognizes a
+    minimal async-oriented subset: `Promise.resolve(...)`,
+    `new Promise(r => setTimeout(r, ms))`,
+    `new Promise((resolve) => setTimeout(() => resolve(v), ms))`,
+    `new Error(...)`, `new Event(...)`, `new EventTarget()`, plus basic
+    object/array/string/number/boolean/null literals
+  - End-to-end verified via `mise exec ruby@3.4.1 -- bundle exec ruby`
+    that `Promise.resolve(...).await`, delayed `setTimeout` promise
+    resolution, chained `.then`, object-literal promise payloads, and
+    rejected promises through `JS::Error` all work
+- Unlocked: none yet (async foundation; specs can now be exercised)
+- Blocked by / open: `JS.eval_javascript` is still a carve-out rather
+  than a general evaluator; router/history/storage/fetch remain absent
+- Next: Session 9 — start pulling actual async-heavy Lilac specs
+  through this bridge, or widen browser surfaces (`history`,
+  `location`, `URL`, `storage`) based on the first failing group.

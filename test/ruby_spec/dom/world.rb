@@ -27,6 +27,9 @@ class MrubyWasm
         @custom_event_ctor = Constructor.new { |args| CustomEvent.new(args[0], args[1]) }
         @mouse_event_ctor = Constructor.new { |args| MouseEvent.new(args[0], args[1]) }
         @keyboard_event_ctor = Constructor.new { |args| KeyboardEvent.new(args[0], args[1]) }
+        @event_target_ctor = Constructor.new { |_args| StandaloneEventTarget.new }
+        @error_ctor = Constructor.new { |args| ErrorValue.new(args[0]) }
+        @promise_ctor = PromiseConstructor.new(self)
         @mutation_observer_ctor = Constructor.new { |args| MutationObserver.new(self, args[0]) }
         @document = Document.new(host)
         @document.default_view = self
@@ -47,6 +50,9 @@ class MrubyWasm
         when "CustomEvent"  then @custom_event_ctor
         when "MouseEvent"   then @mouse_event_ctor
         when "KeyboardEvent" then @keyboard_event_ctor
+        when "EventTarget"  then @event_target_ctor
+        when "Error"        then @error_ctor
+        when "Promise"      then @promise_ctor
         when "MutationObserver" then @mutation_observer_ctor
         when "console"      then :console     # handled by Symbol sentinel
         when "Object"       then :object_ctor # likewise

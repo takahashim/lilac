@@ -7,6 +7,7 @@ require_relative "dom/dispatch"
 require_relative "dom/event"
 require_relative "dom/scheduler"
 require_relative "dom/observer"
+require_relative "dom/promise"
 require_relative "dom/world"
 require_relative "dom/document"
 require_relative "dom/element"
@@ -204,12 +205,7 @@ class MrubyWasm
     # work, but the wrap path that test fixtures depend on does.
     define.call("js_eval", [:i32, :i32], [:i32]) do |caller, p, l|
       src = read_mem_str(caller, p, l).strip
-      case src
-      when "true"  then store_handle(true)
-      when "false" then store_handle(false)
-      when "null"  then 0
-      else 0
-      end
+      handle_for(evaluate_js_source(src))
     end
     # () -> handle (= the global object)
     define.call("js_global", [], [:i32]) { |_c| 1 }
@@ -472,6 +468,8 @@ class MrubyWasm
     when Integer, Float    then "number"
     when String            then "string"
     when true, false       then "boolean"
+    when Dom::Callback, Dom::Constructor, Dom::PromiseConstructor
+      "function"
     else                        "object"
     end
   end
@@ -513,7 +511,223 @@ class MrubyWasm
     when true then "true"
     when false then "false"
     when Integer, Float then value.to_s
+    when Dom::ErrorValue then value.to_s
     else ""
     end
+  end
+
+  def evaluate_js_source(src)
+    value = parse_js_expression(src)
+    return value unless value == :__unsupported__
+
+    parse_js_constructor(src)
+  end
+
+  def parse_js_expression(src)
+    code = strip_wrapping_parens(src.strip)
+    return true if code == "true"
+    return false if code == "false"
+    return nil if code == "null" || code == "undefined"
+    return code[1..-2] if quoted_string?(code)
+    return code.to_i if code.match?(/\A-?\d+\z/)
+    return code.to_f if code.match?(/\A-?\d+\.\d+\z/)
+
+    if (match = code.match(/\APromise\.(resolve|reject)\((.*)\)\z/m))
+      ctor = @handles[1].__js_get__("Promise")
+      value = parse_js_expression(match[2].strip)
+      return ctor.__js_call__(match[1], [value == :__unsupported__ ? nil : value])
+    end
+
+    if code.start_with?("[") && code.end_with?("]")
+      inner = code[1...-1].strip
+      return [] if inner.empty?
+
+      return split_top_level(inner).map { |part| parse_js_expression(part) }
+    end
+
+    if code.start_with?("{") && code.end_with?("}")
+      inner = code[1...-1].strip
+      return {} if inner.empty?
+
+      return split_top_level(inner).each_with_object({}) do |entry, hash|
+        key_src, value_src = split_object_entry(entry)
+        return :__unsupported__ unless key_src && value_src
+
+        key = parse_object_key(key_src)
+        value = parse_js_expression(value_src)
+        return :__unsupported__ if key.nil? || value == :__unsupported__
+
+        hash[key] = value
+      end
+    end
+
+    :__unsupported__
+  end
+
+  def parse_js_constructor(src)
+    code = src.strip
+    window = @handles[1]
+
+    if code == "new EventTarget()"
+      return Dom::StandaloneEventTarget.new
+    end
+
+    if (match = code.match(/\Anew Event\((.+)\)\z/m))
+      arg = parse_js_expression(match[1].strip)
+      return Dom::Event.new(arg)
+    end
+
+    if (match = code.match(/\Anew Error\((.+)\)\z/m))
+      arg = parse_js_expression(match[1].strip)
+      return Dom::ErrorValue.new(arg)
+    end
+
+    if (match = code.match(/\Anew Promise\(r => setTimeout\(r, (\d+)\)\)\z/m))
+      return delayed_promise(window, match[1].to_i, nil)
+    end
+
+    if (match = code.match(/\Anew Promise\(\(resolve\) => setTimeout\(\(\) => resolve\((.+)\), (\d+)\)\)\z/m))
+      value = parse_js_expression(match[1].strip)
+      return delayed_promise(window, match[2].to_i, value)
+    end
+
+    nil
+  end
+
+  def delayed_promise(window, delay_ms, value)
+    promise = Dom::PromiseValue.new(window)
+    window.scheduler.set_timeout(proc { promise.fulfill(value) }, delay_ms)
+    promise
+  end
+
+  def strip_wrapping_parens(src)
+    loop do
+      break src unless src.start_with?("(") && src.end_with?(")")
+      inner = src[1...-1].strip
+      break src unless balanced_delimiters?(inner)
+
+      src = inner
+    end
+    src
+  end
+
+  def quoted_string?(src)
+    (src.start_with?('"') && src.end_with?('"')) ||
+      (src.start_with?("'") && src.end_with?("'"))
+  end
+
+  def split_top_level(src, delimiter = ",")
+    parts = []
+    current = +""
+    depth = 0
+    quote = nil
+    escape = false
+
+    src.each_char do |char|
+      if quote
+        current << char
+        if escape
+          escape = false
+        elsif char == "\\"
+          escape = true
+        elsif char == quote
+          quote = nil
+        end
+        next
+      end
+
+      case char
+      when "'", '"'
+        quote = char
+        current << char
+      when "{", "[", "("
+        depth += 1
+        current << char
+      when "}", "]", ")"
+        depth -= 1
+        current << char
+      else
+        if char == delimiter && depth.zero?
+          parts << current.strip
+          current = +""
+        else
+          current << char
+        end
+      end
+    end
+
+    parts << current.strip unless current.empty?
+    parts
+  end
+
+  def split_object_entry(entry)
+    depth = 0
+    quote = nil
+    escape = false
+
+    entry.each_char.with_index do |char, index|
+      if quote
+        if escape
+          escape = false
+        elsif char == "\\"
+          escape = true
+        elsif char == quote
+          quote = nil
+        end
+        next
+      end
+
+      case char
+      when "'", '"'
+        quote = char
+      when "{", "[", "("
+        depth += 1
+      when "}", "]", ")"
+        depth -= 1
+      when ":"
+        return [entry[0...index].strip, entry[(index + 1)..].strip] if depth.zero?
+      end
+    end
+
+    nil
+  end
+
+  def parse_object_key(src)
+    key = strip_wrapping_parens(src.strip)
+    return key[1..-2] if quoted_string?(key)
+    return key if key.match?(/\A[$A-Za-z_][$\w]*\z/)
+
+    nil
+  end
+
+  def balanced_delimiters?(src)
+    depth = 0
+    quote = nil
+    escape = false
+
+    src.each_char do |char|
+      if quote
+        if escape
+          escape = false
+        elsif char == "\\"
+          escape = true
+        elsif char == quote
+          quote = nil
+        end
+        next
+      end
+
+      case char
+      when "'", '"'
+        quote = char
+      when "{", "[", "("
+        depth += 1
+      when "}", "]", ")"
+        depth -= 1
+        return false if depth.negative?
+      end
+    end
+
+    depth.zero? && quote.nil?
   end
 end

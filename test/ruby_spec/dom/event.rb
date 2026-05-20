@@ -119,6 +119,27 @@ class MrubyWasm
       end
     end
 
+    class StandaloneEventTarget
+      include EventTarget
+
+      def __js_call__(method, args)
+        case method
+        when "addEventListener"
+          add_event_listener(args[0], args[1], args[2])
+        when "removeEventListener"
+          remove_event_listener(args[0], args[1])
+        when "dispatchEvent"
+          dispatch_event(args[0])
+        else
+          nil
+        end
+      end
+
+      def __event_parent__
+        nil
+      end
+    end
+
     class Event
       def initialize(type, init = nil)
         @type = type.to_s
