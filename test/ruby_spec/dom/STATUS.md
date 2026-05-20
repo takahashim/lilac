@@ -160,3 +160,31 @@ for the overall plan.
   emulation for `new Promise(r => setTimeout(...))` helper paths
 - Next: Session 7 — MutationObserver on top of the live callback +
   scheduler bridge, then async/promise drain as needed.
+
+## Session 7 (2026-05-21): MutationObserver childList delivery
+
+- Target spec(s): (foundation only)
+- Achieved:
+  - Added `test/ruby_spec/dom/observer.rb` with
+    `MutationObserver` and `MutationRecord`
+  - `Window` now exposes a `MutationObserver` constructor; `Document`
+    tracks registered observers and fan-outs `childList` mutation
+    records through the scheduler's microtask queue
+  - `Element` mutation paths now emit child-list notifications for
+    `innerHTML=`, `appendChild`, `insertBefore`, `removeChild`,
+    `append`, `prepend`, `before`, `after`, `remove`, and
+    `replaceWith`
+  - Added `nodeType` on element/text/fragment wrappers and
+    `isConnected` on elements to satisfy registry / lifecycle checks
+  - Smoke-tested under `mise` Ruby (`3.4.1`) that observer callbacks
+    receive added/removed nodes after microtask drain
+  - End-to-end verified via `bundle exec ruby` that
+    `Lilac.start` + registry observer mounts a newly appended
+    `data-component` element after `vm.drain_microtasks`
+- Unlocked: none (foundation)
+- Blocked by / open: no `Promise`/`.await` host drain yet, no
+  `JS.eval_javascript("new Promise(r => setTimeout(...))")` emulation,
+  and no router/history/storage/fetch surfaces yet
+- Next: Session 8 — async/promise drain (or a minimal
+  `JS.eval_javascript`/Promise carve-out) so DOM specs using
+  `await setTimeout(0)` can be exercised directly.

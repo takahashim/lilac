@@ -14,6 +14,8 @@ class MrubyWasm
 
       def __js_get__(key)
         case key
+        when "nodeType"
+          11
         when "children"
           element_children
         when "firstElementChild"
@@ -77,6 +79,8 @@ class MrubyWasm
 
       def __js_get__(key)
         case key
+        when "nodeType"
+          3
         when "textContent"
           @__node__.text
         else
@@ -236,6 +240,10 @@ class MrubyWasm
 
       def __js_get__(key)
         case key
+        when "nodeType"
+          1
+        when "isConnected"
+          !@__node__.document.nil? && !@__node__.ancestors("html").empty?
         when "children"
           element_children
         when "firstElementChild"
@@ -264,7 +272,13 @@ class MrubyWasm
         when "textContent"
           @__node__.content = value.to_s
         when "innerHTML"
+          removed = @__node__.children.to_a
           @__node__.inner_html = value.to_s
+          @document.notify_child_list_mutation(
+            target_node: @__node__,
+            added_nodes: @__node__.children.to_a,
+            removed_nodes: removed
+          )
         else
           nil
         end
@@ -311,7 +325,9 @@ class MrubyWasm
         when "after"
           insert_adjacent(:after, args)
         when "remove"
+          parent = @__node__.parent
           @__node__.unlink
+          @document.notify_child_list_mutation(target_node: parent, added_nodes: [], removed_nodes: [@__node__]) if parent
           nil
         when "replaceWith"
           replace_with(args)
@@ -399,6 +415,7 @@ class MrubyWasm
       def append_child(child)
         nodes = detach_dom_nodes(child)
         append_dom_nodes(nodes)
+        @document.notify_child_list_mutation(target_node: @__node__, added_nodes: nodes, removed_nodes: [])
         child
       end
 
@@ -414,6 +431,7 @@ class MrubyWasm
             nodes.reverse_each { |node| ref_node.add_previous_sibling(node) }
           end
         end
+        @document.notify_child_list_mutation(target_node: @__node__, added_nodes: nodes, removed_nodes: [])
         child
       end
 
@@ -422,6 +440,7 @@ class MrubyWasm
         return nil unless node&.parent == @__node__
 
         node.unlink
+        @document.notify_child_list_mutation(target_node: @__node__, added_nodes: [], removed_nodes: [node])
         child
       end
 
@@ -439,7 +458,9 @@ class MrubyWasm
       end
 
       def append_nodes(args)
-        append_dom_nodes(args.flat_map { |arg| detach_dom_nodes(arg) })
+        nodes = args.flat_map { |arg| detach_dom_nodes(arg) }
+        append_dom_nodes(nodes)
+        @document.notify_child_list_mutation(target_node: @__node__, added_nodes: nodes, removed_nodes: [])
         nil
       end
 
@@ -451,6 +472,7 @@ class MrubyWasm
         else
           append_dom_nodes(nodes)
         end
+        @document.notify_child_list_mutation(target_node: @__node__, added_nodes: nodes, removed_nodes: [])
         nil
       end
 
@@ -470,6 +492,7 @@ class MrubyWasm
             nodes.each { |node| parent.add_child(node) }
           end
         end
+        @document.notify_child_list_mutation(target_node: parent, added_nodes: nodes, removed_nodes: [])
         nil
       end
 
@@ -478,6 +501,7 @@ class MrubyWasm
         return nil unless parent
 
         nodes = args.flat_map { |arg| detach_dom_nodes(arg) }
+        removed = @__node__
         anchor = @__node__.next_sibling
         @__node__.unlink
         if anchor
@@ -485,6 +509,7 @@ class MrubyWasm
         else
           nodes.each { |node| parent.add_child(node) }
         end
+        @document.notify_child_list_mutation(target_node: parent, added_nodes: nodes, removed_nodes: [removed])
         nil
       end
 

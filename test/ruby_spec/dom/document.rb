@@ -14,6 +14,7 @@ class MrubyWasm
       def initialize(host)
         @host = host
         @node_wrappers = {}
+        @observers = []
         # Each Document owns a fresh Nokogiri HTML document so `body`
         # is a real Element (not a free-floating node). The document
         # has minimal `<html><head></head><body></body></html>`
@@ -73,6 +74,32 @@ class MrubyWasm
             Fragment.new(self, node)
           end
         end
+      end
+
+      def register_observer(observer)
+        @observers << observer unless @observers.include?(observer)
+        nil
+      end
+
+      def unregister_observer(observer)
+        @observers.delete(observer)
+        nil
+      end
+
+      def notify_child_list_mutation(target_node:, added_nodes:, removed_nodes:)
+        target = wrap_node(target_node)
+        return nil unless target
+        return nil if added_nodes.empty? && removed_nodes.empty?
+
+        record = MutationRecord.new(
+          target: target,
+          added_nodes: added_nodes.map { |node| wrap_node(node) }.compact,
+          removed_nodes: removed_nodes.map { |node| wrap_node(node) }.compact
+        )
+        @observers.each do |observer|
+          observer.enqueue(record) if observer.matches?(target)
+        end
+        nil
       end
 
       def create_element(name)
