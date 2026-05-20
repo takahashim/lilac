@@ -428,9 +428,11 @@ priority 1 で onto 同じ signal を更新するので結果は決定的。
 - field が **nil** または item に key が無い場合は auto-fill skip → priority 3
   (default)に進む。これにより「optional な field を任意で持つ item」も
   扱える
-- 実装は `Lilac::Directives::PropAutoFill` モジュールに集約
-  (`runtime/mruby-lilac-directives/mrblib/lilac_directives_prop_auto_fill.rb`)。
-  Scanner からは `fill_attributes(el, item)`(初回 mount) /
+- 実装は `Lilac::PropAutoFill` モジュールに集約
+  (`runtime/mruby-lilac/mrblib/lilac_prop_auto_fill.rb` — `mruby-lilac` core
+  に置かれている。`lilac-compiled` が scanner gem を含まなくても
+  `bind_list` の row hook から呼べるようにするため、§17 移行で core 側に
+  移動した)。Scanner からは `fill_attributes(el, item)`(初回 mount) /
   `push_updates(row_node, item, skip_exprs, host:)`(reuse)の 2 経路で呼ばれる
 
 ## 8. 制約・エラー

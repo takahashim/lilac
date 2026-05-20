@@ -3,7 +3,7 @@ module Lilac
   #
   # 1. `Lilac::Directives::Evaluator` (runtime scanner) — resolving
   #    `it.field` / bare-ident directive values during DOM walk.
-  # 2. `Lilac::Directives::PropAutoFill` — mapping item fields onto
+  # 2. `Lilac::PropAutoFill` — mapping item fields onto
   #    child component props inside `data-each`.
   # 3. CLI codegen emitted code — `bind ..., text: computed { Lilac::
   #    ItemField.read(it, :label) }` etc. for `data-text` / `data-bind`
@@ -21,10 +21,9 @@ module Lilac
   #   2. otherwise → `public_send(name.to_sym)` if responded to
   #
   # Returns `nil` if `item` is nil, or if neither path yields a value.
-  # Callers distinguish "missing" from "stored nil" via `has?` when
-  # they need to (PropAutoFill currently treats nil-or-missing the
-  # same: skip the write, let the child's prop default / required-check
-  # take over).
+  # Callers (PropAutoFill / codegen / scanner Evaluator) treat
+  # nil-or-missing the same: skip the write, let the child's prop
+  # default / required-check take over.
   module ItemField
     class << self
       def read(item, name)
@@ -37,19 +36,6 @@ module Lilac
           nil
         elsif item.respond_to?(name.to_sym)
           item.public_send(name.to_sym)
-        end
-      end
-
-      # Explicit presence check for callers that need to distinguish
-      # "field is nil" from "field is absent". Returns true if the
-      # item has a routable accessor for `name` (Hash key OR public
-      # method), regardless of stored value.
-      def has?(item, name)
-        return false if item.nil?
-        if item.is_a?(Hash)
-          item.key?(name.to_sym) || item.key?(name.to_s)
-        else
-          item.respond_to?(name.to_sym)
         end
       end
     end

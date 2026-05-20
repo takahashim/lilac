@@ -120,10 +120,4 @@ module Lilac
       end
     end
   end
-
-  # Back-compat alias for the scanner gem (mruby-lilac-directives) which
-  # historically references the module via the `Directives` namespace.
-  module Directives
-    PropAutoFill = ::Lilac::PropAutoFill
-  end
 end
