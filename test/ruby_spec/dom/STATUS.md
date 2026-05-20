@@ -434,3 +434,41 @@ for the overall plan.
   配下が selectorに見えなくなる。`<template>` の "ライブ" 表現は無く、
   操作は `[:content]` 経由でのみ可能、というブラウザの真の意味論に
   揃える。
+
+## Session 14 (2026-05-22): Template content reparent → mruby-lilac 100% unlock
+
+- Target spec(s): test_directive_each / test_node_operations
+- Achieved:
+  1. **`Document#attach_template_content`** — `<template>` 自身の
+     innerHTML setter が呼ばれた時、children を main doc 配下の独立
+     fragment に格納し、template 要素自体は空に保つ
+  2. **`Document#migrate_template_descendants`** — 任意の subtree
+     を traverse し、まだ migrate されていない template 要素を
+     見つけて `migrate_one_template` を発火。innerHTML setter on
+     任意要素 (e.g. body) の後に呼ばれるので、`body.innerHTML =
+     "<template>...</template>..."` のような outer parse でも
+     template の content が selector から見えなくなる
+  3. **`Element#__js_get__("innerHTML")` / `template_content`** —
+     template の場合は stored fragment 経由で結果を返す
+  4. これで `<template>` の真の DOM 意味論 (content は独立 fragment、
+     live tree に出現しない) に揃った
+- Unlocked (2 new spec files):
+  - `test_directive_each` (2) — data-each / data-key directive 全パス
+  - `test_node_operations` (12) — Ref / Template の DOM 基本操作 + 
+    Template#remove via auto-mount (登録された clone の component
+    instance が見つかる)
+
+  PURE_SPECS: 41 → 43. assertions: ~470 → ~510.
+
+- **`runtime/mruby-lilac/wasm_spec/` 38 件すべて unlock 達成 (100%)**。
+  Plan KPI (70%) を遥かに超えて完全カバー。
+
+- Blocked by / open: (mruby-lilac は全件 unlock 済み)
+  残りは別 mrbgem の spec — mruby-lilac-async / mruby-lilac-form /
+  mruby-lilac-router / mruby-lilac-directives 配下
+- Next: Session 15 — `runtime/mruby-lilac-async/wasm_spec/`,
+  `runtime/mruby-lilac-form/wasm_spec/`,
+  `runtime/mruby-lilac-router/wasm_spec/`,
+  `runtime/mruby-lilac-directives/wasm_spec/` の DOM-touching spec を
+  probe pass する。fetchy / form / router / directive 系で何が green
+  になるか確認して batch unlock を狙う。

@@ -83,6 +83,10 @@ class SpecRunner
     "runtime/mruby-lilac/wasm_spec/test_component_abort.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_timer.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_each_frame.rb",
+    # Session 14 unlock — template content を独立 fragment に reparent
+    # する refactor で template 配下が querySelector から見えなくなる
+    "runtime/mruby-lilac/wasm_spec/test_directive_each.rb",
+    "runtime/mruby-lilac/wasm_spec/test_node_operations.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do

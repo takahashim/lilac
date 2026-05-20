@@ -318,7 +318,11 @@ class MrubyWasm
         when "textContent"
           @__node__.text
         when "innerHTML"
-          @__node__.inner_html
+          if @__node__.name == "template"
+            @document.template_content_inner_html(self)
+          else
+            @__node__.inner_html
+          end
         when "tagName"
           @__node__.name.upcase
         when "classList"
@@ -361,7 +365,16 @@ class MrubyWasm
           @__node__.content = value.to_s
         when "innerHTML"
           removed = @__node__.children.to_a
-          @__node__.inner_html = value.to_s
+          if @__node__.name == "template"
+            # `<template>` content is invisible to selectors / Lilac.start
+            # scans in real DOM (it lives in a separate DocumentFragment
+            # exposed via `[:content]`). Mirror that here so child
+            # `<span data-ref>` placeholders don't pollute spec queries.
+            @document.attach_template_content(self, value.to_s)
+          else
+            @__node__.inner_html = value.to_s
+            @document.migrate_template_descendants(@__node__)
+          end
           @document.notify_child_list_mutation(
             target_node: @__node__,
             added_nodes: @__node__.children.to_a,
@@ -465,7 +478,7 @@ class MrubyWasm
       def template_content
         return nil unless @__node__.name == "template"
 
-        @document.wrap_node(Parser.fragment(@__node__.inner_html, owner_doc: @document.nokogiri_doc))
+        @document.template_content_fragment(self)
       end
 
       # HTML attribute names are case-insensitive — browser DOM stores
