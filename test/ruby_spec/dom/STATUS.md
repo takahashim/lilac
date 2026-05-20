@@ -109,3 +109,27 @@ for the overall plan.
 - Next: Session 5/6 boundary — callback bridge first (`js_make_callback`
   + invoke path), then scheduler/microtask drain so MutationObserver
   can deliver.
+
+## Session 5 (2026-05-21): Callback bridge
+
+- Target spec(s): (foundation only)
+- Achieved:
+  - Added `Dom::Callback` in `test/ruby_spec/dom/event.rb` so
+    host-side callback wrappers can carry `__mruby_cb_id__` and route
+    `.call(...)` back into the wasm VM
+  - `js_make_callback` in `test/ruby_spec/mruby_wasm.rb` now returns a
+    live callback wrapper instead of `0`
+  - Added `MrubyWasm#invoke_callback(callback_id, args)` which
+    allocates a temporary args handle, calls exported
+    `js_invoke_proc(callback_id, args_handle)`, reads the returned Ruby
+    value, and releases temporary host handles
+  - Smoke-tested under `mise` Ruby (`3.4.1`) that
+    `EventTarget#dispatchEvent` invokes `Dom::Callback` listeners and
+    routes event args back into the host callback bridge
+- Unlocked: none (foundation)
+- Blocked by / open: full `vm.eval` confirmation is blocked locally by
+  the existing `Wasmtime::Engine.new(wasm_exceptions: true)` /
+  installed-gem mismatch outside the `cli` bundle path; scheduler,
+  timers, and MutationObserver delivery are still absent
+- Next: Session 6 — scheduler + microtask drain, then observer
+  implementation on top of the now-live callback/event bridge.

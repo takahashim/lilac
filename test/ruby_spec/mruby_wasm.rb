@@ -118,6 +118,17 @@ class MrubyWasm
     end
   end
 
+  def invoke_callback(callback_id, args)
+    args_handle = store_handle(args)
+    result_handle = @js_invoke_proc.call(callback_id, args_handle)
+    @handles[result_handle]
+  ensure
+    @handles.delete(args_handle) if args_handle
+    if result_handle && result_handle >= 100
+      @handles.delete(result_handle)
+    end
+  end
+
   # Drain + return captured stdout. Clears the internal buffer.
   def stdout
     out = @stdout_buf
@@ -346,8 +357,13 @@ class MrubyWasm
         0
       end
     end
-    # (handle) -> callback_handle
-    define.call("js_make_callback", [:i32], [:i32]) { |_c, _h| 0 }
+    # (callback_id) -> callback_handle. The wasm side stores the Ruby
+    # Proc in its callback table under callback_id; the host returns a
+    # JS-callable wrapper object that routes invocations back through
+    # the exported `js_invoke_proc(callback_id, args_handle)`.
+    define.call("js_make_callback", [:i32], [:i32]) do |_c, callback_id|
+      store_handle(Dom::Callback.new(self, callback_id))
+    end
     # () -> count
     define.call("js_handle_count", [], [:i32]) { |_c| @handles.size }
     # (handle) -> handle

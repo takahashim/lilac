@@ -2,6 +2,37 @@
 
 class MrubyWasm
   module Dom
+    class Callback
+      def initialize(host, callback_id)
+        @host = host
+        @callback_id = callback_id
+        @props = {}
+      end
+
+      def __js_get__(key)
+        case key
+        when "__mruby_cb_id__"
+          @props.fetch(key, @callback_id)
+        else
+          @props[key]
+        end
+      end
+
+      def __js_set__(key, value)
+        @props[key] = value
+        nil
+      end
+
+      def __js_call__(method, args)
+        case method
+        when "call"
+          @host.invoke_callback(@callback_id, args)
+        else
+          nil
+        end
+      end
+    end
+
     class Constructor
       def initialize(&block)
         @block = block
