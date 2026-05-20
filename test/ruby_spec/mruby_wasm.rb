@@ -90,7 +90,14 @@ class MrubyWasm
   # 2 if the compiler is absent (lilac-compiled variant).
   def eval(source)
     handle = store_handle(source.b)
-    @js_eval_handle.call(handle, 0, 0)
+    rc = @js_eval_handle.call(handle, 0, 0)
+    # After wasm returns, the script may have left fibers suspended on
+    # `.await`. Drain microtasks + immediate timers so those fibers
+    # resume and finish before the next eval. `advance_time(0)`
+    # internally drains microtasks and fires every timer whose due_at
+    # <= now_ms, with a cascade loop for chained tasks.
+    advance_time(0)
+    rc
   ensure
     @handles.delete(handle) if handle
   end

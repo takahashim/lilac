@@ -215,3 +215,24 @@ for the overall plan.
 - Next: Session 9 — start pulling actual async-heavy Lilac specs
   through this bridge, or widen browser surfaces (`history`,
   `location`, `URL`, `storage`) based on the first failing group.
+
+## Session 9 (2026-05-21): First DOM-touching spec unlock
+
+- Target spec(s): `runtime/mruby-lilac/wasm_spec/test_directive_unsafe_html.rb`
+- Achieved:
+  - Added eval-time drain to `MrubyWasm#eval`: after `js_eval_handle`
+    returns, calls `advance_time(0)` so any fiber suspended at `.await`
+    (Promise + setTimeout(0)) resumes before control returns to the
+    spec runner
+  - Validated the full stack end-to-end:
+    `body[:innerHTML]=` → `Lilac.start` → MutationObserver childList
+    delivery → component setup + `bind_template_hook` → signal-driven
+    `innerHTML` write → signal mutation triggers re-render
+- Unlocked: **test_directive_unsafe_html.rb (1 assertion, 2 sub-asserts)**
+  → PURE_SPECS = 13 (240 → 246 assertions)
+- Blocked by / open: nothing new for this spec; the next sessions can
+  start targeting the broader `directive_*` / `component_*` family
+- Next: Session 10 — try `test_directive_text.rb` /
+  `test_directive_attr.rb` (similar shape: small spec, single `.await`,
+  signal-bound DOM mutation). If the same drain pattern works, batch
+  several into one session.

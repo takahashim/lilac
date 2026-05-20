@@ -38,6 +38,10 @@ class SpecRunner
     "runtime/mruby-lilac/wasm_spec/test_json.rb",
     "runtime/mruby-lilac/wasm_spec/test_sortable.rb",
     "runtime/mruby-lilac-async/wasm_spec/test_selector.rb",
+    # Session 9 unlock attempt — smallest DOM spec (31 lines).
+    # Requires Lilac.start + MutationObserver + bind html: signal +
+    # `JS.eval_javascript("new Promise(...)").await` drain.
+    "runtime/mruby-lilac/wasm_spec/test_directive_unsafe_html.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do
