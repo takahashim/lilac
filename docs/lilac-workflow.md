@@ -19,6 +19,7 @@ lilac dev                   # 開発サーバ起動 → http://127.0.0.1:5173
                             # `.lil` を保存すると SSE でブラウザ自動リロード
 lilac build                 # dist/ に出力(既定 target=compiled、mrbc 必要)
 lilac build --target full   # mrbc 不要、runtime parser を dist に同梱
+lilac preview               # dist/ を静的サーバで serve(deploy 前確認、port 4173)
 ```
 
 ---
@@ -196,8 +197,9 @@ end
 | コマンド | 用途 |
 |---|---|
 | `lilac new <name>` | プロジェクト雛形を作る |
-| `lilac dev` | 開発サーバ起動 + watch + SSE reload |
-| `lilac build` | dist/ にビルド |
+| `lilac dev` | 開発サーバ起動 + watch + SSE reload(既定 target=full)|
+| `lilac build` | dist/ にビルド(既定 target=compiled)|
+| `lilac preview` | dist/ を静的サーバで serve(deploy 前確認、port 4173)|
 | `lilac doctor` | 依存ツール(mrbc、mruby-wasm-runtime)の検出 |
 | `lilac help` | ヘルプ表示 |
 

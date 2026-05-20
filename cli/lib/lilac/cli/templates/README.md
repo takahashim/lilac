@@ -42,10 +42,14 @@ the browser reloads automatically (Server-Sent Events).
 ```sh
 bundle exec lilac build                # default --target compiled (smaller bundle, needs mrbc)
 bundle exec lilac build --target full  # opt out: ship runtime parser, no mrbc required
+bundle exec lilac preview              # serve dist/ at http://127.0.0.1:4173 (no watch / no reload)
 ```
 
 Output goes to `dist/`, which is self-contained (HTML + everything from
-`public/`). Deploy `dist/` as your static site root.
+`public/`). Deploy `dist/` as your static site root. `lilac preview` is
+the recommended way to smoke-test the production build locally before
+deploy — it runs a plain static server with no live-reload injection,
+mirroring what a CDN or static host would do.
 
 ### `--target compiled` (default for `lilac build`)
 

@@ -110,6 +110,9 @@ lilac build --output _site
 lilac dev                # build + serve + live reload at http://127.0.0.1:5173
                          # (default --target full so no mrbc needed for iteration)
 lilac dev --port 8000    # bind to a different port
+
+lilac preview            # serve the built dist/ at http://127.0.0.1:4173
+                         # (no watch / no reload — use to verify production output)
 ```
 
 ### Configuration

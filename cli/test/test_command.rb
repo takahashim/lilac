@@ -142,4 +142,35 @@ class TestCommand < Minitest::Test
     refute_equal 0, status
     assert_match(/Invalid project name/, err)
   end
+
+  def test_preview_errors_when_dist_missing
+    # No `lilac build` was run, dist/ doesn't exist.
+    status, _out, err = run_cmd("preview", "--root", @tmp)
+    refute_equal 0, status, "preview must refuse to start without a built dist"
+    assert_match(/does not exist|Run `lilac build`/, err)
+  end
+
+  def test_preview_errors_when_dist_has_no_html
+    FileUtils.mkdir_p(File.join(@tmp, "dist"))
+    # dist/ exists but contains no *.html.
+    status, _out, err = run_cmd("preview", "--root", @tmp)
+    refute_equal 0, status, "preview must refuse to start with empty dist"
+    assert_match(/no HTML|Run `lilac build`/, err)
+  end
+
+  def test_preview_help_lists_options
+    # Use the `help` subcommand (which returns rather than exiting) —
+    # the inline `--help` flag invokes `exit 0` directly which is
+    # harder to capture under Minitest.
+    status, out, _err = run_cmd("help", "preview")
+    assert_equal 0, status
+    assert_match(/Usage: lilac preview/, out)
+    assert_match(/--port/, out)
+  end
+
+  def test_help_lists_preview_command
+    status, out, _err = run_cmd("help")
+    assert_equal 0, status
+    assert_match(/preview\s+Serve the built dist/, out)
+  end
 end

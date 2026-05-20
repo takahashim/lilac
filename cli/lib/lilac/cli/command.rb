@@ -5,6 +5,7 @@ require "fileutils"
 require_relative "config"
 require_relative "builder"
 require_relative "dev_server"
+require_relative "preview_server"
 require_relative "scaffold"
 require_relative "doctor"
 
@@ -29,6 +30,7 @@ module Lilac
         case subcommand
         when "build" then run_build
         when "dev" then run_dev
+        when "preview" then run_preview
         when "new" then run_new
         when "doctor" then run_doctor
         when "help", "-h", "--help" then run_help
@@ -39,7 +41,8 @@ module Lilac
           print_help(io: @err)
           1
         end
-      rescue Builder::Error, SFC::ParseError, Scaffold::Error, ConfigLoader::LoadError => e
+      rescue Builder::Error, SFC::ParseError, Scaffold::Error,
+             ConfigLoader::LoadError, PreviewServer::Error => e
         @err.puts "lilac: #{e.message}"
         1
       end
@@ -53,10 +56,11 @@ module Lilac
         when nil, "help", "-h", "--help"
           print_help
           0
-        when "build"  then @out.puts build_opts_parser; 0
-        when "dev"    then @out.puts dev_opts_parser; 0
-        when "new"    then @out.puts new_opts_parser; 0
-        when "doctor" then @out.puts doctor_opts_parser; 0
+        when "build"   then @out.puts build_opts_parser; 0
+        when "dev"     then @out.puts dev_opts_parser; 0
+        when "preview" then @out.puts preview_opts_parser; 0
+        when "new"     then @out.puts new_opts_parser; 0
+        when "doctor"  then @out.puts doctor_opts_parser; 0
         else
           @err.puts "lilac help: unknown command #{topic.inspect}"
           @err.puts
@@ -248,6 +252,48 @@ module Lilac
         end
       end
 
+      def run_preview
+        opts = parse_preview_opts
+
+        # `preview` only needs the output_dir resolved; target / mrbc /
+        # vendor paths are irrelevant because we're serving an already-
+        # built `dist/`. Reuse `Config.load` so `lilac.config.rb` is still
+        # consulted for `output_dir`.
+        config = Config.load(
+          root: opts[:root],
+          components_dir: opts[:components],
+          pages_dir: opts[:pages],
+          output_dir: opts[:output],
+          public_dir: opts[:public],
+        )
+
+        server = PreviewServer.new(
+          config.output_dir,
+          host: opts[:host] || PreviewServer::DEFAULT_HOST,
+          port: opts[:port] || PreviewServer::DEFAULT_PORT,
+          out: @out,
+          err: @err,
+        )
+        server.start
+        0
+      end
+
+      def parse_preview_opts
+        opts = {}
+        preview_opts_parser(opts).parse!(@argv)
+        opts
+      end
+
+      def preview_opts_parser(opts = {})
+        OptionParser.new do |o|
+          o.banner = "Usage: lilac preview [options]"
+          o.on("--host HOST", "Bind host (default: #{PreviewServer::DEFAULT_HOST})") { |v| opts[:host] = v }
+          o.on("--port PORT", Integer, "Bind port (default: #{PreviewServer::DEFAULT_PORT})") { |v| opts[:port] = v }
+          add_path_options(o, opts)
+          o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
+        end
+      end
+
       def parse_build_opts
         opts = {}
         build_opts_parser(opts).parse!(@argv)
@@ -336,6 +382,7 @@ module Lilac
             new <name>  Scaffold a new Lilac app
             build       Compile components/ + pages/ into dist/
             dev         Build, serve, watch — live reload on changes
+            preview     Serve the built dist/ as a static site (no watch / reload)
             doctor      Verify project setup (runtime, references, paths)
             help        Show this help
             --version   Print version
