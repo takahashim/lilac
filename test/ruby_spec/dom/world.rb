@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
+require "cgi"
+require "erb"
+
 class MrubyWasm
   # DOM polyfill that lets wasmtime-rb drive Lilac's DOM-touching wasm
-  # specs without Node + happy-dom. See the master plan at
-  # /Users/maki/.claude/plans/polished-beaming-badger.md.
+  # specs without Node + happy-dom.
   #
   # Each module under `Dom::*` covers one slice of the browser surface
   # (document tree, events, observers, scheduler, etc.). `MrubyWasm`
@@ -18,7 +20,7 @@ class MrubyWasm
     class Window
       include EventTarget
 
-      attr_reader :document, :scheduler, :location
+      attr_reader :document, :scheduler, :location, :globals
 
       def initialize(host)
         @host = host
@@ -95,22 +97,16 @@ class MrubyWasm
         nil
       end
 
-      attr_reader :globals, :scheduler
-
       def __js_call__(method, args)
         case method
         when "fetch"
           FetchFn.new(self).__js_call__("call", args)
         when "encodeURIComponent"
           # JS spec encoding: percent-encode anything except
-          # `A-Za-z0-9 - _ . ! ~ * ' ( )`. Ruby's `CGI.escape` is close
-          # but uses `+` for space, so do it manually for parity.
-          require "erb"
+          # `A-Za-z0-9 - _ . ! ~ * ' ( )`. Ruby's `CGI.escape` uses
+          # `+` for space; ERB::Util.url_encode matches JS behavior.
           ERB::Util.url_encode(args[0].to_s)
         when "decodeURIComponent"
-          require "erb"
-          # ERB doesn't provide decode; use CGI for symmetry.
-          require "cgi"
           CGI.unescape(args[0].to_s)
         when "addEventListener"
           add_event_listener(args[0], args[1], args[2])

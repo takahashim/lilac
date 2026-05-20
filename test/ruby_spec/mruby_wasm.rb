@@ -133,9 +133,9 @@ class MrubyWasm
   # Map a `__js_get__` / `__js_call__` return value to a handle id.
   # Well-known sentinel symbols (`:console` / `:object_ctor` / etc.)
   # reuse their boot-time handle so wasm-side `JS.global[:console]`
-  # always sees the same id; other values get fresh handles. The
-  # accumulation isn't currently reclaimed — see Session 6's drain
-  # work for the eventual `js_release` impl.
+  # always sees the same id; other values get fresh handles.
+  # Handles accumulate per-VM and aren't currently released; revisit
+  # if memory pressure shows up in long-running test runs.
   def handle_for(value)
     case value
     when nil          then 0

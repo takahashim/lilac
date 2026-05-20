@@ -334,9 +334,6 @@ class MrubyWasm
       end
     end
 
-    # Session 2 covers the read-mostly Element/Node surface needed by
-    # Lilac's tree walkers: attributes, text/html reads, parent/child
-    # traversal, and `closest`.
     class Element
       include EventTarget
 

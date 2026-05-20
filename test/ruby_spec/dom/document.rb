@@ -3,8 +3,8 @@
 class MrubyWasm
   module Dom
     # `document` — the entry point for DOM construction and querying.
-    # Session 2 adds wrapper caching so repeated traversals
-    # (`body.children[0].parentElement`) preserve DOM identity.
+    # Wrapper caching keeps DOM identity stable across repeated
+    # traversals (`body.children[0].parentElement`).
     class Document
       include EventTarget
 
