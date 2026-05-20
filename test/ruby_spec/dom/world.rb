@@ -18,7 +18,7 @@ class MrubyWasm
     class Window
       include EventTarget
 
-      attr_reader :document, :scheduler
+      attr_reader :document, :scheduler, :location
 
       def initialize(host)
         @host = host
@@ -34,6 +34,9 @@ class MrubyWasm
         @abort_controller_ctor  = Constructor.new { |_args| AbortController.new }
         @local_storage   = Storage.new
         @session_storage = Storage.new
+        @location = Location.new(self)
+        @history  = History.new(self, @location)
+        @url_ctor = Constructor.new { |args| Url.new(args[0], args[1]) }
         # `JS.global[:__some_key__] = ...` from user code lands here.
         # Lilac specs use this for stub installation (e.g.
         # `__fetchy_stub__`); production code stays on the typed
@@ -71,6 +74,9 @@ class MrubyWasm
         when "performance"  then { "now" => @scheduler.now_ms.to_f }
         when "localStorage" then @local_storage
         when "sessionStorage" then @session_storage
+        when "location"     then @location
+        when "history"      then @history
+        when "URL"          then @url_ctor
         when "fetch"        then FetchFn.new(self)
         else @globals[key]
         end
@@ -135,6 +141,19 @@ class MrubyWasm
 
       def __event_parent__
         nil
+      end
+
+      # Called by History#go and Location.href= to fire popstate /
+      # hashchange events. Listeners registered on the Window via
+      # `addEventListener("popstate"|"hashchange", cb)` receive them.
+      def fire_popstate(state)
+        event = CustomEvent.new("popstate", "detail" => state)
+        dispatch_event(event)
+      end
+
+      def fire_hashchange(old_hash, new_hash)
+        event = CustomEvent.new("hashchange", "detail" => { "oldURL" => old_hash, "newURL" => new_hash })
+        dispatch_event(event)
       end
     end
   end

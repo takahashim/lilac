@@ -575,3 +575,49 @@ for the overall plan.
 - Next: Session 18 — `MrubyWasm::Dom::Location` / `History` / `URL`
   polyfill + popstate / hashchange event 配線。router spec の 41
   sub-asserts を一気に green に。これで wasm_spec 全 67 件 unlock 完了。
+
+## Session 18 (2026-05-21): Router 完全 unlock — wasm_spec 67/67 達成
+
+- Target spec(s): test_router (8/41 → 41/41)
+- Achieved:
+  1. **`MrubyWasm::Dom::Location`** — origin/pathname/search/hash/href +
+     host/hostname/protocol/port の getter、href= / hash= / pathname= /
+     search= の setter、`__set_url__(raw)` 内部 method で
+     `URI.join` ベースの絶対/相対 URL 解決。hash 差分時に
+     hashchange event fire
+  2. **`MrubyWasm::Dom::History`** — stack + cursor ベース。
+     `pushState(state, _, url)` / `replaceState(state, _, url)` /
+     `back` / `forward` / `go(delta)`、go で cursor が動いたときに
+     `window.fire_popstate(state)`
+  3. **`MrubyWasm::Dom::Url`** — `new URL(raw)` / `new URL(raw, base)`
+     両形式 (`URI.join` で base 解決)。origin computation で
+     default port (80/443) を hide
+  4. **Window 配線**: `@location` / `@history` / `@url_ctor` を作り
+     `__js_get__` で `location` / `history` / `URL` を expose。
+     `fire_popstate(state)` / `fire_hashchange(old, new)` を
+     CustomEvent で dispatch
+  5. **`Element#[:href]`** (anchor IDL attribute) — `URI.join(location.href, raw)`
+     で絶対 URL 化。`route_path_from_href` の origin 比較 / hash 検出が
+     ブラウザ通り動作する (このひと目盛りで残り 4 sub-asserts が一気に通る)
+- Unlocked:
+  - `test_router` (41 sub-asserts) — low-level path/match、navigate、
+    draw + page DSL、link helpers、intercept_link、lazy mount、
+    bootstrap 全 5 グループ green
+  - PURE_SPECS: 66 → **67**。これで `runtime/mruby-lilac-router/wasm_spec/`
+    も 1/1 = 100% 達成
+- **wasm_spec 全 67 件 unlock 完了 (master plan の Session 17 目標を 1
+  session 超過で達成)**
+- カバレッジ最終:
+  - `mruby-regexp-compat`: 4/4
+  - `mruby-lilac`: 38/38
+  - `mruby-lilac-async`: 4/4
+  - `mruby-lilac-form`: 4/4
+  - `mruby-lilac-directives`: 16/16
+  - `mruby-lilac-router`: 1/1
+- Risk register 経過: MutationObserver timing / Fiber drain timeout /
+  Nokogiri quirks いずれも本番では発火せず。Promise drain は 1000
+  iteration bound で安全弁が効いた
+- Next: optional follow-up — sample 系 spec (`examples/*/spec/...`) の
+  Ruby host 化、または DOM polyfill の独立 gem 抽出 (multi-session
+  refactor)。当面は polyfill を Lilac 内部で育てる方針
+  sub-asserts を一気に green に。これで wasm_spec 全 67 件 unlock 完了。

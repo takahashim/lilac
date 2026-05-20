@@ -115,6 +115,9 @@ class SpecRunner
     "runtime/mruby-lilac-async/wasm_spec/test_fetchy.rb",
     "runtime/mruby-lilac-async/wasm_spec/test_resource.rb",
     "runtime/mruby-lilac-async/wasm_spec/test_resource_signal_inject.rb",
+    # Session 18 unlock — Location / History / URL polyfill +
+    # anchor.href resolution against location.href (browser IDL semantics)
+    "runtime/mruby-lilac-router/wasm_spec/test_router.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do

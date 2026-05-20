@@ -347,9 +347,26 @@ class MrubyWasm
           # `value` attribute. We don't model the property/attribute
           # split here — both reads and writes go through the attribute.
           @__node__["value"].to_s
+        when "href"
+          anchor_href
         else
           nil
         end
+      end
+
+      # Anchor / area `href` IDL attribute reflects the attribute resolved
+      # against the document base URL (browser semantics). Routers rely on
+      # this to compare origins and detect external links.
+      def anchor_href
+        raw = @__node__["href"]
+        return "" if raw.nil?
+
+        win = @document.default_view
+        base = win&.location ? win.location.href : ""
+        require "uri"
+        URI.join(base, raw.to_s).to_s
+      rescue URI::InvalidURIError, ArgumentError
+        raw.to_s
       end
 
       # Map a JS boolean property name to its underlying HTML attribute.
