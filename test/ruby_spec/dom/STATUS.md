@@ -36,3 +36,23 @@ for the overall plan.
   etc.) still no-op — session 2 targets
 - Next: Session 2 — Element basic APIs (attributes, textContent,
   innerHTML get, children, parent, closest). No spec unlock expected.
+
+## Session 2 (2026-05-21): Element read-side basics
+
+- Target spec(s): (foundation only)
+- Achieved:
+  - `Element` moved into `test/ruby_spec/dom/element.rb`; `Document`
+    now focuses on document ownership + node wrapper caching
+  - `Document#wrap_node` added so repeated traversals reuse the same
+    Ruby wrapper for a given Nokogiri node
+  - `Element` now supports `children`, `parentElement`, `textContent`,
+    `innerHTML` getter, plus `getAttribute` / `setAttribute` /
+    `hasAttribute` / `closest`
+  - Smoke-tested under `mise` Ruby (`3.4.1`) for attribute writes,
+    parent identity reuse, and `closest("a[href]")`
+- Unlocked: none (foundation)
+- Blocked by / open: no mutation APIs yet (`innerHTML=` /
+  `createElement` / `appendChild` / `insertBefore` / `cloneNode` /
+  `classList`)
+- Next: Session 3 — tree mutation primitives and classList, still
+  without MutationObserver delivery.

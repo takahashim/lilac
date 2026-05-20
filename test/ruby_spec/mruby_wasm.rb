@@ -6,6 +6,7 @@ require "json"
 require_relative "dom/dispatch"
 require_relative "dom/world"
 require_relative "dom/document"
+require_relative "dom/element"
 
 # Minimal wasmtime-rb wrapper around lilac-full.wasm for use from
 # Ruby-side test runners. Replaces the Node `runner.mjs` + JS bridge
