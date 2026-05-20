@@ -11,6 +11,13 @@ gemspec
 wsv_local = File.expand_path("../../wsv", __dir__)
 gem "wsv", path: wsv_local if File.directory?(wsv_local)
 
+# `lilac-wasm-bin` lives next to `cli/` as a sibling gem in this
+# monorepo. Pulling it via `path:` means the `CompiledRuntimeResolver`
+# soft-require can find `Lilac::Wasm::Bin` during dev / tests without
+# a rubygems publish cycle. The scaffold Gemfile users get points at
+# the published gem (no path:).
+gem "lilac-wasm-bin", path: File.expand_path("../wasm-bin", __dir__)
+
 group :development do
   gem "minitest", "~> 5.0"
   gem "rake", "~> 13.0"

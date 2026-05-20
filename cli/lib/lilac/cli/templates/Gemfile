@@ -5,3 +5,9 @@ source "https://rubygems.org"
 group :development do
   gem "lilac-cli", "~> 0.1"
 end
+
+# Lilac wasm runtimes (full + compiled) + JS bridge, packaged as a Ruby
+# gem so `bundle install` is all you need. The lilac-cli soft-requires
+# this; absent gem falls through to npm / monorepo / explicit-path
+# discovery, but having it as a Gemfile dep is the simplest path.
+gem "lilac-wasm-bin", "~> 0.1"

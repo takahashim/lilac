@@ -100,6 +100,16 @@ class TestScaffold < Minitest::Test
     refute File.exist?(File.join(@tmp, "my-app", "gitignore"))
   end
 
+  def test_gemfile_declares_lilac_cli_and_wasm_bin
+    Lilac::CLI::Scaffold.new("my-app", root: @tmp).run
+    gemfile = File.read(File.join(@tmp, "my-app", "Gemfile"))
+    # lilac-cli is the build tool; lilac-wasm-bin ships the runtime
+    # wasm + bridge so `bundle install` is enough to make `lilac dev`
+    # and `lilac build` work without npm.
+    assert_match(/gem ["']lilac-cli["']/, gemfile)
+    assert_match(/gem ["']lilac-wasm-bin["']/, gemfile)
+  end
+
   def test_generated_project_builds_with_builder
     # End-to-end sanity: the scaffold must produce a project that
     # `lilac build` happily compiles. Catches drift between Scaffold

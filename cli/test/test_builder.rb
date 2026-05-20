@@ -724,8 +724,12 @@ class TestBuilder < Minitest::Test
           # Inject a resolver whose monorepo_root points at /nope so the
           # discovery genuinely fails — needed because the real monorepo
           # ancestor of __FILE__ has the runtime artefacts present.
+          # `disable_gem_discovery: true` also blocks the `lilac-wasm-bin`
+          # gem fallback (which would otherwise land back in the real
+          # monorepo's build/).
           stub = Lilac::CLI::CompiledRuntimeResolver.new(
             project_root: sandbox, monorepo_root: no_repo,
+            disable_gem_discovery: true,
           )
           b.instance_variable_set(:@compiled_runtime_resolver, stub)
         end.build

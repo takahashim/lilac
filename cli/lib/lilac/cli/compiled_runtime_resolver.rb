@@ -29,7 +29,8 @@ module Lilac
       BRIDGE_PACKAGE_NAME = "@takahashim/mruby-wasm-js"
 
       def initialize(lilac_compiled_path: nil, mruby_wasm_js_path: nil,
-                     project_root: Dir.pwd, monorepo_root: nil)
+                     project_root: Dir.pwd, monorepo_root: nil,
+                     disable_gem_discovery: false)
         @configured_compiled_path = lilac_compiled_path
         @configured_bridge_path   = mruby_wasm_js_path
         @project_root             = project_root
@@ -37,6 +38,12 @@ module Lilac
         # wasm from being discovered in unit tests; production callers
         # leave it nil and the gem-relative ancestor is used.
         @monorepo_root_override   = monorepo_root
+        # When `lilac-wasm-bin` is on the load path (= scaffolded
+        # project's Gemfile pulled it in), `gem_provided_wasm` returns
+        # the bundled wasm. Tests that exercise the discovery fallback
+        # chain explicitly pass `disable_gem_discovery: true` so the
+        # gem's wasm doesn't satisfy a "nothing should resolve" expectation.
+        @disable_gem_discovery    = disable_gem_discovery
       end
 
       # Absolute path to the compiled wasm. Raises with an actionable
@@ -61,6 +68,13 @@ module Lilac
         if (env = ENV["LILAC_COMPILED_WASM"]) && File.file?(env)
           return env
         end
+        # `lilac-wasm-bin` gem (the recommended distribution path —
+        # scaffolded Gemfiles declare it so `bundle install` brings
+        # the wasm in automatically). Soft-required; absent gem just
+        # falls through.
+        if (gem_wasm = gem_provided_wasm) && File.file?(gem_wasm)
+          return gem_wasm
+        end
         monorepo_wasm_candidates.each { |c| return c if File.file?(c) }
         node_modules = node_modules_wasm_candidate
         return node_modules if node_modules && File.file?(node_modules)
@@ -76,6 +90,7 @@ module Lilac
           return env
         end
         candidates = [
+          gem_provided_bridge,        # `lilac-wasm-bin` gem (same priority as wasm)
           monorepo_bridge_candidate,
           node_modules_bridge_candidate,
           # Fallback: lilac-compiled npm package depends on the bridge
@@ -83,6 +98,29 @@ module Lilac
           nested_bridge_under_compiled_candidate,
         ].compact
         candidates.find { |c| bridge_dir?(c) }
+      end
+
+      # Soft-requires the `lilac-wasm-bin` gem and returns the path it
+      # publishes for `lilac-compiled.wasm`, or nil if the gem isn't on
+      # the load path (= user's Gemfile doesn't include it). `lilac-cli`
+      # itself doesn't depend on the gem — scaffolded projects do via
+      # their template Gemfile, which is the canonical install path.
+      def gem_provided_wasm
+        return nil if @disable_gem_discovery
+        require "lilac/wasm/bin"
+        ::Lilac::Wasm::Bin.lilac_compiled_wasm
+      rescue LoadError
+        nil
+      end
+
+      # Same soft-require pattern for the JS bridge directory bundled
+      # in the gem.
+      def gem_provided_bridge
+        return nil if @disable_gem_discovery
+        require "lilac/wasm/bin"
+        ::Lilac::Wasm::Bin.mruby_wasm_js_dir
+      rescue LoadError
+        nil
       end
 
       # Two monorepo candidates, checked in order:
@@ -146,10 +184,12 @@ module Lilac
           lilac-compiled.wasm not found. Tried:
             • configured `c.lilac_compiled_path` (#{@configured_compiled_path.inspect})
             • ENV["LILAC_COMPILED_WASM"] (#{ENV["LILAC_COMPILED_WASM"].inspect})
+            • lilac-wasm-bin gem (not on load path)
           #{monorepo_lines}
             • node_modules: #{node_modules_wasm_candidate}
 
           To fix, either:
+            • Add `gem "lilac-wasm-bin"` to your Gemfile (recommended — the scaffolded Gemfile from `lilac new` already includes it)
             • Pass `--lilac-compiled-path /abs/path/to/lilac.wasm` on the command line
             • Add `c.lilac_compiled_path = "/abs/path"` to lilac.config.rb
             • Set ENV["LILAC_COMPILED_WASM"]
@@ -163,11 +203,13 @@ module Lilac
           @takahashim/mruby-wasm-js bridge not found. Tried:
             • configured `c.mruby_wasm_js_path` (#{@configured_bridge_path.inspect})
             • ENV["MRUBY_WASM_JS_PATH"] (#{ENV["MRUBY_WASM_JS_PATH"].inspect})
+            • lilac-wasm-bin gem (not on load path)
             • monorepo: #{monorepo_bridge_candidate || '(no mrbgem/mruby-wasm-js/js dir)'}
             • node_modules: #{node_modules_bridge_candidate}
             • nested under lilac-compiled: #{nested_bridge_under_compiled_candidate}
 
           To fix, either:
+            • Add `gem "lilac-wasm-bin"` to your Gemfile (recommended)
             • Pass `--mruby-wasm-js-path /abs/path/to/mruby-wasm-js/` on the command line
             • Add `c.mruby_wasm_js_path = "/abs/path"` to lilac.config.rb
             • Set ENV["MRUBY_WASM_JS_PATH"]

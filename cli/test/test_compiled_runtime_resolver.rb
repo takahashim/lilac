@@ -26,7 +26,7 @@ class TestCompiledRuntimeResolver < Minitest::Test
     wasm = File.join(@tmp, "explicit.wasm")
     File.binwrite(wasm, "WASM")
 
-    r = Resolver.new(lilac_compiled_path: wasm, project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(lilac_compiled_path: wasm, project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal wasm, r.resolve_wasm!
   end
 
@@ -35,7 +35,7 @@ class TestCompiledRuntimeResolver < Minitest::Test
     File.binwrite(wasm, "WASM")
     ENV["LILAC_COMPILED_WASM"] = wasm
 
-    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal wasm, r.resolve_wasm!
   end
 
@@ -44,7 +44,7 @@ class TestCompiledRuntimeResolver < Minitest::Test
     FileUtils.mkdir_p(pkg)
     File.binwrite(File.join(pkg, "lilac.wasm"), "WASM")
 
-    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal File.join(pkg, "lilac.wasm"), r.resolve_wasm!
   end
 
@@ -59,17 +59,17 @@ class TestCompiledRuntimeResolver < Minitest::Test
     ENV["LILAC_COMPILED_WASM"] = env_wasm
 
     # Explicit wins
-    r1 = Resolver.new(lilac_compiled_path: explicit_wasm, project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r1 = Resolver.new(lilac_compiled_path: explicit_wasm, project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal explicit_wasm, r1.resolve_wasm!
 
     # Without explicit, env wins
-    r2 = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r2 = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal env_wasm, r2.resolve_wasm!
 
     # Without env, monorepo or node_modules — for this test the tmp root
     # has no monorepo ancestor, so node_modules wins.
     ENV.delete("LILAC_COMPILED_WASM")
-    r3 = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r3 = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal npm_wasm, r3.resolve_wasm!
   end
 
@@ -84,7 +84,7 @@ class TestCompiledRuntimeResolver < Minitest::Test
     File.binwrite(File.join(monorepo, "build", "lilac-compiled.wasm"), "DEV")
     File.binwrite(File.join(monorepo, "npm", "lilac-compiled", "lilac.wasm"), "PUBLISHED")
 
-    r = Resolver.new(project_root: @tmp, monorepo_root: monorepo)
+    r = Resolver.new(project_root: @tmp, monorepo_root: monorepo, disable_gem_discovery: true)
     assert_equal File.join(monorepo, "build", "lilac-compiled.wasm"), r.resolve_wasm!
   end
 
@@ -95,12 +95,12 @@ class TestCompiledRuntimeResolver < Minitest::Test
     FileUtils.mkdir_p(File.join(monorepo, "npm", "lilac-compiled"))
     File.binwrite(File.join(monorepo, "npm", "lilac-compiled", "lilac.wasm"), "PUBLISHED")
 
-    r = Resolver.new(project_root: @tmp, monorepo_root: monorepo)
+    r = Resolver.new(project_root: @tmp, monorepo_root: monorepo, disable_gem_discovery: true)
     assert_equal File.join(monorepo, "npm", "lilac-compiled", "lilac.wasm"), r.resolve_wasm!
   end
 
   def test_unresolved_wasm_raises_with_actionable_message
-    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     err = assert_raises(Resolver::Error) { r.resolve_wasm! }
     assert_match(/lilac-compiled\.wasm not found/, err.message)
     assert_match(/lilac_compiled_path/, err.message)
@@ -116,7 +116,7 @@ class TestCompiledRuntimeResolver < Minitest::Test
     FileUtils.mkdir_p(bridge)
     File.write(File.join(bridge, "index.js"), "// bridge")
 
-    r = Resolver.new(mruby_wasm_js_path: bridge, project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(mruby_wasm_js_path: bridge, project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal bridge, r.resolve_bridge!
   end
 
@@ -125,7 +125,7 @@ class TestCompiledRuntimeResolver < Minitest::Test
     FileUtils.mkdir_p(bridge)
     File.write(File.join(bridge, "index.js"), "// bridge")
 
-    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal bridge, r.resolve_bridge!
   end
 
@@ -135,7 +135,7 @@ class TestCompiledRuntimeResolver < Minitest::Test
     FileUtils.mkdir_p(nested)
     File.write(File.join(nested, "index.js"), "// bridge")
 
-    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal nested, r.resolve_bridge!
   end
 
@@ -144,12 +144,12 @@ class TestCompiledRuntimeResolver < Minitest::Test
     FileUtils.mkdir_p(bridge)
     # No index.js file → discovery must skip this candidate.
 
-    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_raises(Resolver::Error) { r.resolve_bridge! }
   end
 
   def test_unresolved_bridge_raises_with_actionable_message
-    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"))
+    r = Resolver.new(project_root: @tmp, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     err = assert_raises(Resolver::Error) { r.resolve_bridge! }
     assert_match(/@takahashim\/mruby-wasm-js bridge not found/, err.message)
     assert_match(/mruby_wasm_js_path/, err.message)
