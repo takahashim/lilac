@@ -31,14 +31,54 @@ class MrubyWasm
       end
 
       def __js_call__(_method, _args)
-        # createElement / createTextNode arrive in session 3.
-        nil
+        case _method
+        when "createElement"
+          create_element(_args[0])
+        when "createTextNode"
+          create_text_node(_args[0])
+        when "querySelector"
+          query_selector(_args[0])
+        when "querySelectorAll"
+          query_selector_all(_args[0])
+        else
+          nil
+        end
       end
 
       def wrap_node(node)
-        return nil unless node&.element?
+        return nil unless node
 
-        @node_wrappers[node.object_id] ||= Element.new(self, node)
+        @node_wrappers[node.object_id] ||= begin
+          if node.element?
+            Element.new(self, node)
+          elsif node.text?
+            TextNode.new(self, node)
+          elsif node.is_a?(Nokogiri::XML::DocumentFragment)
+            Fragment.new(self, node)
+          end
+        end
+      end
+
+      def create_element(name)
+        return nil if name.nil? || name.to_s.empty?
+
+        wrap_node(Nokogiri::XML::Node.new(name.to_s, @nokogiri_doc))
+      end
+
+      def create_text_node(text)
+        wrap_node(Nokogiri::XML::Text.new(text.to_s, @nokogiri_doc))
+      end
+
+      def query_selector(selector)
+        return nil if selector.nil? || selector.to_s.empty?
+
+        wrap_node(@nokogiri_doc.at_css(selector.to_s))
+      end
+
+      def query_selector_all(selector)
+        return [] if selector.nil? || selector.to_s.empty?
+
+        @nokogiri_doc.css(selector.to_s).map { |node| wrap_node(node) }.compact
       end
     end
   end

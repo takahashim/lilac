@@ -56,3 +56,27 @@ for the overall plan.
   `classList`)
 - Next: Session 3 — tree mutation primitives and classList, still
   without MutationObserver delivery.
+
+## Session 3 (2026-05-21): Tree mutation primitives
+
+- Target spec(s): (foundation only)
+- Achieved:
+  - `Document` now supports `createElement`, `createTextNode`,
+    `querySelector`, and `querySelectorAll`
+  - Added thin wrappers for `Fragment`, `TextNode`, `ClassList`, and
+    `StyleDeclaration` in `test/ruby_spec/dom/element.rb`
+  - `Element` now supports `innerHTML=` / `firstElementChild` /
+    `tagName` / `classList` / `style` / template `content`
+  - Mutation methods landed: `appendChild`, `insertBefore`,
+    `removeChild`, `cloneNode`, `append`, `prepend`, `before`, `after`,
+    `remove`, `replaceWith`, plus `removeAttribute` and
+    `getAttributeNames`
+  - Smoke-tested under `mise` Ruby (`3.4.1`) for selector lookup,
+    fragment cloning, text-node append, sibling insertion, replace, and
+    class toggling
+- Unlocked: none (foundation)
+- Blocked by / open: no `MutationObserver` delivery, no event system,
+  and no callback bridge yet; component auto-mount / runtime directives
+  still block on those
+- Next: Session 4 — EventTarget / Event / listener registration, then
+  callback bridge + scheduler so observer delivery can be wired in.
