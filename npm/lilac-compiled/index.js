@@ -10,11 +10,13 @@
 //     .then((b) => new Uint8Array(b));
 //   await boot({ bytecode });
 //
-// `boot()` fires `Lilac.start` after `loadIrep` to mount every
-// `data-component` element (decisions §20.6 / §20.7 — Pattern A boot
-// helpers own the framework boot). Runtime-side `Lilac::Registry#start`
-// is idempotent so user code that pre-emits `Lilac.start` in its
-// bytecode (legacy) stays correct.
+// `Lilac.start` is expected to be embedded in the supplied bytecode
+// (decisions §20.6 caveat — the compiled wasm has no
+// `mruby-compiler` / `mruby-eval`, so post-load `vm.eval("Lilac.start")`
+// is unsupported). `lilac build --target compiled` appends it to the
+// bundle automatically; callers that supply hand-rolled bytecode must
+// either pre-compile a top-level `Lilac.start` call into the bundle
+// or use a `loadIrep` of a small pre-compiled boot stub themselves.
 
 export { createVM } from "@takahashim/mruby-wasm-js";
 import { createVM } from "@takahashim/mruby-wasm-js";
@@ -33,14 +35,8 @@ const DEFAULT_WASM_URL = new URL("./lilac.wasm", import.meta.url);
  *   this variant has no runtime parser, so `source` / `script` paths
  *   are rejected.
  * @param {(vm: any) => void | Promise<void>} [opts.onReady]
- *   Callback fired after `Lilac.start` has booted the framework.
- *   Receives the VM. "Ready" means components are mounted and the
- *   page is interactive.
- * @param {boolean} [opts.autoStart=true]
- *   When `false`, skip the automatic `vm.eval("Lilac.start")` call.
- *   Use this only for tests or specialised pre-boot setup; normal
- *   usage relies on the helper firing boot itself (Pattern A —
- *   decisions §20.7).
+ *   Callback fired after `loadIrep` returns (boot is embedded in the
+ *   bytecode for this variant — see file-level doc). Receives the VM.
  * @returns {Promise<any>} resolved with the VM.
  */
 export async function boot(opts = {}) {
@@ -73,13 +69,10 @@ export async function boot(opts = {}) {
       : new Uint8Array(opts.bytecode);
   vm.loadIrep(bytes);
 
-  // Boot the framework after bytecode is loaded so user code stays
-  // purely declarative (decisions §20.6). Idempotent on the runtime
-  // side, so legacy bytecode that already calls `Lilac.start` is fine.
-  if (opts.autoStart !== false) {
-    vm.eval("Lilac.start");
-  }
-
+  // No `vm.eval("Lilac.start")` here: the compiled wasm has no
+  // parser, so `Lilac.start` must be present at the tail of the
+  // bytecode itself (decisions §20.6 caveat). `lilac build` produces
+  // bundles that already include it.
   if (typeof opts.onReady === "function") {
     await opts.onReady(vm);
   }

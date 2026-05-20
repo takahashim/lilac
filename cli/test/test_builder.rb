@@ -792,7 +792,7 @@ class TestBuilder < Minitest::Test
     refute_match(/<script type="text\/ruby"/, out)
   end
 
-  def test_target_compiled_boot_module_invokes_lilac_start
+  def test_target_compiled_bundle_includes_lilac_start_in_bytecode
     mrbc = mrbc_or_skip
     write_page "index", <<~HTML
       <html><body><script type="text/ruby">class Boot1; end</script></body></html>
@@ -801,18 +801,22 @@ class TestBuilder < Minitest::Test
     build!(target: :compiled, mrbc_path: mrbc)
     out = read_output("index.html")
 
-    # The bootstrap module is inlined into the page HTML and calls
-    # `vm.eval("Lilac.start")` right after `loadBytecode` (§20.6).
-    assert_match(/loadBytecode\([^)]*\);[^"]*vm\.eval\("Lilac\.start"\)/m, out,
-                 "inline compiled boot module must call vm.eval('Lilac.start') after loadBytecode")
+    # The compiled wasm has no parser, so `Lilac.start` must travel in
+    # the bytecode and run as part of `loadBytecode` (decisions §20.6
+    # caveat). The inline boot module deliberately does NOT call
+    # `vm.eval("Lilac.start")`.
+    refute_match(/vm\.eval\(/, out,
+                 "inline compiled boot module must not vm.eval anything (no parser in compiled wasm)")
 
-    # The .mrb bundle itself should NOT carry the Lilac.start symbol
-    # pair — boot is no longer baked into the bytecode.
+    # The .mrb bundle carries the Lilac/start sym pair appended at the
+    # tail of the bundle by the builder.
     mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))
     assert_equal 1, mrb_files.length
     bytes = File.binread(mrb_files.first)
-    refute_includes bytes, "Lilac.start",
-                    "compiled bundle must not carry Lilac.start (boot moved to inline module, §20.6)"
+    assert_includes bytes, "Lilac",
+                    "compiled bundle must include Lilac.start (Lilac sym missing)"
+    assert_includes bytes, "start",
+                    "compiled bundle must include Lilac.start (start sym missing)"
   end
 
   # ---- §A scope guard --------------------------------------------

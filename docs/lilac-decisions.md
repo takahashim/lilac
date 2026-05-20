@@ -1657,12 +1657,18 @@ drift が見つかった:
 
 `Lilac.start` の発火位置を builder から boot helper layer に移動:
 
-- **target=compiled の `render_compiled_boot_module`**: `vm.loadBytecode(bytecode)`
-  の **直後** に `vm.eval("Lilac.start")` を 1 行追加。`.mrb` bundle 自体には
-  `Lilac.start` を append しない(bytecode は user code に純化)
+- **target=compiled の `render_compiled_boot_module`**: 初版は
+  `vm.loadBytecode(bytecode)` の直後で `vm.eval("Lilac.start")` を呼ぶ案
+  だったが、**compiled 変種の wasm は `mruby-compiler` / `mruby-eval` を
+  含まない** (build_config/lilac-compiled.rb 参照) ため、post-load の
+  `vm.eval` で任意 Ruby ソースを評価できない。よって target=compiled では
+  **builder が bundle bytecode 末尾に `Lilac.start` を append し、
+  `loadBytecode` の top-level 実行で boot が走る** という形に揃える。
+  inline boot module は `loadBytecode` だけを呼ぶ
 - **target=full の Lilac-specific boot helper**(例: `examples/7guis/public/boot.js`):
   `document.querySelectorAll('script[type="text/ruby"]').forEach(eval)` の
-  **直後** に `vm.eval("Lilac.start")` を呼ぶ。builder の inject は廃止
+  **直後** に `vm.eval("Lilac.start")` を呼ぶ。target=full は parser を持つので
+  ここは runtime 側で発火
 - **runtime-only path で `@takahashim/lilac-full` の `boot()` を使う場合**:
   将来 `boot()` 自体も eval 完了後に `Lilac.start` を呼ぶようにする(別 PR、
   本決定の対象外。idempotent guard があるので即時の修正は不要)
@@ -1676,11 +1682,14 @@ drift が見つかった:
 - **user code の対称性**: `lilac build --target full` / `--target compiled` /
   CLI を使わず `boot()` helper を import する runtime path、いずれも user は
   `Lilac.start` を書かない
-- **builder の責務縮小**: `bundle_scripts` の compiled / full 分岐が単純化、
-  特に full mode で `any_user_ruby ? scripts + ["Lilac.start"] : scripts` の
-  特例処理が消える
-- **bytecode の純粋性**: target=compiled の `.mrb` には user code(class
-  defs + page-inline ruby)のみ。`Lilac.start` は JS-side bootstrap に分離
+- **builder の責務縮小**: full mode で `any_user_ruby ? scripts + ["Lilac.start"] : scripts`
+  の特例処理が消える。compiled mode の bundle 末尾 append は parser 制約から
+  維持(下記 caveat)
+- **bytecode と boot helper の責務分担**: target=full は boot helper layer
+  (JS) が boot を所有。target=compiled は parser 制約で「bundle 末尾の
+  `Lilac.start` を builder が pre-compile」が依然必要 — boot helper layer の
+  "boot 担当者" 役は inline boot module の `loadBytecode` 呼び出しが果たす形
+  (bytecode を実行する = boot を実行する)
 - **§1 整合**: "CLI は optional な最適化レイヤ" 原則がより純粋に成立。
   CLI を介さない runtime-only path でも(適切な boot helper を使う限り)
   user code が同じ形を保つ
@@ -1688,10 +1697,12 @@ drift が見つかった:
 #### 影響を受ける箇所
 
 - `cli/lib/lilac/cli/builder.rb`:
-  - `bundle_scripts` の compiled 枝から `+ ["Lilac.start"]` を削除
-  - 同 full 枝の `any_user_ruby ? scripts + ["Lilac.start"] : scripts` を
-    `scripts` に戻す
-  - `render_compiled_boot_module` に `vm.eval("Lilac.start");` を追加
+  - full mode: `any_user_ruby ? scripts + ["Lilac.start"] : scripts` を
+    `scripts` に戻す(boot は boot helper layer 側)
+  - compiled mode: bundle 末尾の `+ ["Lilac.start"]` append は **維持**
+    (parser 制約のため bytecode に embed する必要あり)
+  - `render_compiled_boot_module` は `loadBytecode` だけを呼ぶ形に戻す
+    (`vm.eval("Lilac.start")` は parser が無いため使えない)
 - `examples/7guis/public/boot.js`:
   - eval loop 末尾に `vm.eval("Lilac.start");` を復活(§20.C の削除を
     取り消す形 — boot.js こそが boot helper layer の実体)
@@ -1699,9 +1710,9 @@ drift が見つかった:
   - `test_target_full_auto_appends_lilac_start` を `test_target_full_does_not_inject_lilac_start_into_script_block` にリネーム
     (アサーションを反転 — Lilac.start が **inject されない** ことを確認)
   - `test_target_compiled_bundle_includes_lilac_start` を
-    `test_target_compiled_boot_module_invokes_lilac_start` にリネーム
-    (boot module 内に `vm.eval("Lilac.start")` が現れる + `.mrb` には現れない
-    ことを確認)
+    `test_target_compiled_bundle_includes_lilac_start_in_bytecode` にリネーム
+    (`.mrb` 内に Lilac / start sym が残ること + boot module が `vm.eval` を
+    呼ばないことを確認 — parser 不在 caveat)
   - `test_target_full_no_lilac_start_when_page_has_no_ruby` を
     `test_target_full_pure_static_page_emits_no_script_block` にリネーム
     (Ruby 無しの場合は injection そのものが起きないことの確認)
@@ -1709,9 +1720,19 @@ drift が見つかった:
   `Lilac.start` を書いた既存コードへの safety net として依然必要
 
 CLI tests 390 runs, all green。examples/7guis の full / compiled 両 build も
-確認済み(target=full の dist HTML に `Lilac.start` 無し、boot.js が eval loop
-末尾で呼ぶ。target=compiled の inline boot module が `loadBytecode` 直後に
-`vm.eval("Lilac.start")` を呼ぶ)。
+確認済み:
+- target=full の dist HTML に `Lilac.start` 無し、boot.js が eval loop 末尾で発火
+- target=compiled の bundle bytecode に `Lilac.start` を builder が append、
+  inline boot module は `loadBytecode` のみ呼んで boot が走る
+
+**Caveat (2026-05-20 追記)**: 当初の refactor 案 (compiled 側でも boot module
+内で `vm.eval("Lilac.start")`) は `lilac-compiled` wasm が `mruby-compiler` /
+`mruby-eval` を含まない (build_config/lilac-compiled.rb で明示的に除外) ため
+runtime error になることが `wsv dist` での動作確認で判明。target=compiled は
+parser 制約により bundle 末尾 append の従来形が必須で、対称性は完全には
+取れない。それでも target=full は boot helper layer (JS) で boot を fire し、
+target=compiled は bytecode-embedded boot が走る、という二段は維持できる
+(user 視点では「`Lilac.start` を書かない」契約は両 target で揃う)。
 
 ### 20.7 Boot pattern を上流選択として明文化 + Pattern A の 3 段グラデーション(2026-05-20)
 
