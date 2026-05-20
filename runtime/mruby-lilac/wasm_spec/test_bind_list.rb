@@ -195,14 +195,14 @@ Spec.describe "bind_list" do
     Lilac.register "bl-leaf", leaf_klass
     Lilac.register "bl-host", host_klass
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     el = doc.call(:querySelector, "[data-component='bl-host']")
     inst = Lilac.find_for_element(el)
 
     # Drop the first item; its leaf component should run cleanup.
     inst.items.update { |arr| arr.reject { |it| it[:id] == 1 } }
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     Spec.assert_equal ["alpha"], cleaned
 

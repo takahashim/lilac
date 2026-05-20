@@ -18,12 +18,12 @@ Spec.describe "Component#each_frame" do
     Lilac.start
 
     # Drain a few microtasks/macrotasks so rAF can fire.
-    5.times { JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await }
+    5.times { Lilac.flush_async!(16) }
 
     Spec.assert_true counts.length >= 2
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
   end
 
   Spec.assert "loop stops after component unmount" do
@@ -40,7 +40,7 @@ Spec.describe "Component#each_frame" do
     Lilac.register "ef-stop", klass
     Lilac.start
 
-    3.times { JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await }
+    3.times { Lilac.flush_async!(16) }
     Spec.assert_true counts.length >= 1   # loop ran while mounted
 
     # Direct unmount (Lilac.reset!) avoids the MutationObserver path so
@@ -48,10 +48,10 @@ Spec.describe "Component#each_frame" do
     # contract verified is still "unmount cancels the rAF loop".
     Lilac.reset!
     body[:innerHTML] = ""
-    5.times { JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await }
+    5.times { Lilac.flush_async!(16) }
     settled = counts.length
 
-    5.times { JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await }
+    5.times { Lilac.flush_async!(16) }
     Spec.assert_equal settled, counts.length
   end
 
@@ -75,7 +75,7 @@ Spec.describe "Component#each_frame" do
     Lilac.register "ef-err", klass
     Lilac.start
 
-    3.times { JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await }
+    3.times { Lilac.flush_async!(16) }
 
     locals = captured.select { |row| row[0] == :local }
     Spec.assert_true locals.length >= 1
@@ -86,6 +86,6 @@ Spec.describe "Component#each_frame" do
 
     Lilac.logger = nil
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
   end
 end

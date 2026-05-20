@@ -10,19 +10,19 @@ Spec.describe "data-css-X (runtime scanner)" do
 
     Lilac.register("css-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     target = body.call(:querySelector, "[data-component=\"css-rt\"] > div")
     Spec.assert_equal "25%", target[:style].call(:getPropertyValue, "--progress").to_s
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"css-rt\"]"))
     inst.pct.value = "80%"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "80%", target[:style].call(:getPropertyValue, "--progress").to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-css-foo_bar (underscore) routes via logger.error (grammar)" do
@@ -45,7 +45,7 @@ Spec.describe "data-css-X (runtime scanner)" do
 
     Lilac.register("css-bad-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error && entry[2].to_s.include?("data-css") }
     Spec.assert_equal 1, errors.length
@@ -53,6 +53,6 @@ Spec.describe "data-css-X (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

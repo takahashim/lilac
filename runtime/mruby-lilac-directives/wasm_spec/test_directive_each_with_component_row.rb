@@ -25,7 +25,7 @@ Spec.describe "data-each row that is itself a data-component" do
     body[:innerHTML] = '<div data-component="each-cmp-list"><ul data-each="@items" data-key="id"><li data-component="each-cmp-item"><span class="t" data-text="@title"></span></li></ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     spans = body.call(:querySelectorAll, ".t")
     Spec.assert_equal 2, spans[:length].to_i
@@ -34,7 +34,7 @@ Spec.describe "data-each row that is itself a data-component" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "row reuse with changed item value updates child's prop signal" do
@@ -56,7 +56,7 @@ Spec.describe "data-each row that is itself a data-component" do
     body[:innerHTML] = '<div data-component="reuse-list"><ul data-each="@items" data-key="id"><li data-component="reuse-item"><span class="t" data-text="@title"></span></li></ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, ".t")
     Spec.assert_equal "before", span[:textContent].to_s
@@ -64,13 +64,13 @@ Spec.describe "data-each row that is itself a data-component" do
     # Same key (1), changed title — bind_list reuses the existing row.
     list_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component='reuse-list']"))
     list_inst.items.value = [{ "id" => 1, "title" => "after" }]
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     Spec.assert_equal "after", span[:textContent].to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "child's data-on-X dispatches to child component's method" do
@@ -95,18 +95,18 @@ Spec.describe "data-each row that is itself a data-component" do
     body[:innerHTML] = '<div data-component="dispatch-list"><ul data-each="@items" data-key="id"><li data-component="dispatch-item"><button data-on-click="click_me">x</button></li></ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     btn = body.call(:querySelector, "button")
     btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     item = Lilac.find_for_element(body.call(:querySelector, "[data-component='dispatch-item']"))
     Spec.assert_true item.clicked
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "reorder (same keys, different order) keeps child components alive with correct props" do
@@ -131,7 +131,7 @@ Spec.describe "data-each row that is itself a data-component" do
     body[:innerHTML] = '<div data-component="reorder-list"><ul data-each="@items" data-key="id"><li data-component="reorder-item" data-attr-data-id="id"><span class="t" data-text="@title"></span></li></ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     items_before = body.call(:querySelectorAll, "[data-component='reorder-item']")
     Spec.assert_equal 2, items_before[:length].to_i
@@ -146,7 +146,7 @@ Spec.describe "data-each row that is itself a data-component" do
       { "id" => 2, "title" => "b" },
       { "id" => 1, "title" => "a" },
     ]
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     items_after = body.call(:querySelectorAll, "[data-component='reorder-item']")
     Spec.assert_equal 2, items_after[:length].to_i
@@ -159,7 +159,7 @@ Spec.describe "data-each row that is itself a data-component" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "row removal unmounts the child component" do
@@ -189,18 +189,18 @@ Spec.describe "data-each row that is itself a data-component" do
     body[:innerHTML] = '<div data-component="rm-list"><ul data-each="@items" data-key="id"><li data-component="rm-item"></li></ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal 2, body.call(:querySelectorAll, "[data-component='rm-item']")[:length].to_i
 
     list_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component='rm-list']"))
     list_inst.items.value = [{ "id" => 1, "title" => "keep" }]
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     Spec.assert_equal 1, body.call(:querySelectorAll, "[data-component='rm-item']")[:length].to_i
     Spec.assert_true unmount_count >= 1
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

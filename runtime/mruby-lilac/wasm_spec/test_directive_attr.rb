@@ -16,24 +16,24 @@ Spec.describe "data-attr-X directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     link = body.call(:querySelector, "[data-ref=\"gA\"]")
     Spec.assert_equal "https://example.com/one", link.call(:getAttribute, "href").to_s
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     inst.url.value = "https://example.com/two"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "https://example.com/two", link.call(:getAttribute, "href").to_s
 
     # nil → attribute removed (spec Section 7)
     inst.url.value = nil
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_true link.call(:getAttribute, "href").js_null?
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-attr-href sanitizes javascript: per Appendix B" do
@@ -53,13 +53,13 @@ Spec.describe "data-attr-X directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     link = body.call(:querySelector, "[data-ref=\"gA\"]")
     Spec.assert_equal "about:blank", link.call(:getAttribute, "href").to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

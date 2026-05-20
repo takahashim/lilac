@@ -13,7 +13,7 @@ Spec.describe "data-class (runtime scanner)" do
 
     Lilac.register("cls-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "span")
     Spec.assert_equal true, span[:classList].call(:contains, "active").js_bool
@@ -22,13 +22,13 @@ Spec.describe "data-class (runtime scanner)" do
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"cls-rt\"]"))
     inst.on.value = false
     inst.primary.value = true
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal false, span[:classList].call(:contains, "active").js_bool
     Spec.assert_equal true, span[:classList].call(:contains, "btn-primary").js_bool
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-class with double-quoted Tailwind-style key (contains `:`)" do
@@ -42,14 +42,14 @@ Spec.describe "data-class (runtime scanner)" do
 
     Lilac.register("cls-tw-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "span")
     Spec.assert_equal true, span[:classList].call(:contains, "hover:bg-blue").js_bool
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-class containing reserved `lil-hidden` key raises (correctness)" do
@@ -66,7 +66,7 @@ Spec.describe "data-class (runtime scanner)" do
 
     Lilac.register("cls-bad-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error && entry[2].to_s.include?("lil-hidden") }
     Spec.assert_equal 1, errors.length
@@ -74,7 +74,7 @@ Spec.describe "data-class (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "ClassParser smoke (bare and quoted keys + values)" do

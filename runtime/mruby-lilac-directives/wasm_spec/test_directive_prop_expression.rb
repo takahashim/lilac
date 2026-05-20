@@ -27,7 +27,7 @@ Spec.describe "data-prop-* expression resolution" do
     body[:innerHTML] = '<div data-component="expr-parent-it"><ul data-each="@items" data-key="id"><li data-component="expr-child-it"></li></ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     lis = body.call(:querySelectorAll, "[data-component='expr-child-it']")
     Spec.assert_equal 2, lis[:length].to_i
@@ -40,7 +40,7 @@ Spec.describe "data-prop-* expression resolution" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "@ivar resolves from parent's setup-declared signal inside data-each row" do
@@ -66,7 +66,7 @@ Spec.describe "data-prop-* expression resolution" do
     body[:innerHTML] = '<div data-component="expr-parent-ivar-each"><ul data-each="@items" data-key="id"><li data-component="expr-child-ivar-each" data-prop-label="@prefix"></li></ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     children = body.call(:querySelectorAll, "[data-component='expr-child-ivar-each']")
     Spec.assert_equal 2, children[:length].to_i
@@ -75,7 +75,7 @@ Spec.describe "data-prop-* expression resolution" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "literal value still works (parse failure = passthrough)" do
@@ -92,14 +92,14 @@ Spec.describe "data-prop-* expression resolution" do
     body[:innerHTML] = '<div data-component="expr-parent-lit"><div data-component="expr-child-lit" data-prop-label="static literal"></div></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     child = Lilac.find_for_element(body.call(:querySelector, "[data-component='expr-child-lit']"))
     Spec.assert_equal "static literal", child.instance_variable_get(:@label).value
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Integer prop type coercion applies after auto-fill" do
@@ -121,7 +121,7 @@ Spec.describe "data-prop-* expression resolution" do
     body[:innerHTML] = '<div data-component="expr-parent-coerce"><ul data-each="@items" data-key="id"><li data-component="expr-child-coerce"></li></ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     child = Lilac.find_for_element(body.call(:querySelector, "[data-component='expr-child-coerce']"))
     n = child.instance_variable_get(:@n).value
@@ -130,6 +130,6 @@ Spec.describe "data-prop-* expression resolution" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

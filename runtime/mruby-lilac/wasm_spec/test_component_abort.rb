@@ -17,7 +17,7 @@ Spec.describe "Component lifecycle abort" do
     Spec.assert_true inst.alive?
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
     Spec.assert_false inst.alive?
   end
 
@@ -35,7 +35,7 @@ Spec.describe "Component lifecycle abort" do
     Spec.assert_false sig[:aborted].js_bool
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
     Spec.assert_true sig[:aborted].js_bool
   end
 
@@ -50,7 +50,7 @@ Spec.describe "Component lifecycle abort" do
 
     inst = Lilac.find_for_element(doc.call(:querySelector, "[data-component='ab-pre']"))
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
 
     Spec.assert_raises(Lilac::Aborted) { inst.sleep(0.01) }
   end
@@ -79,9 +79,9 @@ Spec.describe "Component lifecycle abort" do
 
     btn = doc.call(:querySelector, "[data-component='ab-click'] button")
     btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 20))").await
+    Lilac.flush_async!(20)
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 200))").await
+    Lilac.flush_async!(200)
 
     Spec.assert_false reached_after_sleep
     Spec.assert_false boundary_fired
@@ -110,9 +110,9 @@ Spec.describe "Component lifecycle abort" do
     Lilac.register "ab-every", klass
     Lilac.start
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 30))").await
+    Lilac.flush_async!(30)
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 300))").await
+    Lilac.flush_async!(300)
 
     Spec.assert_equal 0, reached_after_sleep
     Spec.assert_equal 0, captured.count { |(msg, _)| msg.to_s.include?("every") }
@@ -142,9 +142,9 @@ Spec.describe "Component lifecycle abort" do
 
     btn = doc.call(:querySelector, "[data-component='ab-on-err'] button")
     btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 20))").await
+    Lilac.flush_async!(20)
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 200))").await
+    Lilac.flush_async!(200)
 
     Spec.assert_equal [], on_error_invocations
   end
@@ -168,13 +168,13 @@ Spec.describe "Component lifecycle abort" do
     Lilac.start
 
     doc.call(:querySelector, "[data-component='ab-regress'] button").call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
 
     Spec.assert_true boundary_saw && boundary_saw[1] == "kaboom"
     Spec.assert_equal 0, captured.length
 
     Lilac.logger = nil
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
   end
 end

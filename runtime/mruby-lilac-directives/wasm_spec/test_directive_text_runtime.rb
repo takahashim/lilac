@@ -10,19 +10,19 @@ Spec.describe "data-text / data-unsafe-html (runtime scanner)" do
 
     Lilac.register("text-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "span")
     Spec.assert_equal "hello", span[:textContent].to_s
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"text-rt\"]"))
     inst.msg.value = "world"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "world", span[:textContent].to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-unsafe-html='@html' wires innerHTML binding" do
@@ -36,19 +36,19 @@ Spec.describe "data-text / data-unsafe-html (runtime scanner)" do
 
     Lilac.register("html-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     inner = body.call(:querySelector, "[data-component=\"html-rt\"] > div")
     Spec.assert_equal "<em>plain</em>", inner[:innerHTML].to_s
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"html-rt\"]"))
     inst.body.value = "<strong>bold</strong>"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "<strong>bold</strong>", inner[:innerHTML].to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "invalid value (not @ivar / bare ident) routes via Lilac.logger.error" do
@@ -66,7 +66,7 @@ Spec.describe "data-text / data-unsafe-html (runtime scanner)" do
 
     Lilac.register("bad-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error }
     Spec.assert_equal 1, errors.length
@@ -75,6 +75,6 @@ Spec.describe "data-text / data-unsafe-html (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

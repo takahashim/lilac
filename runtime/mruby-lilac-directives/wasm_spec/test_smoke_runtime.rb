@@ -74,13 +74,13 @@ Spec.describe "smoke test: directive scanner loaded" do
 
     Lilac.register("smoke-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"smoke-rt\"]"))
     Spec.assert_true inst.scanner_attempted, "bind_template_hook was called"
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

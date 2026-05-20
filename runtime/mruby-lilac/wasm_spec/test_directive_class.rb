@@ -19,7 +19,7 @@ Spec.describe "data-class directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     target = body.call(:querySelector, "[data-ref=\"gC\"]")
     has = ->(name) { target[:classList].call(:contains, name).js_bool }
@@ -30,17 +30,17 @@ Spec.describe "data-class directive (lilac-cli codegen target)" do
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     inst.active.value = true
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_true has.call("active")
     Spec.assert_true has.call("btn-primary")
     Spec.assert_true has.call("base")
 
     inst.primary.value = false
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_false has.call("btn-primary")
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

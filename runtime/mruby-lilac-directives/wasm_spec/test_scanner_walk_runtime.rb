@@ -22,7 +22,7 @@ Spec.describe "Scanner walk boundaries (runtime)" do
     Lilac.register("outer-rt", outer_klass)
     Lilac.register("inner-rt", inner_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     outer_span = body.call(:querySelector, ".outer-target")
     inner_span = body.call(:querySelector, ".inner-target")
@@ -34,7 +34,7 @@ Spec.describe "Scanner walk boundaries (runtime)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "scanner processes directives on the component root element itself" do
@@ -51,19 +51,19 @@ Spec.describe "Scanner walk boundaries (runtime)" do
 
     Lilac.register("root-bind-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     root = body.call(:querySelector, "[data-component=\"root-bind-rt\"]")
     Spec.assert_equal true, root[:classList].call(:contains, "active").js_bool
 
     inst = Lilac.find_for_element(root)
     inst.on.value = false
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal false, root[:classList].call(:contains, "active").js_bool
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "CLI codegen path (Bindings module) is unaffected by runtime scanner" do
@@ -91,7 +91,7 @@ Spec.describe "Scanner walk boundaries (runtime)" do
 
     Lilac.register("coexist-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "[data-ref=\"t\"]")
     Spec.assert_equal "from-codegen", span[:textContent].to_s
@@ -99,11 +99,11 @@ Spec.describe "Scanner walk boundaries (runtime)" do
     # which would still produce one final value but indicate a leak).
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"coexist-rt\"]"))
     inst.msg.value = "updated"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "updated", span[:textContent].to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

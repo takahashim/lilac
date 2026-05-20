@@ -71,14 +71,14 @@ Spec.describe "Lilac::Resource.current_run + Fetchy signal injection" do
     Lilac.start
 
     inst = Lilac.find_for_element(doc.call(:querySelector, "[data-component='inject-basic']"))
-    JS.eval_javascript("new Promise(r => setTimeout(r, 60))").await
+    Lilac.flush_async!(60)
     value, state, error = inst.snapshot
     Spec.assert_equal true, value["ok"]
     Spec.assert_equal :ready, state
     Spec.assert_equal nil, error
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     uninstall_inject_fetch_stub
   end
 
@@ -111,11 +111,11 @@ Spec.describe "Lilac::Resource.current_run + Fetchy signal injection" do
     # the resource transitions to :errored. If the resource's own
     # signal had been used, the user controller would have no effect.
     user_controller.call(:abort)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 50))").await
+    Lilac.flush_async!(50)
     Spec.assert_equal :errored, inst.state
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     uninstall_inject_fetch_stub
   end
 
@@ -148,12 +148,12 @@ Spec.describe "Lilac::Resource.current_run + Fetchy signal injection" do
     Lilac.register "inject-restore", klass
     Lilac.start
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 20))").await
+    Lilac.flush_async!(20)
     Spec.assert_equal 1, seen_inside.length
     Spec.assert_true seen_inside.first.is_a?(Lilac::ResourceRun)
     Spec.assert_equal nil, Lilac::Resource.current_run
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

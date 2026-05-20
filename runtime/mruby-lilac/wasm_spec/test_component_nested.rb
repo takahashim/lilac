@@ -121,7 +121,7 @@ Spec.describe "Nested components" do
     el.call(:remove)
     # Drain several macrotask boundaries — CI runners need more than one
     # turn before the MO callback fires the cascading unmount.
-    5.times { JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await }
+    5.times { Lilac.flush_async! }
 
     Spec.assert_equal [:parent_cleanup, :child_cleanup], log
 

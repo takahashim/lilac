@@ -21,18 +21,18 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     cli_klass.include(cli_mod)
     Lilac.register("parity-cli", cli_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     cli_span = body.call(:querySelector, "[data-component=\"parity-cli\"] span")
     initial_cli = cli_span[:textContent].to_s
     cli_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"parity-cli\"]"))
     cli_inst.msg.value = "world"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     updated_cli = cli_span[:textContent].to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     # ---- Path B: runtime scanner (declarative directive only) ----
     body[:innerHTML] = '<div data-component="parity-rt"><span data-text="@msg">x</span></div>'
@@ -42,13 +42,13 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     end
     Lilac.register("parity-rt", rt_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     rt_span = body.call(:querySelector, "[data-component=\"parity-rt\"] span")
     initial_rt = rt_span[:textContent].to_s
     rt_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"parity-rt\"]"))
     rt_inst.msg.value = "world"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     updated_rt = rt_span[:textContent].to_s
 
     Spec.assert_equal initial_cli, initial_rt, "initial bound text matches across paths"
@@ -56,7 +56,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-on-click: dispatch arrives at the method on both paths" do
@@ -75,18 +75,18 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     cli_klass.include(cli_mod)
     Lilac.register("parity-on-cli", cli_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     cli_btn = body.call(:querySelector, "[data-component=\"parity-on-cli\"] button")
     cli_btn.call(:click)
     cli_btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     cli_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"parity-on-cli\"]"))
     cli_count = cli_inst.count.value
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     # ---- Path B: runtime scanner ----
     body[:innerHTML] = '<div data-component="parity-on-rt"><button data-on-click="inc">+</button></div>'
@@ -97,12 +97,12 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     end
     Lilac.register("parity-on-rt", rt_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     rt_btn = body.call(:querySelector, "[data-component=\"parity-on-rt\"] button")
     rt_btn.call(:click)
     rt_btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     rt_inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"parity-on-rt\"]"))
     rt_count = rt_inst.count.value
 
@@ -110,7 +110,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Bindings module override always wins (no double-binding)" do
@@ -138,7 +138,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
 
     Lilac.register("parity-coexist", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "[data-ref=\"t\"]")
     # The codegen's bind reads @used_by_codegen. If the runtime
@@ -151,7 +151,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   # --- data-field: input value flows into form[:name] on both paths ----
@@ -173,7 +173,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     cli_klass.include(cli_mod)
     Lilac.register("parity-field-cli", cli_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     cli_input = body.call(:querySelector, "[data-component='parity-field-cli'] input")
     cli_input[:value] = "hi@example.com"
@@ -184,7 +184,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     # Path B: runtime scanner (declarative data-field directive only).
     body[:innerHTML] = '<div data-component="parity-field-rt"><form><input data-field="email" type="text"></form></div>'
@@ -193,7 +193,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     end
     Lilac.register("parity-field-rt", rt_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     rt_input = body.call(:querySelector, "[data-component='parity-field-rt'] input")
     rt_input[:value] = "hi@example.com"
@@ -206,7 +206,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   # --- data-button: click invokes the same handler on both paths -------
@@ -235,7 +235,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     cli_klass.include(cli_mod)
     Lilac.register("parity-btn-cli", cli_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     cli_btn = body.call(:querySelector, "[data-component='parity-btn-cli'] button")
     cli_btn.call(:click)
@@ -244,7 +244,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     # Path B: runtime scanner.
     body[:innerHTML] = '<div data-component="parity-btn-rt"><form><button data-button="save" type="button">Save</button></form></div>'
@@ -261,7 +261,7 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
     end
     Lilac.register("parity-btn-rt", rt_klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     rt_btn = body.call(:querySelector, "[data-component='parity-btn-rt'] button")
     rt_btn.call(:click)
@@ -273,6 +273,6 @@ Spec.describe "CLI codegen ↔ runtime scanner parity" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

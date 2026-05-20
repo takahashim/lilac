@@ -10,19 +10,19 @@ Spec.describe "data-show / data-hide (runtime scanner)" do
 
     Lilac.register("show-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "span")
     Spec.assert_equal false, span[:classList].call(:contains, "lil-hidden").js_bool
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"show-rt\"]"))
     inst.visible.value = false
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal true, span[:classList].call(:contains, "lil-hidden").js_bool
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-hide='@hidden' toggles `lil-hidden` class with signal truthiness" do
@@ -36,19 +36,19 @@ Spec.describe "data-show / data-hide (runtime scanner)" do
 
     Lilac.register("hide-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "span")
     Spec.assert_equal false, span[:classList].call(:contains, "lil-hidden").js_bool
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"hide-rt\"]"))
     inst.hidden.value = true
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal true, span[:classList].call(:contains, "lil-hidden").js_bool
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-show + data-hide on same element raises (correctness)" do
@@ -65,7 +65,7 @@ Spec.describe "data-show / data-hide (runtime scanner)" do
 
     Lilac.register("conflict-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error && entry[2].to_s.include?("collision") }
     Spec.assert_equal 1, errors.length
@@ -73,6 +73,6 @@ Spec.describe "data-show / data-hide (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

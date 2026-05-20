@@ -11,7 +11,7 @@ Spec.describe "data-bind (runtime scanner)" do
 
     Lilac.register("bind-text", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     input = body.call(:querySelector, "input")
     # signal → DOM
@@ -20,19 +20,19 @@ Spec.describe "data-bind (runtime scanner)" do
     inst = Lilac.find_for_element(
       body.call(:querySelector, "[data-component='bind-text']"))
     inst.name.value = "bob"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "bob", input[:value].to_s
 
     # DOM → signal
     ev = JS.global[:document][:defaultView][:Event]
     input[:value] = "carol"
     input.call(:dispatchEvent, ev.new("input", JS.object(bubbles: true)))
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "carol", inst.name.value
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-bind on <input type=checkbox> binds :checked, not :value" do
@@ -47,7 +47,7 @@ Spec.describe "data-bind (runtime scanner)" do
 
     Lilac.register("bind-cb", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     input = body.call(:querySelector, "input")
     Spec.assert_equal false, input[:checked].js_bool
@@ -55,18 +55,18 @@ Spec.describe "data-bind (runtime scanner)" do
     inst = Lilac.find_for_element(
       body.call(:querySelector, "[data-component='bind-cb']"))
     inst.on.value = true
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal true, input[:checked].js_bool
 
     ev = JS.global[:document][:defaultView][:Event]
     input[:checked] = false
     input.call(:dispatchEvent, ev.new("change", JS.object(bubbles: true)))
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal false, inst.on.value
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-bind on <textarea> binds :value" do
@@ -81,7 +81,7 @@ Spec.describe "data-bind (runtime scanner)" do
 
     Lilac.register("bind-ta", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     ta = body.call(:querySelector, "textarea")
     Spec.assert_equal "hello", ta[:value].to_s
@@ -89,14 +89,14 @@ Spec.describe "data-bind (runtime scanner)" do
     ev = JS.global[:document][:defaultView][:Event]
     ta[:value] = "world"
     ta.call(:dispatchEvent, ev.new("input", JS.object(bubbles: true)))
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     inst = Lilac.find_for_element(
       body.call(:querySelector, "[data-component='bind-ta']"))
     Spec.assert_equal "world", inst.note.value
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-bind with unparseable value routes via Lilac.logger.error" do
@@ -112,7 +112,7 @@ Spec.describe "data-bind (runtime scanner)" do
     klass = Class.new(Lilac::Component) { define_method(:setup) {} }
     Lilac.register("bind-bad-literal", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error }
     Spec.assert_true errors.length >= 1, "expected at least one error log entry"
@@ -122,7 +122,7 @@ Spec.describe "data-bind (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-bind pointing at Computed (not Signal) raises via logger" do
@@ -142,7 +142,7 @@ Spec.describe "data-bind (runtime scanner)" do
     end
     Lilac.register("bind-bad-computed", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error }
     Spec.assert_true errors.length >= 1, "expected error for Computed bind"
@@ -152,7 +152,7 @@ Spec.describe "data-bind (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-bind on non form-control element raises" do
@@ -169,7 +169,7 @@ Spec.describe "data-bind (runtime scanner)" do
     end
     Lilac.register("bind-bad-tag", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error }
     Spec.assert_true errors.length >= 1, "expected error for <div> bind"
@@ -177,7 +177,7 @@ Spec.describe "data-bind (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-bind + data-field on same element raises collision" do
@@ -198,7 +198,7 @@ Spec.describe "data-bind (runtime scanner)" do
     end
     Lilac.register("bind-vs-field", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error }
     Spec.assert_true errors.length >= 1, "expected collision error"
@@ -208,6 +208,6 @@ Spec.describe "data-bind (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

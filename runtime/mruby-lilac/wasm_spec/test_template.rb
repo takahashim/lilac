@@ -7,7 +7,7 @@ Spec.describe "Lilac.template" do
     Spec.assert_equal 1, t.to_js[:nodeType].to_i
     Spec.assert_equal "ok", t.to_js[:className].to_s
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "missing template raises Lilac::Error" do
@@ -21,7 +21,7 @@ Spec.describe "Lilac.template" do
     end
     Spec.assert_true !err.nil?
     Spec.assert_true err.message.include?("nope")
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "empty template raises Lilac::Error" do
@@ -36,7 +36,7 @@ Spec.describe "Lilac.template" do
     Spec.assert_true !err.nil?
     Spec.assert_true err.message.include?("Empty")
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "refs-yielding form fills text via data-ref" do
@@ -48,7 +48,7 @@ Spec.describe "Lilac.template" do
     inner = t.to_js.call(:querySelector, "[data-ref=\"t\"]")
     Spec.assert_equal "hello", inner[:textContent].to_s
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Template#refs is accessible after construction (not just in block)" do
@@ -59,7 +59,7 @@ Spec.describe "Lilac.template" do
     inner = t.to_js.call(:querySelector, "[data-ref=\"t\"]")
     Spec.assert_equal "world", inner[:textContent].to_s
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "missing template ref raises Lilac::Error" do
@@ -75,7 +75,7 @@ Spec.describe "Lilac.template" do
     Spec.assert_true !err.nil?
     Spec.assert_true err.message.include?("nonexistent")
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Template.new wraps any DOM element (escape hatch)" do
@@ -94,7 +94,7 @@ Spec.describe "Lilac.template" do
     t.attr("data-id", "42")
     Spec.assert_equal "42", t.attr("data-id")
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Template#attr coerces non-String values via to_s" do
@@ -104,7 +104,7 @@ Spec.describe "Lilac.template" do
     t.attr("data-id", 42)
     Spec.assert_equal "42", t.attr("data-id")
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Template#attr returns nil for unset attributes and supports remove" do
@@ -116,7 +116,7 @@ Spec.describe "Lilac.template" do
     t.attr("data-keep", nil)
     Spec.assert_true t.attr("data-keep").nil?
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "invalid data-template name raises Lilac::Error" do
@@ -149,7 +149,7 @@ Spec.describe "Lilac.template" do
     Spec.assert_true !err.nil?
     Spec.assert_true err.message.include?("Missing template ref")
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "valid name shapes (letter / digit / underscore / hyphen) are accepted" do
@@ -164,7 +164,7 @@ Spec.describe "Lilac.template" do
     t.refs[:"x_y-z9"].text = "b"
     Spec.assert_equal "a", t.to_js.call(:querySelector, "[data-ref='x']")[:textContent].to_s
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end
 
@@ -189,7 +189,7 @@ Spec.describe "bind_list with Template" do
     end
     Lilac.register "bl-tmpl-1", klass
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     list = doc.call(:querySelector, "[data-ref='list']")
     Spec.assert_equal 2, list[:children][:length].to_i
@@ -198,13 +198,13 @@ Spec.describe "bind_list with Template" do
     items_sig.update do |arr|
       arr.map { |it| it[:id] == 1 ? {id: 1, t: "A!"} : it }
     end
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     Spec.assert_equal "A!", list[:children][0].call(:querySelector, "[data-ref='t']")[:textContent].to_s
     Spec.assert_false list[:children][0] == node_a_before
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "2-arg block reuses prev Template (in-place mutation)" do
@@ -229,7 +229,7 @@ Spec.describe "bind_list with Template" do
     end
     Lilac.register "bl-tmpl-2", klass
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     list = doc.call(:querySelector, "[data-ref='list']")
     node_a_before = list[:children][0]
@@ -246,7 +246,7 @@ Spec.describe "bind_list with Template" do
     Spec.assert_equal "ALPHA!", list[:children][0].call(:querySelector, "[data-ref='t']")[:textContent].to_s
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "raw JS::Object return raises clear error" do
@@ -276,7 +276,7 @@ Spec.describe "bind_list with Template" do
 
     Lilac.logger = nil
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "managed template mode (template: kwarg) clones and mutates in place" do
@@ -299,7 +299,7 @@ Spec.describe "bind_list with Template" do
     end
     Lilac.register "bl-mgd-1", klass
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     list = doc.call(:querySelector, "[data-ref='list']")
     Spec.assert_equal 2, list[:children][:length].to_i
@@ -314,7 +314,7 @@ Spec.describe "bind_list with Template" do
     Spec.assert_equal "ALPHA!", list[:children][0].call(:querySelector, "[data-ref='t']")[:textContent].to_s
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "managed template mode ignores block return value" do
@@ -336,14 +336,14 @@ Spec.describe "bind_list with Template" do
     end
     Lilac.register "bl-mgd-2", klass
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     list = doc.call(:querySelector, "[data-ref='list']")
     Spec.assert_equal 1, list[:children][:length].to_i
     Spec.assert_equal "x", list[:children][0].call(:querySelector, "[data-ref='t']")[:textContent].to_s
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "non-Template / non-String return raises clear error" do
@@ -371,6 +371,6 @@ Spec.describe "bind_list with Template" do
 
     Lilac.logger = nil
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

@@ -10,19 +10,19 @@ Spec.describe "data-attr-X (runtime scanner)" do
 
     Lilac.register("attr-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     btn = body.call(:querySelector, "button")
     Spec.assert_equal "close", btn.call(:getAttribute, "aria-label").to_s
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"attr-rt\"]"))
     inst.label.value = "dismiss"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "dismiss", btn.call(:getAttribute, "aria-label").to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-attr-onclick (banned) raises via logger.error" do
@@ -39,7 +39,7 @@ Spec.describe "data-attr-X (runtime scanner)" do
 
     Lilac.register("ban-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error && entry[2].to_s.include?("banned") }
     Spec.assert_equal 1, errors.length
@@ -47,6 +47,6 @@ Spec.describe "data-attr-X (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

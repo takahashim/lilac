@@ -88,6 +88,20 @@ module Lilac
       return view if !view.js_null?
       JS.global
     end
+
+    # Yield to the host event loop so queued microtasks (Promise then,
+    # MutationObserver callbacks) and timers drain. Spec authors call
+    # this to let bound effects propagate before asserting. Replaces
+    # the `JS.eval_javascript("new Promise(r => setTimeout(r, N))").await`
+    # idiom — works identically under browser/Node and the wasmtime-rb
+    # Ruby host.
+    def flush_async!(delay_ms = 0)
+      promise = JS.global[:Promise].new(JS.callback { |resolve, _reject|
+        JS.global.call(:setTimeout, resolve, delay_ms)
+      })
+      promise.await
+      nil
+    end
   end
 
   # Default logger. `warn(msg)` and `error(label, error, source:)` are

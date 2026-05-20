@@ -38,6 +38,41 @@ class MrubyWasm
           nil
         end
       end
+
+      # `new Promise(executor)` — runs executor synchronously with
+      # (resolve, reject) callbacks. Used by `Lilac.flush_async!` (and
+      # any user code that builds Promises Ruby-natively).
+      def __js_new__(args)
+        executor = args[0]
+        promise = PromiseValue.new(@window)
+        resolve = PromiseSettler.new(promise, fulfilled: true)
+        reject  = PromiseSettler.new(promise, fulfilled: false)
+        if executor.respond_to?(:__js_call__)
+          executor.__js_call__("call", [resolve, reject])
+        elsif executor.respond_to?(:call)
+          executor.call(resolve, reject)
+        end
+        promise
+      end
+    end
+
+    # Adapter so a Ruby-side executor can deliver resolve/reject through
+    # the same `__js_call__("call", args)` interface that the scheduler
+    # and JS bridge use for callbacks.
+    class PromiseSettler
+      def initialize(promise, fulfilled:)
+        @promise = promise
+        @fulfilled = fulfilled
+      end
+
+      def __js_call__(_method, args)
+        if @fulfilled
+          @promise.fulfill(args[0])
+        else
+          @promise.reject(args[0])
+        end
+        nil
+      end
     end
 
     class PromiseValue

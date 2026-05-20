@@ -42,7 +42,7 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
 
     Lilac.register("TodoList", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     titles = -> {
       list = doc.call(:querySelectorAll, "[data-ref=\"lilT\"]")
@@ -53,7 +53,7 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
     # Append a new item — bind_list reconciles, adds one DOM node.
     inst = Lilac.find_for_element(doc.call(:querySelector, "[data-component=\"TodoList\"]"))
     inst.todos.value = inst.todos.value + [todo_class.new(id: "c", title: "third")]
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal ["first", "second", "third"], titles.call
 
     # Reorder by key — existing nodes move, no new <li> created.
@@ -62,12 +62,12 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
       todo_class.new(id: "a", title: "first"),
       todo_class.new(id: "b", title: "second"),
     ]
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal ["third", "first", "second"], titles.call
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-on inside data-each passes the item to the handler" do
@@ -108,16 +108,16 @@ Spec.describe "data-each / data-key directives (lilac-cli codegen target)" do
 
     Lilac.register("TodoList", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     inst = Lilac.find_for_element(doc.call(:querySelector, "[data-component=\"TodoList\"]"))
     buttons = doc.call(:querySelectorAll, "[data-ref=\"lilB\"]")
     buttons[1].call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal ["y"], inst.removed
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

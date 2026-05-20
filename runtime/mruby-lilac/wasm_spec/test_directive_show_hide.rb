@@ -16,7 +16,7 @@ Spec.describe "data-show / data-hide directives (lil-hidden class toggle)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     target = body.call(:querySelector, "[data-ref=\"gS\"]")
     has = ->() { target[:classList].call(:contains, "lil-hidden").js_bool }
@@ -25,16 +25,16 @@ Spec.describe "data-show / data-hide directives (lil-hidden class toggle)" do
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     inst.visible.value = false
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_true has.call
 
     inst.visible.value = true
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_false has.call
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-hide: lil-hidden present when signal is truthy, absent when falsy" do
@@ -54,7 +54,7 @@ Spec.describe "data-show / data-hide directives (lil-hidden class toggle)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     target = body.call(:querySelector, "[data-ref=\"gH\"]")
     has = ->() { target[:classList].call(:contains, "lil-hidden").js_bool }
@@ -63,11 +63,11 @@ Spec.describe "data-show / data-hide directives (lil-hidden class toggle)" do
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     inst.loading.value = true
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_true has.call
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

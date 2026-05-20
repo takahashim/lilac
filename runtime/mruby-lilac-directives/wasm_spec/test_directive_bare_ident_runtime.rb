@@ -18,7 +18,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.register("bare-text-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     spans = body.call(:querySelectorAll, "span")
     Spec.assert_equal 2, spans[:length].to_i
@@ -27,7 +27,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-bind='field' two-way binds to row's nested Signal" do
@@ -49,7 +49,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.register("bare-bind-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     inputs = body.call(:querySelectorAll, "input")
     Spec.assert_equal "alpha", inputs[0][:value].to_s
@@ -58,18 +58,18 @@ Spec.describe "bare ident value (data-each scope)" do
     inst = Lilac.find_for_element(
       body.call(:querySelector, "[data-component='bare-bind-rt']"))
     inst.items.value[0]["name"].value = "gamma"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "gamma", inputs[0][:value].to_s
 
     ev = JS.global[:document][:defaultView][:Event]
     inputs[1][:value] = "delta"
     inputs[1].call(:dispatchEvent, ev.new("input", JS.object(bubbles: true)))
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "delta", inst.items.value[1]["name"].value
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "child component inside data-each auto-fills props from item" do
@@ -98,7 +98,7 @@ Spec.describe "bare ident value (data-each scope)" do
       '</ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     lis = body.call(:querySelectorAll, "[data-component='autofill-child']")
     Spec.assert_equal 2, lis[:length].to_i
@@ -111,7 +111,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "explicit data-prop-X overrides auto-fill" do
@@ -137,7 +137,7 @@ Spec.describe "bare ident value (data-each scope)" do
       '</ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     li = body.call(:querySelector, "[data-component='autofill-override-child']")
     inst = Lilac.find_for_element(li)
@@ -146,7 +146,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "auto-filled props update on row reuse" do
@@ -175,7 +175,7 @@ Spec.describe "bare ident value (data-each scope)" do
       '</ul></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     parent = Lilac.find_for_element(
       body.call(:querySelector, "[data-component='autofill-reuse-parent']"))
@@ -183,7 +183,7 @@ Spec.describe "bare ident value (data-each scope)" do
       { "id" => 1, "title" => "alpha-updated" },
       { "id" => 2, "title" => "beta-updated" },
     ]
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     lis = body.call(:querySelectorAll, "[data-component='autofill-reuse-child']")
     c1 = Lilac.find_for_element(lis[0])
@@ -193,7 +193,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-prop-X='todo' (bare) is treated as literal, not auto-fill" do
@@ -211,7 +211,7 @@ Spec.describe "bare ident value (data-each scope)" do
       '<div data-component="literal-child" data-prop-status="todo"></div></div>'
 
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     inst = Lilac.find_for_element(
       body.call(:querySelector, "[data-component='literal-child']"))
@@ -219,7 +219,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "bare ident outside data-each in value-binding silent-skips" do
@@ -233,7 +233,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.register("bare-scope-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "span")
     # No item context → silent skip → original text stays.
@@ -241,7 +241,7 @@ Spec.describe "bare ident value (data-each scope)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
 end

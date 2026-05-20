@@ -210,7 +210,7 @@ Spec.describe "Fetchy v2" do
 
     controller = JS.global[:AbortController].new
     JS.global[:__aborter__] = controller
-    JS.eval_javascript('(() => { setTimeout(() => globalThis.__aborter__.abort(), 10); return null; })()')
+    JS.global.call(:setTimeout, JS.callback { controller.call(:abort) }, 10)
 
     err = Spec.assert_raises(Fetchy::AbortError) do
       Fetchy.json("/slow", signal: controller[:signal])

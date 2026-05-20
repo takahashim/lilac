@@ -83,7 +83,7 @@ Spec.describe "Component#resource" do
     Spec.assert_true loading
     Spec.assert_equal nil, error
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 40))").await
+    Lilac.flush_async!(40)
     value, state, loading, error = inst.snapshot
     Spec.assert_equal "Alice", value["name"]
     Spec.assert_equal :ready, state
@@ -91,7 +91,7 @@ Spec.describe "Component#resource" do
     Spec.assert_equal nil, error
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     uninstall_resource_fetch_stub
   end
 
@@ -121,18 +121,18 @@ Spec.describe "Component#resource" do
 
     inst = Lilac.find_for_element(doc.call(:querySelector, "[data-component='resource-stale']"))
     inst.set_user_id(2)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 20))").await
+    Lilac.flush_async!(20)
     value, state = inst.snapshot
     Spec.assert_equal "Fast", value["name"]
     Spec.assert_equal :ready, state
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 60))").await
+    Lilac.flush_async!(60)
     value, state = inst.snapshot
     Spec.assert_equal "Fast", value["name"]
     Spec.assert_equal :ready, state
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     uninstall_resource_fetch_stub
   end
 
@@ -161,7 +161,7 @@ Spec.describe "Component#resource" do
     Lilac.start
 
     inst = Lilac.find_for_element(doc.call(:querySelector, "[data-component='resource-refresh']"))
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     value, state, loading = inst.snapshot
     Spec.assert_equal "Alice", value["name"]
     Spec.assert_equal :ready, state
@@ -173,14 +173,14 @@ Spec.describe "Component#resource" do
     Spec.assert_equal :refreshing, state
     Spec.assert_true loading
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 80))").await
+    Lilac.flush_async!(80)
     value, state, loading = inst.snapshot
     Spec.assert_equal "Bob", value["name"]
     Spec.assert_equal :ready, state
     Spec.assert_false loading
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     uninstall_resource_fetch_stub
   end
 
@@ -211,6 +211,6 @@ Spec.describe "Component#resource" do
     Spec.assert_equal 10, inst.value
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

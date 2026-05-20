@@ -560,25 +560,14 @@ class MrubyWasm
     end
   end
 
+  # Minimal JS source evaluator — recognizes only literal values
+  # (true / false / null / numbers / quoted strings / array / object
+  # literals) and a handful of constructor shapes (`new EventTarget()`
+  # / `new Event(...)` / `new Error(...)`). Anything else (IIFE
+  # installers, etc.) returns nil. Spec code that needs async waiting
+  # should call `Lilac.flush_async!` instead of constructing Promises
+  # via this path.
   def evaluate_js_source(src)
-    # Pattern: `setTimeout(() => globalThis.X.method(), delay)` —
-    # commonly used by Fetchy specs to schedule an abort. We can't
-    # interpret arbitrary JS, but this specific shape can be lifted
-    # into a host-side scheduler.set_timeout call.
-    if (m = src.match(/setTimeout\(\(\)\s*=>\s*globalThis\.(\w+)\.(\w+)\(\)\s*,\s*(\d+)\)/))
-      target_key, method_name, delay = m[1], m[2], m[3].to_i
-      window = @handles[1]
-      target = window.respond_to?(:globals) ? window.globals[target_key] : nil
-      if target.respond_to?(:__js_call__) && window.respond_to?(:scheduler)
-        window.scheduler.set_timeout(
-          ->(*_args) { target.__js_call__(method_name, []) },
-          delay
-        )
-      end
-      # The original returns `null` so the test's installer chain works.
-      return nil
-    end
-
     value = parse_js_expression(src)
     return value unless value == :__unsupported__
 
@@ -593,12 +582,6 @@ class MrubyWasm
     return code[1..-2] if quoted_string?(code)
     return code.to_i if code.match?(/\A-?\d+\z/)
     return code.to_f if code.match?(/\A-?\d+\.\d+\z/)
-
-    if (match = code.match(/\APromise\.(resolve|reject)\((.*)\)\z/m))
-      ctor = @handles[1].__js_get__("Promise")
-      value = parse_js_expression(match[2].strip)
-      return ctor.__js_call__(match[1], [value == :__unsupported__ ? nil : value])
-    end
 
     if code.start_with?("[") && code.end_with?("]")
       inner = code[1...-1].strip
@@ -628,7 +611,6 @@ class MrubyWasm
 
   def parse_js_constructor(src)
     code = src.strip
-    window = @handles[1]
 
     if code == "new EventTarget()"
       return Dom::StandaloneEventTarget.new
@@ -644,22 +626,7 @@ class MrubyWasm
       return Dom::ErrorValue.new(arg)
     end
 
-    if (match = code.match(/\Anew Promise\(r => setTimeout\(r, (\d+)\)\)\z/m))
-      return delayed_promise(window, match[1].to_i, nil)
-    end
-
-    if (match = code.match(/\Anew Promise\(\(resolve\) => setTimeout\(\(\) => resolve\((.+)\), (\d+)\)\)\z/m))
-      value = parse_js_expression(match[1].strip)
-      return delayed_promise(window, match[2].to_i, value)
-    end
-
     nil
-  end
-
-  def delayed_promise(window, delay_ms, value)
-    promise = Dom::PromiseValue.new(window)
-    window.scheduler.set_timeout(proc { promise.fulfill(value) }, delay_ms)
-    promise
   end
 
   def strip_wrapping_parens(src)

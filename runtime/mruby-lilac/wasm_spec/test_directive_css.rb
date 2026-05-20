@@ -16,7 +16,7 @@ Spec.describe "data-css-X directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     target = body.call(:querySelector, "[data-ref=\"lilB\"]")
     read = ->() { target[:style].call(:getPropertyValue, "--progress").to_s }
@@ -25,17 +25,17 @@ Spec.describe "data-css-X directive (lilac-cli codegen target)" do
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     inst.percent.value = "78"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "78", read.call
 
     # nil → CSS variable removed (set_style nil/false → removeProperty)
     inst.percent.value = nil
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "", read.call
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-css-theme-color works for hyphenated property names" do
@@ -55,13 +55,13 @@ Spec.describe "data-css-X directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     target = body.call(:querySelector, "[data-ref=\"lilB\"]")
     Spec.assert_equal "#ff0000", target[:style].call(:getPropertyValue, "--theme-color").to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

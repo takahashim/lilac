@@ -87,7 +87,7 @@ Spec.describe "Component mount + refs + events" do
     el.call(:remove)
     # Allow MutationObserver microtask to flush. CI runners under load
     # need several drains before the MO callback actually fires.
-    5.times { JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await }
+    5.times { Lilac.flush_async! }
 
     Spec.assert_equal [:ran], cleaned
 
@@ -135,7 +135,7 @@ Spec.describe "Component mount + refs + events" do
     Spec.assert_equal "A", captured[:text]
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#attr reads / writes / removes HTML attributes" do
@@ -168,7 +168,7 @@ Spec.describe "Component mount + refs + events" do
     Spec.assert_equal "primary", captured[:via_data]
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Component#selector helper works inside bind/class flows" do
@@ -206,6 +206,6 @@ Spec.describe "Component mount + refs + events" do
     Spec.assert_true list[:children][2][:classList].call(:contains, "active").js_bool
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

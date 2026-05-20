@@ -21,7 +21,7 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.register("each-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     lis = body.call(:querySelectorAll, "[data-component=\"each-rt\"] li")
     Spec.assert_equal 2, lis[:length].to_i
@@ -34,7 +34,7 @@ Spec.describe "data-each (runtime scanner)" do
       { id: 2, name: "blueberry" },
       { id: 3, name: "cherry" },
     ]
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     lis = body.call(:querySelectorAll, "[data-component=\"each-rt\"] li")
     Spec.assert_equal 3, lis[:length].to_i
@@ -43,7 +43,7 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-each row data-on-click receives (item, event) and fires method" do
@@ -67,19 +67,19 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.register("each-click-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     btns = body.call(:querySelectorAll, "[data-component=\"each-click-rt\"] button")
     btns[1].call(:click)
     btns[0].call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"each-click-rt\"]"))
     Spec.assert_equal [20, 10], inst.picked
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-each without data-key falls back to object_id keying" do
@@ -100,7 +100,7 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.register("each-nokey-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     lis = body.call(:querySelectorAll, "[data-component=\"each-nokey-rt\"] li")
     Spec.assert_equal 2, lis[:length].to_i
@@ -108,7 +108,7 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "nested data-each: inner `it` shadows outer `it`" do
@@ -137,7 +137,7 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.register("each-nested-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     names = body.call(:querySelectorAll, "[data-component=\"each-nested-rt\"] .g-name")
     Spec.assert_equal "Fruit",  names[0][:textContent].to_s
@@ -151,7 +151,7 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-each on Data-attribute items (bare ident via public_send)" do
@@ -177,7 +177,7 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.register("each-data-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     lis = body.call(:querySelectorAll, "[data-component=\"each-data-rt\"] li")
     Spec.assert_equal "first",  lis[0][:textContent].to_s
@@ -185,6 +185,6 @@ Spec.describe "data-each (runtime scanner)" do
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

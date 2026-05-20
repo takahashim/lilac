@@ -10,14 +10,14 @@ Spec.describe "RefElement#set_style (data-css-X compile target)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     el = body.call(:querySelector, "[data-ref=\"el\"]")
     # getPropertyValue is the canonical read path for CSS custom properties.
     Spec.assert_equal "teal", el[:style].call(:getPropertyValue, "--theme-color").to_s.strip
     Spec.assert_equal "75", el[:style].call(:getPropertyValue, "--progress").to_s.strip
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "set_style with nil removes the CSS custom property" do
@@ -31,12 +31,12 @@ Spec.describe "RefElement#set_style (data-css-X compile target)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     el = body.call(:querySelector, "[data-ref=\"el\"]")
     Spec.assert_equal "", el[:style].call(:getPropertyValue, "--theme-color").to_s.strip
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "set_style with false removes the CSS custom property (data-css-X falsy semantics)" do
@@ -50,12 +50,12 @@ Spec.describe "RefElement#set_style (data-css-X compile target)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     el = body.call(:querySelector, "[data-ref=\"el\"]")
     Spec.assert_equal "", el[:style].call(:getPropertyValue, "--enabled").to_s.strip
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "set_style for standard CSS property still works (regression guard)" do
@@ -69,12 +69,12 @@ Spec.describe "RefElement#set_style (data-css-X compile target)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     el = body.call(:querySelector, "[data-ref=\"el\"]")
     Spec.assert_equal "red", el[:style].call(:getPropertyValue, "color").to_s.strip
     Spec.assert_equal "blue", el[:style].call(:getPropertyValue, "background-color").to_s.strip
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

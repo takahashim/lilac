@@ -19,24 +19,24 @@ Spec.describe "data-on-X directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     btn = body.call(:querySelector, "[data-ref=\"lilB\"]")
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     Spec.assert_equal 0, inst.count.value
 
     btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal 1, inst.count.value
 
     btn.call(:click)
     btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal 3, inst.count.value
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "custom event name with hyphens routes via quoted symbol" do
@@ -58,15 +58,15 @@ Spec.describe "data-on-X directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     inst.refs.lilB.dispatch("card-deleted", detail: { "id" => 42 })
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal [42], inst.received
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

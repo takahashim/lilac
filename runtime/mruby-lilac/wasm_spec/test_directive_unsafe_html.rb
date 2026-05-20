@@ -14,18 +14,18 @@ Spec.describe "data-unsafe-html directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     target = body.call(:querySelector, "[data-ref=\"gH\"]")
     Spec.assert_equal "<em>hello</em>", target[:innerHTML].to_s.strip
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     inst.content.value = "<strong>updated</strong>"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "<strong>updated</strong>", target[:innerHTML].to_s.strip
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

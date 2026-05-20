@@ -16,7 +16,7 @@ Spec.describe "data-text directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "[data-ref=\"lilT\"]")
     Spec.assert_equal "hello", span[:textContent].to_s
@@ -24,12 +24,12 @@ Spec.describe "data-text directive (lilac-cli codegen target)" do
     root = body.call(:querySelector, "[data-component=\"C\"]")
     inst = Lilac.find_for_element(root)
     inst.msg.value = "world"
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "world", span[:textContent].to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "bind refs.lilN, text: @computed reacts to dependency changes" do
@@ -50,18 +50,18 @@ Spec.describe "data-text directive (lilac-cli codegen target)" do
 
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     span = body.call(:querySelector, "[data-ref=\"lilT\"]")
     Spec.assert_equal "Count: 0", span[:textContent].to_s
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"C\"]"))
     inst.count.update { |n| n + 5 }
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal "Count: 5", span[:textContent].to_s
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

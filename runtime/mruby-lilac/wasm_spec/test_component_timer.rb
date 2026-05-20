@@ -13,11 +13,11 @@ Spec.describe "Component#timeout" do
     Lilac.register "to-basic", klass
     Lilac.start
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 60))").await
+    Lilac.flush_async!(60)
     Spec.assert_equal [:hit], fired
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
   end
 
   Spec.assert "auto-cancels when component unmounts before delay elapses" do
@@ -34,12 +34,12 @@ Spec.describe "Component#timeout" do
 
     # Direct reset! (not MO via innerHTML clear) makes the
     # cancel-on-unmount deterministic in CI.
-    JS.eval_javascript("new Promise(r => setTimeout(r, 10))").await
+    Lilac.flush_async!(10)
     Lilac.reset!
     body[:innerHTML] = ""
 
     # Wait well past the original delay.
-    JS.eval_javascript("new Promise(r => setTimeout(r, 150))").await
+    Lilac.flush_async!(150)
     Spec.assert_equal [], fired
   end
 
@@ -63,7 +63,7 @@ Spec.describe "Component#timeout" do
     Lilac.register "to-err", klass
     Lilac.start
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 40))").await
+    Lilac.flush_async!(40)
 
     locals = captured.select { |row| row[0] == :local }
     Spec.assert_equal 1, locals.length
@@ -74,7 +74,7 @@ Spec.describe "Component#timeout" do
 
     Lilac.logger = nil
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
   end
 
   Spec.assert "Timer#stop cancels the pending timeout" do
@@ -97,11 +97,11 @@ Spec.describe "Component#timeout" do
     captured_timer.stop
     Spec.assert_true captured_timer.stopped?
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 100))").await
+    Lilac.flush_async!(100)
     Spec.assert_equal [], fired
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 16))").await
+    Lilac.flush_async!(16)
   end
 end
 
@@ -120,11 +120,11 @@ Spec.describe "Component#every" do
     Lilac.register "ev-basic", klass
     Lilac.start
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 80))").await
+    Lilac.flush_async!(80)
     Spec.assert_true counts.length >= 2
 
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 30))").await
+    Lilac.flush_async!(30)
   end
 
   Spec.assert "interval stops after component unmount" do
@@ -139,17 +139,17 @@ Spec.describe "Component#every" do
     Lilac.register "ev-stop", klass
     Lilac.start
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 50))").await
+    Lilac.flush_async!(50)
     Spec.assert_true counts.length >= 1
 
     # Direct reset! avoids MO scheduling latency under CI load — same
     # contract is verified ("interval stops once the component unmounts").
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 30))").await
+    Lilac.flush_async!(30)
     settled = counts.length
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 80))").await
+    Lilac.flush_async!(80)
     Spec.assert_equal settled, counts.length
   end
 
@@ -173,7 +173,7 @@ Spec.describe "Component#every" do
     Lilac.register "ev-err", klass
     Lilac.start
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 60))").await
+    Lilac.flush_async!(60)
 
     locals = captured.select { |row| row[0] == :local }
     Spec.assert_true locals.length >= 2  # interval kept ticking past first raise
@@ -184,7 +184,7 @@ Spec.describe "Component#every" do
 
     Lilac.logger = nil
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 30))").await
+    Lilac.flush_async!(30)
   end
 
   Spec.assert "Timer#stop halts further ticks; double stop is a no-op" do
@@ -202,7 +202,7 @@ Spec.describe "Component#every" do
     Lilac.register "ev-manual", klass
     Lilac.start
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 50))").await
+    Lilac.flush_async!(50)
     Spec.assert_true counts.length >= 1
     captured_timer.stop
     Spec.assert_true captured_timer.stopped?
@@ -210,11 +210,11 @@ Spec.describe "Component#every" do
     Spec.assert_true captured_timer.stopped?
     settled = counts.length
 
-    JS.eval_javascript("new Promise(r => setTimeout(r, 80))").await
+    Lilac.flush_async!(80)
     Spec.assert_equal settled, counts.length
 
     # unmount after manual stop must not raise / double-cancel
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 30))").await
+    Lilac.flush_async!(30)
   end
 end

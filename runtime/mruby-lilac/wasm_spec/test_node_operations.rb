@@ -11,7 +11,7 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     ul = body.call(:querySelector, "ul")
     children = ul[:children]
     Spec.assert_equal 2, children[:length].to_i
@@ -19,7 +19,7 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     Spec.assert_equal "b", children[1][:textContent].to_s
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#append(Template) で template clone を append" do
@@ -35,13 +35,13 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     li = body.call(:querySelector, "ul li.row")
     Spec.assert_true !li.js_null?
     Spec.assert_equal "row content", li[:textContent].to_s
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#append(RefElement) で別 Ref の DOM 要素を移動 (DOM の標準挙動)" do
@@ -54,13 +54,13 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     dst = body.call(:querySelector, "[data-ref=\"dst\"]")
     Spec.assert_equal 1, dst[:children][:length].to_i
     Spec.assert_equal "moved", dst[:children][0].call(:getAttribute, "data-ref").to_s
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#append(String) で text node を末尾に追加 (createTextNode 経由)" do
@@ -73,12 +73,12 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     p = body.call(:querySelector, "p")
     Spec.assert_equal "hello world", p[:textContent].to_s
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#prepend で先頭に child 追加" do
@@ -93,13 +93,13 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     ul = body.call(:querySelector, "ul")
     Spec.assert_equal "first", ul[:children][0][:textContent].to_s
     Spec.assert_equal "second", ul[:children][1][:textContent].to_s
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#remove で DOM から self を削除" do
@@ -112,13 +112,13 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     root = body.call(:querySelector, "[data-component=\"C\"]")
     Spec.assert_equal 1, root[:children][:length].to_i
     Spec.assert_equal "y", root[:children][0][:textContent].to_s
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#remove は nil を返す" do
@@ -132,11 +132,11 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_true result.nil?
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#append は self を返し chain 可能" do
@@ -150,13 +150,13 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     ul = body.call(:querySelector, "ul")
     Spec.assert_equal "ab", ul[:textContent].to_s
     Spec.assert_true chained.is_a?(Lilac::RefElement)
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#before / #after で sibling 挿入" do
@@ -174,14 +174,14 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     ul = body.call(:querySelector, "ul")
     Spec.assert_equal "before", ul[:children][0][:textContent].to_s
     Spec.assert_equal "mid", ul[:children][1][:textContent].to_s
     Spec.assert_equal "after", ul[:children][2][:textContent].to_s
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "RefElement#replace_with で self を別要素に置換、戻り値は nil" do
@@ -197,14 +197,14 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     root = body.call(:querySelector, "[data-component=\"C\"]")
     Spec.assert_equal "STRONG", root[:children][0][:tagName].to_s
     Spec.assert_equal "new", root[:children][0][:textContent].to_s
     Spec.assert_true result.nil?
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Template#remove で template clone 自身を DOM から削除 (auto-mount 経由)" do
@@ -228,19 +228,19 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     Lilac.register("app-c", app_klass)
     Lilac.start
     # auto-mount runs on a MutationObserver microtask; two awaits to settle.
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
+    Lilac.flush_async!
     modal_el = body.call(:querySelector, ".modal")
     Spec.assert_true !modal_el.js_null?
 
     modal_inst = Lilac.find_for_element(modal_el)
     Spec.assert_true !modal_inst.nil?
     modal_inst.close_self
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_true body.call(:querySelector, ".modal").js_null?
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "Template#append で template の root element 配下に child 追加" do
@@ -253,6 +253,6 @@ Spec.describe "Lilac::NodeOperations (Ref / Template の DOM 基本操作)" do
     Spec.assert_equal 1, t.to_js[:children][:length].to_i
     Spec.assert_equal "item", t.to_js[:children][0][:textContent].to_s
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

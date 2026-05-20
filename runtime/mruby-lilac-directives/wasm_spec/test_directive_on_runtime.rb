@@ -11,24 +11,24 @@ Spec.describe "data-on-X (runtime scanner)" do
 
     Lilac.register("on-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     btn = body.call(:querySelector, "button")
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"on-rt\"]"))
     Spec.assert_equal 0, inst.count.value
 
     btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal 1, inst.count.value
 
     btn.call(:click)
     btn.call(:click)
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal 3, inst.count.value
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-on-card-deleted='handle' routes hyphenated custom event" do
@@ -43,16 +43,16 @@ Spec.describe "data-on-X (runtime scanner)" do
 
     Lilac.register("evt-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     inst = Lilac.find_for_element(body.call(:querySelector, "[data-component=\"evt-rt\"]"))
     inst.refs.emitter.dispatch("card-deleted", detail: { "id" => 42 })
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal [42], inst.received
 
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "data-on-click with non-ident value (e.g. `save?`) routes via logger.error" do
@@ -69,7 +69,7 @@ Spec.describe "data-on-X (runtime scanner)" do
 
     Lilac.register("on-bad-rt", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
 
     errors = captured.select { |entry| entry[0] == :error && entry[2].to_s.include?("data-on-click") }
     Spec.assert_equal 1, errors.length
@@ -77,6 +77,6 @@ Spec.describe "data-on-X (runtime scanner)" do
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end

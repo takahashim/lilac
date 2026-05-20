@@ -5,12 +5,12 @@ Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" d
     klass = Class.new(Lilac::Component)
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     root = body.call(:querySelector, "[data-component=\"C\"]")
     Spec.assert_true !Lilac.find_for_element(root).nil?
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "user-defined bind_template_hook fires after setup" do
@@ -23,11 +23,11 @@ Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" d
     end
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     Spec.assert_equal [:setup, :bind_template_hook], order
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "bind_template_hook supplied via included module is invoked" do
@@ -45,12 +45,12 @@ Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" d
     klass.include(mod)
     Lilac.register("C", klass)
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     el = body.call(:querySelector, "[data-ref=\"label\"]")
     Spec.assert_equal "patched", el[:textContent].to_s
     Lilac.reset!
     body[:innerHTML] = ""
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 
   Spec.assert "errors inside bind_template_hook are routed through the logger, not the mount path" do
@@ -70,7 +70,7 @@ Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" d
     # Should NOT raise out of Lilac.start — the begin/rescue inside
     # mount routes the exception through Lilac.logger.error.
     Lilac.start
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
     root = body.call(:querySelector, "[data-component=\"C\"]")
     # Component is still mounted; only the hook errored.
     Spec.assert_true !Lilac.find_for_element(root).nil?
@@ -82,6 +82,6 @@ Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" d
     Lilac.reset!
     body[:innerHTML] = ""
     Lilac.logger = prev_logger
-    JS.eval_javascript("new Promise(r => setTimeout(r, 0))").await
+    Lilac.flush_async!
   end
 end
