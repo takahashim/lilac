@@ -265,7 +265,7 @@ unergonomic になることが分かった:
   しかなく、declarative-first の Lilac 方針(design.md §2.1)と齟齬
 
 receipt example の bind_list → data-each 化作業
-(2026-05-18, `examples/lilac-receipt.html`)で実際にこの摩擦が顕在化した。
+(2026-05-18, `examples/runtime-only/lilac-receipt.html`)で実際にこの摩擦が顕在化した。
 form-spec §2 「現時点で非対応(将来検討): 動的 collection / field array」も
 **この問題の自覚的な棚上げ** として記録されていた。
 
@@ -657,3 +657,354 @@ wsv は Lilac チームが書いた / Ruby stdlib only で zero-dep / TLS と SS
 
 Phase 1 の最小実装(receipt / counter 等で動作する compiled flow)を作って
 動作確認 → 残作業の精度を上げてから判断昇格、という流れを推奨。
+
+---
+
+## コンポーネント scope rule の確定と `Lilac.start` 自動化
+
+### 動機
+
+§18(compiled target 統合)/§19(positional `lilN`)が着地した結果、Lilac
+の component には **3 つの定義場所** が並ぶようになった:
+
+1. `components/*.lil` — SFC 形式の単一ファイル component
+2. page-inline `<X data-component="name">` — page HTML 中に直接書かれた
+   component 要素(class 定義は同 page の `<script type="text/ruby">` 内)
+3. page-inline `<script type="text/ruby">` — page HTML 中のロジック塊
+
+ところが「同名衝突したらどうなるか」「どこに書いた class がどこから見えるか」
+の **scope rule が明文化されていない**。実装上は per-page bundle と VM 境界で
+自然に分離されているが、guard が無いため次の silent failure が起こり得る:
+
+- `.lil` の `Counter` と page-inline `data-component="counter"` が衝突しても
+  page-inline が **黙って上書き**(`synthesize_page_inline_components` の
+  `synthesized[name] = ...`)。user は `.lil` 側が使われていると誤認する
+- 別 page が同名で別実装の page-inline component を持つのは安全だが、
+  user が「同じ名前 → 同じ UI」と思い込んで書くリスクは残る
+- runtime の `Lilac.registry` は「`.lil` 由来 / page-inline 由来」のメタ情報
+  を保持しないので、将来 SPA 的に複数 page worth の bundle を 1 VM に
+  load する設計に踏み込むと意味が崩れる
+
+さらに **`Lilac.start` の責務分布が target 間で非対称**:
+
+- target=full: user が `<script type="text/ruby">` 内に `Lilac.start` を書く
+- target=compiled: builder が bundle 末尾に `Lilac.start` を自動 append
+
+§18 着地までは「compiled で動かすには HTML を書き直す」ことが許容されて
+いたが、現状は同じ markup で両 target を切り替えられるのが原則
+(decisions §1: runtime canonical / CLI optional の方針)。**`Lilac.start`
+だけ target 間で書き方が変わる** のは、これまで潰してきた非対称性の
+最後の残滓。
+
+加えて Ruby の通常の常識 — 「実行開始は明示的に書く」 — からすると、
+user が `Lilac.start` を書かずに済ませる根拠を framework としてどう
+位置づけるかも整理が必要。本 proposal はこれを **「user 空間は宣言、
+framework 空間は dispatch」** という Rails / Stimulus 系の責務配分で
+正当化する(後述)。
+
+### 提案
+
+#### A. component scope rule の明文化と guard 追加
+
+3 階層に整理し、collision を build-time error で潰す。
+
+| 定義場所 | 名前空間 | 可視範囲 | 用途 |
+|---|---|---|---|
+| `components/*.lil` | **project-global** | どの page からも参照可 | 複数 page で共有する部品 |
+| page-inline `<X data-component>` | **page-local** | その page 内 (nested 含む) のみ | その page 専用 compose 単位 |
+| page-inline `<script type="text/ruby">` | **page-local 実行スコープ** | その page の `.mrb` 内 | その page の class 本体 / setup |
+
+**Guard rule**(build-time):
+
+- **R1**: `.lil` と page-inline `data-component` で **同名は build error**
+  (silent override 禁止)。message は `"data-component=#{name} is also
+  defined in components/#{name}.lil — rename one of them"` 等
+- **R2**: 同 page 内で同名 page-inline `data-component` が複数あるのは error
+  (例: `<div data-component="row">` が 2 箇所)
+- **R3**: 異なる page 間で同名 page-inline component を別形に書くのは
+  **error ではないが lint warning**(意図的な isolated UI を許容しつつ、
+  名前再利用の見落としを検出)
+- **R4**: page-inline `<script type="text/ruby">` 内で定義する class 名が
+  `.lil` 由来の class 名と衝突するのは build error
+
+#### B. `Lilac.start` の責務統一
+
+##### B.0 設計の位置づけ — なぜ user が `Lilac.start` を書かなくていいのか
+
+Ruby は通常「実行は明示」が原則(`class Foo; end` を書いただけでは何も
+起きない)。にも関わらず user に `Lilac.start` を書かせない設計を取る
+根拠は、**Lilac の user code を procedural script ではなく declaration
+として位置づける**こと。具体的には:
+
+- user が書く Ruby = `class Counter < Lilac::Component` という **宣言**
+- 「呼ぶ側」 = DOM 上の `<div data-component="counter">` という **dispatch
+  指示**(DOM が dispatch table)
+- 「dispatcher」 = framework 自身
+
+つまり Lilac の user code は **application entry point ではなく library
+side のコード**。Rails で `class PostsController < ApplicationController`
+の中に `rails server` を書かないのと同じ理屈で、Lilac でも `class Counter`
+の隣に `Lilac.start` を書く必要はない。`rails server` がアプリ作者の API
+ではなく Rails 内部の bootstrap routine であるのと同様、`Lilac.start` も
+**framework internal な boot 呼び出し**と位置づける。
+
+比較:
+
+| framework | user が明示 boot を書くか | bootstrap |
+|---|---|---|
+| Rails | No | `rails server` |
+| Stimulus | No | DOMContentLoaded 自動 |
+| Vue 2 | Yes (`new Vue({el})`) | 明示 constructor |
+| React | Yes (`createRoot().render`) | 明示 |
+| **Lilac (本案)** | **No** | bootstrap module 末尾で auto |
+
+これにより「Ruby の明示性原則を破っていない」を成立させる: user 空間は
+**class 定義という宣言 + DOM の data-* 属性という宣言** で全部宣言的、
+boot は user 空間の外(framework 内部)。
+
+##### B.1 `Lilac.start` を idempotent にする(safety net)
+
+```ruby
+# lilac_registry.rb
+def start(root_js = nil)
+  return if @started
+  @started = true
+  # … 既存ロジック
+end
+```
+
+user が明示的に `Lilac.start` を書いた既存 code を壊さないための保険。
+idempotent にしておけば「user が早めに呼ぶ → builder の自動分は no-op」で
+共存できる。`Lilac.reset!`(test 用 / SPA 再起動用)で `@started = false`
+にも戻す。
+
+##### B.2 builder が target を問わず自動で boot を発火
+
+builder が emit する **bootstrap module の末尾** で `Lilac.start` を呼ぶ。
+具体的には:
+
+- target=compiled: 現状通り `.mrb` bundle 末尾に `Lilac.start` を append
+  (`vm.loadBytecode(bundle)` 完了 = 全 user Ruby 評価完了 = boot 発火)
+- target=full: bridge JS が `<script type="text/ruby">` を順次 `evalScript`
+  したループの直後に `vm.evalScript("Lilac.start")` を 1 度だけ呼ぶ
+  (もしくは同等の `<script type="text/ruby">Lilac.start</script>` を
+  `</body>` 直前に builder が inject。どちらでも観測等価)
+
+##### B.3 boot タイミングの仕様
+
+framework boot は **bootstrap module の eval loop 直後** で発火する。
+「全 user Ruby 評価済み」は実行時に検出するのではなく、bootstrap module
+の **コード上の位置として保証される**:
+
+- target=compiled: `vm.loadBytecode(bundle)` の直後。単一 `.mrb`
+  per-page なので、これ以外に user Ruby は存在しない
+- target=full: bridge が `document.querySelectorAll('script[type="text/ruby"]')`
+  で拾った全 tag を `evalScript` し終えた直後
+
+これは framework 自身が eval loop を所有しているため決定論的に確定する。
+event を観測する必要はない。
+
+boot 時の browser lifecycle 上の位置:
+
+```
+1. browser が HTML parse
+2. <script type="module"> は defer されて parse blocking しない
+3. parse 完了
+4. module script を document order で実行
+5. Lilac bootstrap module:
+   a. wasm load
+   b. user Ruby を全 eval (.mrb load or text/ruby tag 順次)
+   c. ★ framework auto-boot
+6. DOMContentLoaded fire(deferred + module 実行後)
+7. 外部 resource load → load event
+```
+
+つまり **DOMContentLoaded を明示 listen する必要はない**: ES module
+script の暗黙 defer により bootstrap が走り始める時点で既に DOM 全体が
+parse 済み。`data-component` 要素も `<script type="text/ruby">` 要素も
+全部存在する。
+
+##### B.4 position 依存性の境界(invariant)
+
+上記が成立する前提条件:
+
+| script の種別 | 位置依存性 | 理由 |
+|---|---|---|
+| `<script type="module">` bootstrap | **非依存** | browser が暗黙 defer |
+| `<script defer>` bootstrap | **非依存** | 明示 defer |
+| `<script>` (classic) bootstrap | **依存(壊れる)** | parse blocking、`<head>` だと DOM 未生成 |
+| `<script async>` bootstrap | **依存(壊れる)** | DOMContentLoaded 待たない |
+| `<script type="text/ruby">` user code | **完全非依存** | browser が実行しない。bridge が parse 完了後に querySelectorAll で拾う |
+| `.lil` ファイル | **N/A** | browser に届かない(CLI が build 時に消費) |
+
+順序の話で唯一気にすべきは target=full mode で user が前方参照を書いた
+ケース(`class B < A` が `class A` より前に置かれる等):
+
+```html
+<!-- target=full では失敗(bridge が document order で eval) -->
+<script type="text/ruby">class B < A; end</script>
+<script type="text/ruby">class A; end</script>
+```
+
+これは browser の defer とは無関係で、単に「Ruby の通常の load order」の
+問題。target=compiled では build 時 concat なので CLI が順序を決め、user
+の物理位置は完全無関係。
+
+framework としては builder emit / scaffold template で **常に
+`<script type="module">` 形式の bootstrap** を物理的に保証することで
+invariant を維持する。user が手書きで bootstrap を作り直さない限り壊れ
+ない。
+
+##### B.5 明示 boot の escape hatch
+
+「全 user Ruby 評価完了 = bootstrap module 末尾」という invariant が
+崩れるのは、user Ruby 自体が **非同期に追加コードを呼び込む** ケース:
+
+- 動的 `.mrb` load(`JS.eval("import('./extra.mrb')")` 等)
+- SSR hydration で server side state を後追い反映
+- `await fetch(...)` で初期 data を取ってから mount したい
+
+これらは現状すべて out of scope。要件が立った時点で hook API を別途
+検討する:
+
+```ruby
+# 将来の hook 例(本 proposal では決めない)
+Lilac.start_when do
+  await(fetch_initial_state)
+end
+```
+
+本 proposal では「現状の用途では bootstrap module 末尾 = 全評価完了が
+位置として確定する」という invariant だけを確定させる。
+
+##### B.6 user が明示的に `Lilac.start` を書いた場合
+
+idempotent (B.1) なので重複 boot は起きない。boot 前 setup
+(`Lilac.logger.level = :debug` 等)を早めに走らせたい人は今まで通り
+明示してよい。書かなければ framework が握る。
+
+将来的には `Lilac.configure { ... }` のような **宣言的 hook** で書くのが
+正式ルートになる想定(class 定義と同じ初期化フェーズで eval され、boot
+より必ず前に走る)。本 proposal ではこの新 API は導入せず、`Lilac.start`
+を public な escape hatch として残す。
+
+#### C. 既存 example の `Lilac.start` 削除(別 commit / optional)
+
+`examples/7guis/pages/*.html` 等で明示的に書いている `Lilac.start` 行を
+削除して新方針に揃える。idempotent なので残しても動くが、doc 例として
+「framework convention に従う」姿を見せる意義はある。
+
+### 利点
+
+- **scope の認知負荷が下がる**: 「どこに書いたら誰から見えるか」が表で
+  説明できる。今は実装を読まないと挙動が分からない
+- **silent shadowing 事故の防止**: R1 が無いと、`.lil` を後から追加して
+  既存 page の挙動が壊れる事故が検出されない
+- **target 切替の対称性**: 同じ HTML / Ruby のまま `lilac build --target full`
+  と `--target compiled` を交互に叩ける(decisions §1 と整合)
+- **user 空間の宣言性**: user code が「class 定義 + DOM の data-* 属性」
+  という宣言だけで完結し、procedural な entry point を含まない。Rails
+  / Stimulus と同じ責務配分になり、Ruby の明示性原則(`class Foo; end`
+  は何もしない)とも整合
+- **boot 位置の framework 内部化**: 将来 boot 前に何か挟みたくなった時
+  (router 初期化、theme 適用 etc.)、framework 内 1 箇所で済む
+- **boot タイミングの決定論性**: 「全 user Ruby 評価済み」を event 検出
+  ではなく bootstrap module 上の位置として定義することで、検出機構が
+  不要・確実・テスト容易になる
+- **doc 化の容易さ**: scope rule と boot invariant を表 2 つで spec に
+  書けるので、Rails integration や Router proposal が依存できる土台になる
+
+### 現状の workaround
+
+- scope 衝突は user が手で grep して気付くしかない
+- target 切替時の `Lilac.start` 書き換えは user 責務(現状は examples
+  内で compiled 想定で書かれているため、full に切り替えると boot しない)
+
+### 実装的課題
+
+**A (scope guard) の実装**:
+
+- `synthesize_page_inline_components` (`builder.rb:282`) に collision
+  check を追加。`components.key?(name)` が真なら R1 違反として raise
+- 同一 page 内の重複は `targets` 走査ループで `seen = Set.new` を持ち
+  R2 違反を raise
+- R3 は cross-page 集計が必要なので `Builder#build` 全体で
+  `page_inline_signatures = { name => [content_hash, ...] }` を持って
+  終端で diff(hash 一致なら warning も出さない)
+- R4 は inline-script 内の class 名抽出が必要 — `ScriptAnalyzer` の
+  既存 Prism walk を再利用して `ClassNode#constant_path` を採取し
+  `.lil` 由来名と突き合わせる
+
+**B (`Lilac.start` 統一) の実装**:
+
+- runtime: `Lilac::Registry#start` 冒頭に `return if @started; @started = true`
+  (B.1)
+- builder: 現状 compiled だけ `bundle_scripts + ["Lilac.start"]` している
+  `build_injection` (`builder.rb:435` 付近)を target 分岐の外に出す(B.2)。
+  - target=compiled は現状維持(bundle 末尾 append)
+  - target=full は `<script type="text/ruby">Lilac.start</script>` を
+    `</body>` 直前に inject、または bridge 側に「全 eval 後に 1 度だけ
+    `Lilac.start` を呼ぶ」routine を追加(後者は bridge package の
+    変更を伴うので前者が低コスト)
+- `Lilac.reset!`(test 用 / SPA 再起動用)で `@started = false` も戻す
+  必要あり(B.1)
+- bootstrap が常に `<script type="module">` で emit されることを
+  builder template / scaffold 側で確実に保証(B.4 invariant)。既存
+  `render_compiled_boot_module` および `templates/pages/index.html` は
+  既に module 形式なので、現状ではそのまま
+
+**テスト**:
+
+- A: builder spec に collision の 4 ケース(R1〜R4)を追加
+- B: full / compiled 双方で「user が `Lilac.start` を書かない」ケースを
+  golden(現状は full で boot しないので新規)
+- B: idempotency: user が `Lilac.start` を 2 回呼んでも mount が 2 回
+  走らないこと(`Counter` の click handler が 2 重 bind されない等)
+- B (位置 invariant): bootstrap script を `<head>` 内に置いた page でも
+  正常 boot する parity test(module deferral 前提の保証)
+- B (順序): target=full mode で 2 つの `<script type="text/ruby">` が
+  document order に従って eval されることの確認(前方参照 case)
+
+### 関連する確定判断 / 既存提案
+
+- **decisions §1**(Runtime canonical / CLI optional)— B の boot 統一は
+  「target 切替が user code を変えない」原則の補完
+- **decisions §18**(compiled target 単一コマンド deploy)— 本案は §18
+  が露呈させた scope / boot の非対称性を解消する後続整備
+- **decisions §19**(positional `lilN`)— A の R2 (同 page 内重複) は
+  §19 の per-scope 一意性と同じ精神(silent collision を build-time に
+  落とす)
+- **§17**(codegen を binding canonical に)— page-inline component も
+  codegen 経路を通る(`used_inline` 含む)ので、§17 の SSOT 戦略に乗る
+
+### ステータス
+
+未判断。判断の論点:
+
+- **scope rule の名前空間語彙**: 「project-global / page-local」で固める
+  か、Rails integration で `app/components/` を導入する将来を見越して
+  「app-global / page-local」と呼ぶか
+- **R3 (cross-page 同名 warning) の severity**: warning にとどめるか
+  error にするか。warning だと examples が複数 page で `<button
+  data-component="primary-button">` のような pattern を共有しにくい
+- **`Lilac.reset!` の semantics**: idempotency guard を入れるなら
+  「mount を全部捨てて再起動する」既存の `reset!` が `@started` も
+  戻すべきか、別 API として `Lilac.restart` を切るか
+- **`Lilac.start` を public API として残すか**: B.0 の位置づけだと
+  `Lilac.start` は framework internal だが、idempotent な escape hatch
+  として残す案を取った。完全に hide して `Lilac.configure` のような宣言
+  hook だけにする(deprecate `Lilac.start`)選択肢もある — 本 proposal
+  では deprecate せず、将来の hook 議論に委ねる
+- **boot inject の位置**: full mode で `<script type="text/ruby">Lilac.start</script>`
+  を `</body>` 直前に置くと、user の inline script の **後ろ** に並ぶ。
+  user が boot 前 setup を書きたい場合 user script の位置で十分か、
+  framework が `Lilac.before_start { ... }` のような hook を提供すべきか
+- **async load 系を将来サポートするか**: B.5 の escape hatch (`Lilac.start_when`
+  等)は本 proposal では out of scope だが、SPA / SSR hydration を真面目に
+  サポートする方向に進むと再浮上する。その時点で「bootstrap module 末尾
+  = 全評価完了」invariant をどう拡張するか
+
+A と B は独立に決められるが、合わせて入れる方が「scope と boot の
+責務を framework 側に確定させる」というメッセージとして一貫する。
+実装規模は A=中(~250 行 + test)、B=小(~80 行 + test)程度。
+
