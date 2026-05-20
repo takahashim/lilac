@@ -4,6 +4,7 @@ require "wasmtime"
 require "json"
 
 require_relative "dom/dispatch"
+require_relative "dom/event"
 require_relative "dom/world"
 require_relative "dom/document"
 require_relative "dom/element"
@@ -265,12 +266,20 @@ class MrubyWasm
     # `new Object` / `new Array` produce fresh Hash / Array under a new
     # handle so subsequent js_set / js_call writes have somewhere to
     # land. Other constructors are unsupported here (return 0).
-    define.call("js_new", [:i32, :i32, :i32], [:i32]) do |_c, ctor, _ap, _ac|
-      case @handles[ctor]
-      when :object_ctor then store_handle({})
-      when :array_ctor  then store_handle([])
-      else 0
-      end
+    define.call("js_new", [:i32, :i32, :i32], [:i32]) do |caller, ctor, ap, ac|
+      args = read_handle_args(caller, ap, ac)
+      target = @handles[ctor]
+      value =
+        if target.respond_to?(:__js_new__)
+          target.__js_new__(args)
+        else
+          case target
+          when :object_ctor then {}
+          when :array_ctor  then []
+          else nil
+          end
+        end
+      handle_for(value)
     end
     # (handle) -> length. Honors host-registered byte buffers so eval
     # source / irep bytes can flow into the wasm via the handle table.

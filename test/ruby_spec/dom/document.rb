@@ -6,7 +6,10 @@ class MrubyWasm
     # Session 2 adds wrapper caching so repeated traversals
     # (`body.children[0].parentElement`) preserve DOM identity.
     class Document
+      include EventTarget
+
       attr_reader :body
+      attr_accessor :default_view
 
       def initialize(host)
         @host = host
@@ -22,6 +25,7 @@ class MrubyWasm
       def __js_get__(key)
         case key
         when "body" then @body
+        when "defaultView" then @default_view
         else nil
         end
       end
@@ -40,9 +44,21 @@ class MrubyWasm
           query_selector(_args[0])
         when "querySelectorAll"
           query_selector_all(_args[0])
+        when "getElementById"
+          get_element_by_id(_args[0])
+        when "addEventListener"
+          add_event_listener(_args[0], _args[1], _args[2])
+        when "removeEventListener"
+          remove_event_listener(_args[0], _args[1])
+        when "dispatchEvent"
+          dispatch_event(_args[0])
         else
           nil
         end
+      end
+
+      def __event_parent__
+        @default_view
       end
 
       def wrap_node(node)
@@ -79,6 +95,12 @@ class MrubyWasm
         return [] if selector.nil? || selector.to_s.empty?
 
         @nokogiri_doc.css(selector.to_s).map { |node| wrap_node(node) }.compact
+      end
+
+      def get_element_by_id(id)
+        return nil if id.nil?
+
+        wrap_node(@nokogiri_doc.at_css("##{id}"))
       end
     end
   end

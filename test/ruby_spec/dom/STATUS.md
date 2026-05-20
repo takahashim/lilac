@@ -80,3 +80,32 @@ for the overall plan.
   still block on those
 - Next: Session 4 — EventTarget / Event / listener registration, then
   callback bridge + scheduler so observer delivery can be wired in.
+
+## Session 4 (2026-05-21): EventTarget and DOM events
+
+- Target spec(s): (foundation only)
+- Achieved:
+  - Added `test/ruby_spec/dom/event.rb` with `EventTarget`,
+    `Constructor`, `Event`, `CustomEvent`, `MouseEvent`, and
+    `KeyboardEvent`
+  - `js_new` in `mruby_wasm.rb` now honors duck-typed `__js_new__`,
+    so DOM constructors can instantiate host-side event objects
+  - `Window`, `Document`, and `Element` now support
+    `addEventListener` / `removeEventListener` / `dispatchEvent`
+  - `document.defaultView` now resolves to the host `Window`; window
+    exposes `Event` / `CustomEvent` / `MouseEvent` / `KeyboardEvent`
+    constructors
+  - Bubbling dispatch now sets `target` / `currentTarget` and honors
+    `preventDefault`, `stopPropagation`, and
+    `stopImmediatePropagation`; `Element#click` dispatches a synthetic
+    bubbling/cancelable click event
+  - Smoke-tested under `mise` Ruby (`3.4.1`) for constructor creation,
+    bubbling to parent listeners, `defaultPrevented`, custom `detail`,
+    and listener removal
+- Unlocked: none (foundation)
+- Blocked by / open: wasm-side `JS.callback` still returns `0`, so
+  runtime listeners from mruby cannot fire yet; scheduler and
+  observer delivery are still absent
+- Next: Session 5/6 boundary — callback bridge first (`js_make_callback`
+  + invoke path), then scheduler/microtask drain so MutationObserver
+  can deliver.

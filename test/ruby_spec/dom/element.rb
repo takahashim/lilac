@@ -223,6 +223,8 @@ class MrubyWasm
     # Lilac's tree walkers: attributes, text/html reads, parent/child
     # traversal, and `closest`.
     class Element
+      include EventTarget
+
       attr_reader :__node__
 
       def initialize(document, nokogiri_node)
@@ -286,6 +288,12 @@ class MrubyWasm
           query_selector(args[0])
         when "querySelectorAll"
           query_selector_all(args[0])
+        when "addEventListener"
+          add_event_listener(args[0], args[1], args[2])
+        when "removeEventListener"
+          remove_event_listener(args[0], args[1])
+        when "dispatchEvent"
+          dispatch_event(args[0])
         when "appendChild"
           append_child(args[0])
         when "insertBefore"
@@ -307,6 +315,8 @@ class MrubyWasm
           nil
         when "replaceWith"
           replace_with(args)
+        when "click"
+          dispatch_event(MouseEvent.new("click", "bubbles" => true, "cancelable" => true, "button" => 0))
         else
           nil
         end
@@ -323,6 +333,11 @@ class MrubyWasm
 
       def wrap_parent(node)
         @document.wrap_node(node)
+      end
+
+      def __event_parent__
+        parent = wrap_parent(@__node__.parent)
+        parent || @document
       end
 
       def template_content

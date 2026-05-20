@@ -16,11 +16,18 @@ class MrubyWasm
     # routed through `#__js_get__`. Method calls (`JS.global.call(:foo)`)
     # are routed through `#__js_call__`.
     class Window
+      include EventTarget
+
       attr_reader :document
 
       def initialize(host)
         @host = host
+        @event_ctor = Constructor.new { |args| Event.new(args[0], args[1]) }
+        @custom_event_ctor = Constructor.new { |args| CustomEvent.new(args[0], args[1]) }
+        @mouse_event_ctor = Constructor.new { |args| MouseEvent.new(args[0], args[1]) }
+        @keyboard_event_ctor = Constructor.new { |args| KeyboardEvent.new(args[0], args[1]) }
         @document = Document.new(host)
+        @document.default_view = self
       end
 
       # Bridge protocol: respond to a JS-style property read by name.
@@ -34,6 +41,10 @@ class MrubyWasm
       def __js_get__(key)
         case key
         when "document"     then @document
+        when "Event"        then @event_ctor
+        when "CustomEvent"  then @custom_event_ctor
+        when "MouseEvent"   then @mouse_event_ctor
+        when "KeyboardEvent" then @keyboard_event_ctor
         when "console"      then :console     # handled by Symbol sentinel
         when "Object"       then :object_ctor # likewise
         when "Array"        then :array_ctor
@@ -49,8 +60,21 @@ class MrubyWasm
       end
 
       def __js_call__(method, args)
-        # No window-level methods supported yet. setTimeout / etc come
-        # in session 5 (scheduler).
+        case method
+        when "addEventListener"
+          add_event_listener(args[0], args[1], args[2])
+        when "removeEventListener"
+          remove_event_listener(args[0], args[1])
+        when "dispatchEvent"
+          dispatch_event(args[0])
+        else
+          # No window-level methods supported yet. setTimeout / etc come
+          # in session 5 (scheduler).
+          nil
+        end
+      end
+
+      def __event_parent__
         nil
       end
     end
