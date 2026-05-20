@@ -472,3 +472,38 @@ for the overall plan.
   `runtime/mruby-lilac-directives/wasm_spec/` の DOM-touching spec を
   probe pass する。fetchy / form / router / directive 系で何が green
   になるか確認して batch unlock を狙う。
+
+## Session 15 (2026-05-22): Cross-gem probe pass — form / directives 全unlock
+
+- Target spec(s): mruby-lilac-async / mruby-lilac-form /
+  mruby-lilac-router / mruby-lilac-directives 全 25 件の probe pass
+- Achieved: ポリフィル追加無しで **21 spec が green**
+  (foundation 強度の証明)
+- Unlocked (21 new spec files / +148 sub-asserts):
+  - **mruby-lilac-form (4/4 = 100%)**: test_form (17),
+    test_form_cross_field (6), test_form_phase_a (16),
+    test_form_validators (21)
+  - **mruby-lilac-directives (16/16 = 100%)**: codegen_parity_runtime
+    (5), directive_attr_runtime (2), directive_bare_ident_runtime (7),
+    directive_bind_runtime (7), directive_class_runtime (4),
+    directive_css_runtime (2), directive_each_runtime (5),
+    directive_each_with_component_row (5), directive_field_wiring (9),
+    directive_form_field_button (10), directive_on_runtime (3),
+    directive_prop_expression (4), directive_show_hide_runtime (3),
+    directive_text_runtime (3), scanner_walk_runtime (3),
+    smoke_runtime (6)
+  - mruby-lilac-async は test_selector が既存 + remaining 3 spec が
+    partial / zero (Fetchy / Resource は `fetch` polyfill 待ち)
+
+  PURE_SPECS: 43 → 64. assertions: ~510 → ~660.
+
+- Blocked by / open:
+  - **mruby-lilac-async/test_fetchy (0/0)**: 早期 throw、`fetch`
+    polyfill が未実装 (`AbortController` は session 13 で済)
+  - **mruby-lilac-async/test_resource (1/4) + test_resource_signal_inject
+    (1/3)**: Resource は Fetchy 依存なので fetch 待ち
+  - **mruby-lilac-router/test_router (8/41 sub-asserts)**: history /
+    location / URL parsing 不在で各種 navigate / link が失敗
+- Next: Session 16 — `fetch` polyfill (Promise を返す stub-injectable な
+  fetcher) で Fetchy / Resource 系 (3 spec) を狙う。これで lilac-async
+  も 100%。Session 17 を router (history + location + URL) に充てる。

@@ -87,6 +87,28 @@ class SpecRunner
     # する refactor で template 配下が querySelector から見えなくなる
     "runtime/mruby-lilac/wasm_spec/test_directive_each.rb",
     "runtime/mruby-lilac/wasm_spec/test_node_operations.rb",
+    # Session 15 unlock — mruby-lilac-form / mruby-lilac-directives /
+    # mruby-lilac-async (test_selector 既存) を probe pass で一括追加
+    "runtime/mruby-lilac-form/wasm_spec/test_form.rb",
+    "runtime/mruby-lilac-form/wasm_spec/test_form_cross_field.rb",
+    "runtime/mruby-lilac-form/wasm_spec/test_form_phase_a.rb",
+    "runtime/mruby-lilac-form/wasm_spec/test_form_validators.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_codegen_parity_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_attr_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_bare_ident_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_bind_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_class_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_css_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_each_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_each_with_component_row.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_field_wiring.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_form_field_button.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_on_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_prop_expression.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_show_hide_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_directive_text_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_scanner_walk_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_smoke_runtime.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do
