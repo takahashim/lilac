@@ -130,8 +130,14 @@ module Lilac
       cb
     end
 
+    # Fire a `CustomEvent` on the wrapped DOM element. Throws at
+    # runtime if `@js` isn't an EventTarget — same trade-off Lilac
+    # has always accepted for keeping `refs.x.dispatch(...)` natural.
     def dispatch(name, detail: nil, bubbles: false)
-      @js.dispatch(name, detail: detail, bubbles: bubbles)
+      init = JS.object(bubbles: bubbles)
+      init[:detail] = JS.wrap(detail) unless detail.nil?
+      ev = Lilac.__window__[:CustomEvent].new(name.to_s, init)
+      @js.call(:dispatchEvent, ev)
     end
 
     PROPS.each do |name, js_key, kind|

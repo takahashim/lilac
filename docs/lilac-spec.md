@@ -1344,7 +1344,9 @@ event[:target].call(:closest, "li")
 
 汎用 JS 値ヘルパ (`js_null?` / `js_bool` / `to_ruby`) は **mruby-wasm-js 側**で `JS::Object` に直接定義されている。詳細は [mruby-wasm-js/docs/js-object.md](../mrbgem/mruby-wasm-js/docs/js-object.md) を参照。
 
-Lilac はその上に DOM 固有の `Lilac::DomExtensions` を `JS::Object` に include して、`dispatch(name, detail:, bubbles:)` を追加する (CustomEvent 発火のシュガー)。
+DOM 固有の Ruby ergonomic は Lilac 所有の wrapper class (`RefElement` / `Template`)
+のメソッドとして提供される。例えば CustomEvent 発火のシュガー
+`dispatch(name, detail:, bubbles:)` は `RefElement#dispatch` として実装されている:
 
 ```ruby
 refs.row.dispatch("row:select", detail: { id: 42 }, bubbles: true)

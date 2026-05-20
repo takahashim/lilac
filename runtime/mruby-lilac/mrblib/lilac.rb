@@ -5,7 +5,6 @@
 #   - Lilac::Error
 #   - Lilac.dev_mode / .logger / .__window__ / .batch
 #   - Lilac::Logger (default writes to STDERR; override emit_warn / emit_error)
-#   - Lilac::DomExtensions (JS::Object DOM mixin)
 #   - Lilac::Reactive (private infrastructure: TRACKER, BATCH, helpers)
 #   - Lilac::Subscribers
 #   - Lilac::MutationGuard
@@ -164,18 +163,6 @@ module Lilac
 
     def self.generate(value)
       JS.global[:JSON].call(:stringify, JS.wrap(value)).to_s
-    end
-  end
-
-  # DOM-specific helpers. Calling these on a JS::Object that is not an
-  # EventTarget will throw at runtime — that's the expected trade-off
-  # for keeping the spec API natural (`refs.x.dispatch(...)`).
-  module DomExtensions
-    def dispatch(name, detail: nil, bubbles: false)
-      init = JS.object(bubbles: bubbles)
-      init[:detail] = JS.wrap(detail) unless detail.nil?
-      ev = Lilac.__window__[:CustomEvent].new(name.to_s, init)
-      call(:dispatchEvent, ev)
     end
   end
 
@@ -592,5 +579,3 @@ module Lilac
   end
 
 end
-
-JS::Object.include(Lilac::DomExtensions)
