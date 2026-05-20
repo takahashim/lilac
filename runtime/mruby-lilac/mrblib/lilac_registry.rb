@@ -23,6 +23,7 @@ module Lilac
       @next_component_id = 0
       @observer = nil
       @observer_callback = nil
+      @started = false
     end
 
     def register(name, klass)
@@ -45,7 +46,14 @@ module Lilac
     #   2. Post-order: run `setup`. Children before parents, so
     #      `refs.x.component.method` from a parent's setup sees its
     #      children fully initialised.
+    #
+    # Idempotent: the builder auto-appends `Lilac.start` at the end of
+    # the bootstrap module, but users may also call it explicitly (to
+    # run boot earlier or run setup before mount). The second call is
+    # a no-op; reset via `reset!`.
     def start(root_js = nil)
+      return if @started
+      @started = true
       root_js ||= JS.global[:document][:body]
       # install_observer must precede mount_subtree: if a component's setup
       # inserts nested data-component nodes (e.g. bind_list with template:),
@@ -61,6 +69,7 @@ module Lilac
       @components = {}
       @component_classes = {}
       @next_component_id = 0
+      @started = false
       return unless @observer
       @observer.call(:disconnect)
       JS.release_callback(@observer_callback)

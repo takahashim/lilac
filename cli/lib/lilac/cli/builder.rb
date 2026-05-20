@@ -125,9 +125,20 @@ module Lilac
         # when the same component appears on multiple pages.
         @template_ast_cache = {}
 
+        # Records `{ name => [ [content_hash, page_path], ... ] }` for
+        # every page-inline `data-component` element across pages. The
+        # post-loop pass warns when the same name appears with
+        # different shapes (proposal §A.R3) — page-inline components
+        # are page-local, so divergent shapes don't break runtime, but
+        # users typically intend "same name = same UI" and the warning
+        # surfaces unintentional drift.
+        @page_inline_signatures = Hash.new { |h, k| h[k] = [] }
+
         pages.each do |page_path|
           build_page(page_path, components)
         end
+
+        warn_cross_page_signature_drift!
 
         # `:compiled` target needs the runtime (wasm + bridge + boot
         # helper) sitting under `dist/vendor/lilac-compiled/`. We emit
@@ -242,6 +253,14 @@ module Lilac
           html, components: components, page_path: page_path,
         )
 
+        # R4: page-inline script classes that collide with `.lil`-derived
+        # class names (project-global) are flagged before codegen. Done
+        # AFTER synthesize_page_inline_components so synthesized in-memory
+        # components (which carry no script) don't trigger false positives,
+        # but BEFORE build_injection so the user sees a structured error
+        # instead of a downstream Codegen / mrbc failure.
+        check_class_name_collisions!(page_inline_scripts, components, synthesized_names, page_path)
+
         used = used_inline.dup
         html = html.gsub(COMPONENT_PLACEHOLDER) do
           # Capture 1 = double-quoted name; capture 2 = single-quoted name.
@@ -327,17 +346,54 @@ module Lilac
 
         return [components, html, [], Set.new] if targets.empty?
 
+        # Capture the set of `.lil`-origin component names BEFORE we
+        # start synthesising — `synthesized = components.dup` would
+        # make a `synthesized.key?(name)` check tautological.
+        lil_origin = components.keys.to_set
         synthesized = components.dup
         synthesized_names = Set.new
         used_inline = []
+        seen_in_page = {}  # name => line — for R2 duplicate detection
         targets.each do |elem|
           name = elem["data-component"]
+
+          # R1: `.lil` and page-inline can't share a name. The .lil
+          # version would be silently shadowed otherwise — see
+          # proposal §A.R1.
+          if lil_origin.include?(name)
+            lil_path = components[name].path
+            raise Error, build_scope_error_message(
+              kind: :lil_vs_page_inline,
+              name: name,
+              page_path: page_path,
+              elem_line: elem.line,
+              lil_path: lil_path,
+            )
+          end
+
+          # R2: same page can't declare the same page-inline component
+          # twice. Two `<X data-component="row">` siblings would race
+          # on which class body wins. See proposal §A.R2.
+          if seen_in_page.key?(name)
+            raise Error, build_scope_error_message(
+              kind: :same_page_duplicate,
+              name: name,
+              page_path: page_path,
+              elem_line: elem.line,
+              previous_line: seen_in_page[name],
+            )
+          end
+          seen_in_page[name] = elem.line
+
+          body_html = elem.to_html
           synthesized[name] = SFC::Component.new(
             path: page_path,
-            templates: [SFC::Template.new(name: nil, body: elem.to_html)],
+            templates: [SFC::Template.new(name: nil, body: body_html)],
             script: "",
           )
           synthesized_names << name
+          # R3: record signature for cross-page drift detection.
+          @page_inline_signatures[name] << [signature_for(body_html), page_path] if @page_inline_signatures
           used_inline << name
         end
 
@@ -357,8 +413,97 @@ module Lilac
         [synthesized, doc.to_html, used_inline, synthesized_names]
       end
 
+      # R4: any class declared at the top level of a page-inline script
+      # whose name collides with a `.lil`-derived class name aborts the
+      # build. Page-inline scripts and `.lil` scripts both land in the
+      # same Ruby namespace at runtime, so a colliding name would
+      # silently reopen the .lil class — surprise that we'd rather
+      # catch at build time.
+      def check_class_name_collisions!(page_inline_scripts, components, synthesized_names, page_path)
+        return if page_inline_scripts.empty?
+
+        # `.lil` class names (skip synthesized in-memory entries — those
+        # are the page-inline data-component snapshots, not real .lil files).
+        lil_class_names = {}  # ruby_class_name => kebab (original file)
+        components.each do |name, _comp|
+          next if synthesized_names.include?(name)
+          ruby_name = ComponentName.new(name).ruby_class
+          lil_class_names[ruby_name] = name
+        end
+        return if lil_class_names.empty?
+
+        page_inline_scripts.each do |script|
+          ScriptAnalyzer.extract_top_level_class_names(script).each do |declared|
+            next unless lil_class_names.key?(declared)
+            raise Error, build_scope_error_message(
+              kind: :class_name_vs_lil,
+              name: declared,
+              page_path: page_path,
+              lil_basename: "#{lil_class_names[declared]}.lil",
+            )
+          end
+        end
+      end
+
+      # Stable hash of a page-inline component element body (outer HTML)
+      # for cross-page drift detection (proposal §A.R3). Whitespace
+      # normalised so cosmetic indentation differences across pages don't
+      # spuriously fire the warning.
+      def signature_for(body_html)
+        require "digest" unless defined?(Digest)
+        Digest::SHA1.hexdigest(body_html.gsub(/\s+/, " ").strip)
+      end
+
+      # R3: after every page is built, scan recorded signatures for the
+      # same name appearing with different content_hashes across pages.
+      # Output a single warning grouping divergent pages so the user can
+      # decide whether to rename one of them or align the shapes.
+      def warn_cross_page_signature_drift!
+        return unless @page_inline_signatures
+        @page_inline_signatures.each do |name, entries|
+          unique_sigs = entries.map { |sig, _| sig }.uniq
+          next if unique_sigs.size <= 1
+          pages_str = entries.uniq { |sig, _| sig }
+                             .map { |_sig, page| File.basename(page) }
+                             .join(", ")
+          warn(
+            "[lilac] page-inline component #{name.inspect} appears with " \
+            "different shapes across pages (#{pages_str}). " \
+            "Page-inline names are page-local so this is allowed, but " \
+            "is likely unintentional drift — consider renaming or moving " \
+            "the component to components/#{name}.lil to share one shape.",
+          )
+        end
+      end
+
       def default_markup(name, component)
         template_ast_for(name, component)[:default_html]
+      end
+
+      # Build a structured scope-violation error message. See proposals.md
+      # §A.R1〜R4 — the scope rule for `.lil` (project-global) vs page-
+      # inline `data-component` (page-local) vs page-inline script
+      # (page-local execution).
+      def build_scope_error_message(kind:, name:, page_path:, **detail)
+        page_rel = page_path ? File.basename(page_path) : "(page)"
+        case kind
+        when :lil_vs_page_inline
+          lil_rel = detail[:lil_path] ? File.basename(detail[:lil_path]) : "components/#{name}.lil"
+          "data-component=#{name.inspect} on #{page_rel}:#{detail[:elem_line]} " \
+            "collides with components/#{lil_rel} (project-global). " \
+            "Page-inline components are page-local, so the silent shadowing " \
+            "would surprise. Rename one of them."
+        when :same_page_duplicate
+          "data-component=#{name.inspect} on #{page_rel}:#{detail[:elem_line]} " \
+            "is declared twice in the same page (first at line #{detail[:previous_line]}). " \
+            "Page-inline component names must be unique within a page."
+        when :class_name_vs_lil
+          "page-inline class #{name} in #{page_rel} collides with the class " \
+            "derived from components/#{detail[:lil_basename]}. " \
+            "Rename either the page-inline class or the .lil file."
+        else
+          "scope violation: #{kind} (name=#{name.inspect}, page=#{page_rel})"
+        end
       end
 
       def build_injection(used_names, components,
@@ -432,12 +577,23 @@ module Lilac
           parts.reject(&:empty?).join("\n\n")
         }.reject(&:empty?)
 
+        # `Lilac.start` is appended automatically so user code can stay
+        # purely declarative (see proposal §B.0): class defs + DOM
+        # attributes only, framework owns the boot. Idempotency on
+        # `Lilac::Registry#start` makes it safe even when a user has
+        # written their own `Lilac.start` explicitly.
+        #
         # Page-inline `<script type="text/ruby">` blocks join the bundle
         # only on the compiled target — they're emitted last so any
         # `Lilac.start` written there runs after the component class
-        # definitions. On :full they remain in the dist HTML body and the
-        # runtime parser picks them up via `vm.evalScript`, so duplicating
-        # them into the injected block would re-execute them.
+        # definitions. On :full they remain in the dist HTML body and
+        # the runtime parser picks them up via `vm.evalScript`, so
+        # duplicating them into the injected block would re-execute
+        # them — but the auto-appended `Lilac.start` belongs at the
+        # very end of the bridge's document-order eval loop, so we
+        # emit it as the last entry in the injected block (which sits
+        # just before `</body>`, after every user page-inline script).
+        any_user_ruby = !scripts.empty? || page_inline_scripts.any? { |s| !s.strip.empty? }
         bundle_scripts =
           if @target == :compiled
             # `Lilac.start` must execute as part of the loaded bytecode —
@@ -449,7 +605,7 @@ module Lilac
             user_scripts = scripts + page_inline_scripts.reject { |s| s.strip.empty? }
             user_scripts.empty? ? [] : user_scripts + ["Lilac.start"]
           else
-            scripts
+            any_user_ruby ? scripts + ["Lilac.start"] : scripts
           end
         ruby_source = bundle_scripts.join("\n\n")
         script_block =

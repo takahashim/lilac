@@ -133,7 +133,38 @@ module Lilac
         nil
       end
 
-def self.constant_path_name(node)
+      # Returns the set of top-level class names declared at the
+      # outermost scope of `script_text`. Used by the builder's R4
+      # guard (proposal §A.R4) to detect when a page-inline script
+      # declares a class whose name collides with a `.lil`-derived
+      # component class. On parse failure returns an empty set —
+      # ScriptAnalyzer prefers under-reporting over double-error noise
+      # when the user already has a syntax error.
+      def self.extract_top_level_class_names(script_text)
+        parse = Prism.parse(script_text.to_s)
+        return [] if parse.failure?
+
+        names = []
+        collect_top_level_class_names(parse.value, names)
+        names
+      end
+
+      def self.collect_top_level_class_names(node, names)
+        return unless node.respond_to?(:child_nodes)
+        node.child_nodes.each do |child|
+          next if child.nil?
+          if child.is_a?(Prism::ClassNode)
+            n = constant_path_name(child.constant_path)
+            names << n if n
+            # do NOT recurse: nested classes are scoped to their
+            # parent and don't participate in top-level collision
+          else
+            collect_top_level_class_names(child, names)
+          end
+        end
+      end
+
+      def self.constant_path_name(node)
         return node.name.to_s if node.is_a?(Prism::ConstantReadNode)
         node.slice if node.respond_to?(:slice)
       end

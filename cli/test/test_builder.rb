@@ -757,6 +757,136 @@ class TestBuilder < Minitest::Test
     assert_includes bytes, "PageY"
   end
 
+  # ---- §B auto Lilac.start --------------------------------------
+
+  def test_target_full_auto_appends_lilac_start
+    write_page "index", <<~HTML
+      <html><body>
+      <script type="text/ruby">
+      class PageOnlyBar; end
+      </script>
+      </body></html>
+    HTML
+
+    build!(target: :full)
+    out = read_output("index.html")
+
+    # The user's page-inline script is preserved verbatim, and a
+    # framework-owned `Lilac.start` is appended in a separate injected
+    # block before `</body>` (auto-boot, §B.2).
+    assert_includes out, "class PageOnlyBar"
+    assert_includes out, "Lilac.start"
+    user_pos = out.index("class PageOnlyBar")
+    start_pos = out.index("Lilac.start")
+    assert start_pos > user_pos,
+           "auto-inserted Lilac.start must come after user page-inline scripts in document order"
+  end
+
+  def test_target_full_no_lilac_start_when_page_has_no_ruby
+    write_page "index", "<html><body><h1>static</h1></body></html>"
+    build!(target: :full)
+    out = read_output("index.html")
+    refute_includes out, "Lilac.start"
+  end
+
+  def test_target_compiled_bundle_includes_lilac_start
+    mrbc = mrbc_or_skip
+    write_page "index", <<~HTML
+      <html><body><script type="text/ruby">class Boot1; end</script></body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc)
+    mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))
+    assert_equal 1, mrb_files.length
+    bytes = File.binread(mrb_files.first)
+    # mrbc stores method calls as separate sym entries ("Lilac" + "start")
+    # in the bytecode symbol table — not as the literal source text.
+    # Both symbols appearing together is what proves the auto-append
+    # made it into the bundle.
+    assert_includes bytes, "Lilac",
+                    "compiled bundle must auto-append Lilac.start (Lilac sym missing)"
+    assert_includes bytes, "start",
+                    "compiled bundle must auto-append Lilac.start (start sym missing)"
+  end
+
+  # ---- §A scope guard --------------------------------------------
+
+  def test_lil_and_page_inline_same_name_raises
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter">x</div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <html><body>
+      <div data-component="counter"><span>y</span></div>
+      </body></html>
+    HTML
+
+    err = assert_raises(Lilac::CLI::Builder::Error) { build!(target: :full) }
+    assert_match(/data-component="counter".+collides with components\/counter\.lil/, err.message)
+  end
+
+  def test_same_page_duplicate_page_inline_data_component_raises
+    write_page "index", <<~HTML
+      <html><body>
+      <div data-component="row">A</div>
+      <div data-component="row">B</div>
+      </body></html>
+    HTML
+
+    err = assert_raises(Lilac::CLI::Builder::Error) { build!(target: :full) }
+    assert_match(/data-component="row".+is declared twice/, err.message)
+  end
+
+  def test_cross_page_divergent_page_inline_warns
+    write_page "a", <<~HTML
+      <html><body>
+      <div data-component="shared"><span>shape-A</span></div>
+      </body></html>
+    HTML
+    write_page "b", <<~HTML
+      <html><body>
+      <div data-component="shared"><span>SHAPE-B-different</span></div>
+      </body></html>
+    HTML
+
+    captured = capture_io { build!(target: :full) }
+    combined = captured.join
+    assert_match(/page-inline component "shared".+different shapes/, combined)
+  end
+
+  def test_cross_page_identical_page_inline_does_not_warn
+    same = <<~HTML
+      <html><body>
+      <div data-component="card"><span>same</span></div>
+      </body></html>
+    HTML
+    write_page "a", same
+    write_page "b", same
+
+    captured = capture_io { build!(target: :full) }
+    refute_match(/different shapes/, captured.join)
+  end
+
+  def test_page_inline_class_name_collision_with_lil_raises
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    # Note: does NOT use data-component="counter" (so R1 doesn't fire),
+    # but redefines the Counter class in page-inline. R4 catches this.
+    write_page "index", <<~HTML
+      <html><body>
+      <script type="text/ruby">
+      class Counter; end
+      </script>
+      </body></html>
+    HTML
+
+    err = assert_raises(Lilac::CLI::Builder::Error) { build!(target: :full) }
+    assert_match(/page-inline class Counter.+collides/, err.message)
+  end
+
   private
 
   # Dummy lilac-compiled runtime sources to exercise the auto-vendor
