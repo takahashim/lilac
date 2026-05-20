@@ -133,3 +133,30 @@ for the overall plan.
   timers, and MutationObserver delivery are still absent
 - Next: Session 6 — scheduler + microtask drain, then observer
   implementation on top of the now-live callback/event bridge.
+
+## Session 6 (2026-05-21): Scheduler and end-to-end callback check
+
+- Target spec(s): (foundation only)
+- Achieved:
+  - Added `test/ruby_spec/dom/scheduler.rb` with deterministic
+    `setTimeout` / `clearTimeout`, `setInterval` / `clearInterval`,
+    `requestAnimationFrame` / `cancelAnimationFrame`, and microtask
+    queue support
+  - `Window` now owns a scheduler and exposes timer/rAF methods through
+    `JS.global.call(...)`; `MrubyWasm` now exposes host helpers
+    `advance_time(ms)` and `drain_microtasks`
+  - Installed the `cli` bundle under `mise` Ruby 3.4.1 and verified the
+    local `~/git/wasmtime-rb` checkout is active for end-to-end checks
+  - Fixed host-side boolean stringification in `mruby_wasm.rb` so
+    wasm-side `js_bool` reads (`defaultPrevented`, `cancelable`,
+    `dispatchEvent` return values) reflect host booleans correctly
+  - End-to-end verified via `bundle exec ruby` that
+    `JS.callback`-backed DOM listeners fire through `js_invoke_proc`,
+    bubble with `target/currentTarget`, and mutate
+    `defaultPrevented` as expected
+- Unlocked: none (foundation)
+- Blocked by / open: no `MutationObserver` implementation yet, no
+  `Promise`/`.await` host drain yet, and no `JS.eval_javascript`
+  emulation for `new Promise(r => setTimeout(...))` helper paths
+- Next: Session 7 — MutationObserver on top of the live callback +
+  scheduler bridge, then async/promise drain as needed.

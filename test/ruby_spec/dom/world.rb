@@ -18,10 +18,11 @@ class MrubyWasm
     class Window
       include EventTarget
 
-      attr_reader :document
+      attr_reader :document, :scheduler
 
       def initialize(host)
         @host = host
+        @scheduler = Scheduler.new
         @event_ctor = Constructor.new { |args| Event.new(args[0], args[1]) }
         @custom_event_ctor = Constructor.new { |args| CustomEvent.new(args[0], args[1]) }
         @mouse_event_ctor = Constructor.new { |args| MouseEvent.new(args[0], args[1]) }
@@ -49,6 +50,7 @@ class MrubyWasm
         when "Object"       then :object_ctor # likewise
         when "Array"        then :array_ctor
         when "JSON"         then :json_ctor
+        when "performance"  then { "now" => @scheduler.now_ms.to_f }
         else nil
         end
       end
@@ -67,9 +69,23 @@ class MrubyWasm
           remove_event_listener(args[0], args[1])
         when "dispatchEvent"
           dispatch_event(args[0])
+        when "setTimeout"
+          @scheduler.set_timeout(args[0], args[1] || 0)
+        when "clearTimeout"
+          @scheduler.clear_timeout(args[0])
+        when "setInterval"
+          @scheduler.set_interval(args[0], args[1] || 0)
+        when "clearInterval"
+          @scheduler.clear_interval(args[0])
+        when "requestAnimationFrame"
+          @scheduler.request_animation_frame(args[0])
+        when "cancelAnimationFrame"
+          @scheduler.cancel_animation_frame(args[0])
+        when "queueMicrotask"
+          @scheduler.queue_microtask(args[0])
         else
-          # No window-level methods supported yet. setTimeout / etc come
-          # in session 5 (scheduler).
+          # Additional window-level methods (fetch, location, history,
+          # Promise, MutationObserver, etc.) arrive in later sessions.
           nil
         end
       end

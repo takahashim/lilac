@@ -122,9 +122,8 @@ class MrubyWasm
     class Event
       def initialize(type, init = nil)
         @type = type.to_s
-        init = init.is_a?(Hash) ? init : {}
-        @bubbles = !!fetch(init, "bubbles")
-        @cancelable = !!fetch(init, "cancelable")
+        @bubbles = !!read_init(init, "bubbles")
+        @cancelable = !!read_init(init, "cancelable")
         @default_prevented = false
         @propagation_stopped = false
         @immediate_propagation_stopped = false
@@ -196,16 +195,20 @@ class MrubyWasm
 
       private
 
-      def fetch(hash, key)
-        hash[key] || hash[key.to_sym]
+      def read_init(init, key)
+        case init
+        when Hash
+          init[key] || init[key.to_sym]
+        else
+          init.respond_to?(:__js_get__) ? init.__js_get__(key) : nil
+        end
       end
     end
 
     class CustomEvent < Event
       def initialize(type, init = nil)
         super
-        init = init.is_a?(Hash) ? init : {}
-        @detail = fetch(init, "detail")
+        @detail = read_init(init, "detail")
       end
 
       def __js_get__(key)
@@ -213,25 +216,18 @@ class MrubyWasm
 
         super
       end
-
-      private
-
-      def fetch(hash, key)
-        hash[key] || hash[key.to_sym]
-      end
     end
 
     class MouseEvent < Event
       def initialize(type, init = nil)
         super
-        init = init.is_a?(Hash) ? init : {}
-        @button = fetch(init, "button") || 0
-        @ctrl_key = !!fetch(init, "ctrlKey")
-        @shift_key = !!fetch(init, "shiftKey")
-        @alt_key = !!fetch(init, "altKey")
-        @meta_key = !!fetch(init, "metaKey")
-        @client_x = fetch(init, "clientX") || 0
-        @client_y = fetch(init, "clientY") || 0
+        @button = read_init(init, "button") || 0
+        @ctrl_key = !!read_init(init, "ctrlKey")
+        @shift_key = !!read_init(init, "shiftKey")
+        @alt_key = !!read_init(init, "altKey")
+        @meta_key = !!read_init(init, "metaKey")
+        @client_x = read_init(init, "clientX") || 0
+        @client_y = read_init(init, "clientY") || 0
       end
 
       def __js_get__(key)
@@ -247,23 +243,16 @@ class MrubyWasm
           super
         end
       end
-
-      private
-
-      def fetch(hash, key)
-        hash[key] || hash[key.to_sym]
-      end
     end
 
     class KeyboardEvent < Event
       def initialize(type, init = nil)
         super
-        init = init.is_a?(Hash) ? init : {}
-        @key = fetch(init, "key").to_s
-        @ctrl_key = !!fetch(init, "ctrlKey")
-        @shift_key = !!fetch(init, "shiftKey")
-        @alt_key = !!fetch(init, "altKey")
-        @meta_key = !!fetch(init, "metaKey")
+        @key = read_init(init, "key").to_s
+        @ctrl_key = !!read_init(init, "ctrlKey")
+        @shift_key = !!read_init(init, "shiftKey")
+        @alt_key = !!read_init(init, "altKey")
+        @meta_key = !!read_init(init, "metaKey")
       end
 
       def __js_get__(key)
@@ -276,12 +265,6 @@ class MrubyWasm
         else
           super
         end
-      end
-
-      private
-
-      def fetch(hash, key)
-        hash[key] || hash[key.to_sym]
       end
     end
   end

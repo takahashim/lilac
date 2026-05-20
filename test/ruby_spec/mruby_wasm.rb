@@ -5,6 +5,7 @@ require "json"
 
 require_relative "dom/dispatch"
 require_relative "dom/event"
+require_relative "dom/scheduler"
 require_relative "dom/world"
 require_relative "dom/document"
 require_relative "dom/element"
@@ -127,6 +128,20 @@ class MrubyWasm
     if result_handle && result_handle >= 100
       @handles.delete(result_handle)
     end
+  end
+
+  def advance_time(ms)
+    window = @handles[1]
+    return nil unless window.respond_to?(:scheduler)
+
+    window.scheduler.advance_time(ms)
+  end
+
+  def drain_microtasks
+    window = @handles[1]
+    return nil unless window.respond_to?(:scheduler)
+
+    window.scheduler.drain_microtasks
   end
 
   # Drain + return captured stdout. Clears the internal buffer.
@@ -295,16 +310,15 @@ class MrubyWasm
     # (handle) -> length. Honors host-registered byte buffers so eval
     # source / irep bytes can flow into the wasm via the handle table.
     define.call("js_to_string_len", [:i32], [:i32]) do |_c, h|
-      v = @handles[h]
-      v.is_a?(String) ? v.bytesize : 0
+      string_value_for(@handles[h]).bytesize
     end
     # (handle, dst_ptr, dst_len) -> (). Writes the registered bytes
     # into linear memory at dst_ptr (up to dst_len).
     define.call("js_to_string_copy", [:i32, :i32, :i32], []) do |caller, h, ptr, len|
-      v = @handles[h]
-      if v.is_a?(String) && len.positive?
+      value = string_value_for(@handles[h])
+      if len.positive?
         mem = caller.export("memory").to_memory
-        mem.write(ptr, v.byteslice(0, len))
+        mem.write(ptr, value.byteslice(0, len))
       end
       nil
     end
@@ -490,5 +504,15 @@ class MrubyWasm
   def console_log(method, args)
     buf = (method == "error" || method == "warn") ? @stderr_buf : @stdout_buf
     args.each { |a| buf << (a.is_a?(String) ? a : a.to_s) << "\n" }
+  end
+
+  def string_value_for(value)
+    case value
+    when String then value
+    when true then "true"
+    when false then "false"
+    when Integer, Float then value.to_s
+    else ""
+    end
   end
 end
