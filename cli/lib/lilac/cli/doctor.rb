@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-require_relative "builder"
-require_relative "compiled_runtime_resolver"
-require_relative "sfc"
+require_relative 'builder'
+require_relative 'bytecode_builder'
+require_relative 'compiled_runtime_resolver'
+require_relative 'sfc'
 
 module Lilac
   module CLI
@@ -21,8 +22,8 @@ module Lilac
       # Where the wasm runtime is expected to live, relative to public_dir.
       # Both live under `vendor/lilac-full/` so the target-aware public
       # mirror can prune them when building `--target compiled`.
-      RUNTIME_WASM = "vendor/lilac-full/lilac-full.wasm"
-      RUNTIME_JS_ADAPTER = "vendor/lilac-full/mruby-wasm-js/index.js"
+      RUNTIME_WASM = 'vendor/lilac-full/lilac-full.wasm'
+      RUNTIME_JS_ADAPTER = 'vendor/lilac-full/mruby-wasm-js/index.js'
 
       def initialize(config, out: $stdout)
         @config = config
@@ -52,6 +53,7 @@ module Lilac
           check_runtime_wasm,
           check_js_adapter,
           check_compiled_runtime,
+          check_mrbc_backend
         ]
       end
 
@@ -85,7 +87,7 @@ module Lilac
       def check_component_references
         return [] unless File.directory?(@config.pages_dir)
 
-        component_names = gnt_paths.map { |p| File.basename(p, ".lil") }.to_set
+        component_names = gnt_paths.map { |p| File.basename(p, '.lil') }.to_set
         results = []
         page_paths.each do |page_path|
           html = File.read(page_path)
@@ -99,20 +101,20 @@ module Lilac
             end
           end
         end
-        results.empty? ? [ok("all <lilac-component> references resolve")] : results
+        results.empty? ? [ok('all <lilac-component> references resolve')] : results
       end
 
       def check_unused_components
-        return ok("no components to check for usage") if gnt_paths.empty?
+        return ok('no components to check for usage') if gnt_paths.empty?
 
-        component_names = gnt_paths.map { |p| File.basename(p, ".lil") }.to_set
+        component_names = gnt_paths.map { |p| File.basename(p, '.lil') }.to_set
         referenced = page_paths.flat_map do |page_path|
           File.read(page_path).scan(Builder::COMPONENT_PLACEHOLDER).map { |dq, sq| dq || sq }
         end.uniq.to_set
 
         unused = component_names - referenced
         if unused.empty?
-          ok("all components are referenced from at least one page")
+          ok('all components are referenced from at least one page')
         else
           warn("unused components: #{unused.to_a.sort.join(', ')}")
         end
@@ -155,17 +157,41 @@ module Lilac
         resolver = CompiledRuntimeResolver.new(
           lilac_compiled_path: @config.lilac_compiled_path,
           mruby_wasm_js_path: @config.mruby_wasm_js_path,
-          project_root: @config.root,
+          project_root: @config.root
         )
         path = resolver.send(:resolve_wasm)
         if path && File.file?(path)
           ok("compiled wasm discoverable: #{relative(path)} (#{format_size(File.size(path))})")
         else
           warn(
-            "lilac-compiled.wasm not discoverable — `lilac build` (default " \
-            "target=compiled) will fail. Either run `make lilac-compiled` " \
-            "in the lilac monorepo, `npm install @takahashim/lilac-compiled` " \
-            "in this project, or use `lilac build --target full` to skip it."
+            'lilac-compiled.wasm not discoverable — `lilac build` (default ' \
+            'target=compiled) will fail. Either run `make lilac-compiled` ' \
+            'in the lilac monorepo, `npm install @takahashim/lilac-compiled` ' \
+            'in this project, or use `lilac build --target full` to skip it.'
+          )
+        end
+      end
+
+      # Reports which mrbc backend `lilac build --target compiled` will
+      # pick (binary vs wasm-driven) so users can see at a glance why
+      # their setup works (or doesn't). Same priority chain as
+      # `BytecodeBuilder#resolve_backend`.
+      def check_mrbc_backend
+        builder = BytecodeBuilder.new(
+          mrbc_path: @config.mrbc_path,
+          output_dir: Dir.tmpdir # never used by resolve_backend
+        )
+        backend = builder.resolve_backend
+        case backend&.first
+        when :binary
+          ok("mrbc backend: binary (#{backend.last})")
+        when :wasm
+          ok("mrbc backend: wasm via lilac-wasm-bin gem (#{relative(backend.last)})")
+        else
+          warn(
+            'no mrbc backend discoverable — `lilac build --target compiled` ' \
+            'will fail. Add `gem "lilac-wasm-bin"` + `gem "wasmtime"` to ' \
+            'your Gemfile, or install mrbc on PATH.'
           )
         end
       end
@@ -173,13 +199,13 @@ module Lilac
       def gnt_paths
         return [] unless File.directory?(@config.components_dir)
 
-        @gnt_paths ||= Dir.glob(File.join(@config.components_dir, "**", "*.lil"))
+        @gnt_paths ||= Dir.glob(File.join(@config.components_dir, '**', '*.lil'))
       end
 
       def page_paths
         return [] unless File.directory?(@config.pages_dir)
 
-        @page_paths ||= Dir.glob(File.join(@config.pages_dir, "**", "*.html"))
+        @page_paths ||= Dir.glob(File.join(@config.pages_dir, '**', '*.html'))
       end
 
       def relative(path)
@@ -187,7 +213,7 @@ module Lilac
         # Paths outside the project root produce ugly `../../../../...`
         # forms — fall back to the absolute path which is easier to
         # read (and grep) than a long traversal sequence.
-        rel.start_with?("../..") ? path : rel
+        rel.start_with?('../..') ? path : rel
       rescue ArgumentError
         path
       end
@@ -219,9 +245,9 @@ module Lilac
 
       def prefix(level)
         case level
-        when :ok then "[OK]   "
-        when :warn then "[WARN] "
-        when :error then "[FAIL] "
+        when :ok then '[OK]   '
+        when :warn then '[WARN] '
+        when :error then '[FAIL] '
         end
       end
 

@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require "fileutils"
-require "pathname"
-require_relative "sfc"
-require_relative "template_ast"
-require_relative "codegen"
-require_relative "component_name"
-require_relative "cross_ref_linter"
-require_relative "bytecode_builder"
+require 'fileutils'
+require 'pathname'
+require_relative 'sfc'
+require_relative 'template_ast'
+require_relative 'codegen'
+require_relative 'component_name'
+require_relative 'cross_ref_linter'
+require_relative 'bytecode_builder'
 
 module Lilac
   module CLI
@@ -67,7 +67,7 @@ module Lilac
       # `vendor/lilac-full/lilac-full.wasm` but not `vendor/lilac-full-x`.
       EXCLUDED_DIRS_FOR_TARGET = {
         full: %w[vendor/lilac-compiled].freeze,
-        compiled: %w[vendor/lilac-full].freeze,
+        compiled: %w[vendor/lilac-full].freeze
       }.freeze
 
       # Client snippet injected into every dev-server page. Subscribes
@@ -82,7 +82,7 @@ module Lilac
       #
       # The overlay is self-contained: inline CSS in a namespaced id
       # (`__lilac_err_overlay`), no dependency on user styles.
-      LIVE_RELOAD_SCRIPT = <<~HTML.freeze
+      LIVE_RELOAD_SCRIPT = <<~HTML
         <script>
           // lilac dev: live reload + error overlay via SSE
           (function () {
@@ -165,7 +165,8 @@ module Lilac
                      live_reload: false, codegen: :auto,
                      target: :full, mrbc_path: nil,
                      lilac_compiled_path: nil, mruby_wasm_js_path: nil,
-                     project_root: Dir.pwd)
+                     project_root: Dir.pwd,
+                     disable_gem_discovery: false)
         @components_dir = components_dir
         @pages_dir = pages_dir
         @output_dir = output_dir
@@ -196,11 +197,16 @@ module Lilac
         @lilac_compiled_path = lilac_compiled_path
         @mruby_wasm_js_path  = mruby_wasm_js_path
         @project_root        = project_root
+        # Mirrors `CompiledRuntimeResolver` / `BytecodeBuilder`'s
+        # `disable_gem_discovery:` — tests pass `true` so the gem-bundled
+        # wasm doesn't satisfy lookups they're trying to isolate. Plumbed
+        # through to both resolvers below.
+        @disable_gem_discovery = disable_gem_discovery
       end
 
       def build
         components = load_components
-        pages = Dir.glob(File.join(@pages_dir, "**", "*.html"))
+        pages = Dir.glob(File.join(@pages_dir, '**', '*.html'))
         raise Error, "No pages found under #{@pages_dir.inspect}" if pages.empty?
 
         public_files = mirror_public_files
@@ -230,7 +236,7 @@ module Lilac
         # npm package by hand. Skipped when no `.mrb` was actually
         # produced — pages without any Ruby script don't reference the
         # bootstrap module.
-        auto_vendor_compiled_runtime! if @target == :compiled && Dir.glob(File.join(@output_dir, "*.mrb")).any?
+        auto_vendor_compiled_runtime! if @target == :compiled && Dir.glob(File.join(@output_dir, '*.mrb')).any?
 
         { pages: pages.length, components: components.length, public_files: public_files }
       end
@@ -261,7 +267,7 @@ module Lilac
           synthetic = default_results.flat_map(&:synthetic_templates).map do |st|
             RenderedTemplate.new(
               name: component_name.each_template_name(st.ref_id),
-              html: st.html,
+              html: st.html
             )
           end
 
@@ -270,7 +276,7 @@ module Lilac
             default_directives: default_results.flat_map(&:directives),
             default_refs_map: default_results.map(&:refs_map).reduce({}, :merge),
             named: named + synthetic,
-            source_path: component.path,
+            source_path: component.path
           }
         end
       end
@@ -288,7 +294,7 @@ module Lilac
 
         excluded_dirs = EXCLUDED_DIRS_FOR_TARGET.fetch(@target, [])
         copied = 0
-        Dir.glob(File.join(@public_dir, "**", "*"), File::FNM_DOTMATCH).each do |source|
+        Dir.glob(File.join(@public_dir, '**', '*'), File::FNM_DOTMATCH).each do |source|
           # File.file? already filters out the `.` / `..` directory
           # entries that FNM_DOTMATCH surfaces, so no extra guard needed.
           next unless File.file?(source)
@@ -306,8 +312,8 @@ module Lilac
       end
 
       def load_components
-        Dir.glob(File.join(@components_dir, "**", "*.lil")).to_h do |path|
-          [File.basename(path, ".lil"), SFC.parse_file(path)]
+        Dir.glob(File.join(@components_dir, '**', '*.lil')).to_h do |path|
+          [File.basename(path, '.lil'), SFC.parse_file(path)]
         end
       end
 
@@ -339,7 +345,7 @@ module Lilac
         # rendered ones. Runtime resolves `refs.lilN` positionally, so
         # nothing else about the page markup needs to change.
         components, html, used_inline, synthesized_names = synthesize_page_inline_components(
-          html, components: components, page_path: page_path,
+          html, components: components, page_path: page_path
         )
 
         # R4: page-inline script classes that collide with `.lil`-derived
@@ -413,8 +419,9 @@ module Lilac
         # skip the round-trip and return the input verbatim.
         return [components, html, [], Set.new] unless html.match?(/\bdata-component\s*=/)
 
-        require "nokogiri" unless defined?(Nokogiri)
-        require "set" unless defined?(Set)
+        require 'nokogiri' unless defined?(Nokogiri)
+        unless defined?(Set)
+        end
         doc = Nokogiri::HTML5.parse(html)
 
         # Collect data-component elements in document order. Each gets
@@ -427,7 +434,7 @@ module Lilac
         targets = []
         walk = lambda do |node|
           node.element_children.each do |child|
-            targets << child if child["data-component"]
+            targets << child if child['data-component']
             walk.call(child)
           end
         end
@@ -442,9 +449,9 @@ module Lilac
         synthesized = components.dup
         synthesized_names = Set.new
         used_inline = []
-        seen_in_page = {}  # name => line — for R2 duplicate detection
+        seen_in_page = {} # name => line — for R2 duplicate detection
         targets.each do |elem|
-          name = elem["data-component"]
+          name = elem['data-component']
 
           # R1: `.lil` and page-inline can't share a name. The .lil
           # version would be silently shadowed otherwise — see
@@ -456,7 +463,7 @@ module Lilac
               name: name,
               page_path: page_path,
               elem_line: elem.line,
-              lil_path: lil_path,
+              lil_path: lil_path
             )
           end
 
@@ -469,7 +476,7 @@ module Lilac
               name: name,
               page_path: page_path,
               elem_line: elem.line,
-              previous_line: seen_in_page[name],
+              previous_line: seen_in_page[name]
             )
           end
           seen_in_page[name] = elem.line
@@ -478,25 +485,23 @@ module Lilac
           synthesized[name] = SFC::Component.new(
             path: page_path,
             templates: [SFC::Template.new(name: nil, body: body_html)],
-            script: "",
+            script: ''
           )
           synthesized_names << name
           # R3: record signature for cross-page drift detection.
           @page_inline_signatures[name] << [signature_for(body_html), page_path] if @page_inline_signatures
           used_inline << name
-        end
 
-        # Empty out `data-each` containers in the dist DOM. TemplateAST
-        # already moves their bodies into synthetic `<template
-        # data-template>` blocks for `bind_list` to clone at runtime;
-        # leaving the static row in the live container would render it
-        # as a phantom alongside the dynamically-instantiated ones.
-        # Restricted to descendants of synthesized data-component
-        # elements so unrelated `data-each` elsewhere on the page
-        # (none in practice today, but the rule is conservative)
-        # stays untouched.
-        targets.each do |elem|
-          elem.css("[data-each]").each { |each_el| each_el.children.unlink }
+          # Empty out `data-each` containers in the dist DOM. TemplateAST
+          # already moves their bodies into synthetic `<template
+          # data-template>` blocks for `bind_list` to clone at runtime;
+          # leaving the static row in the live container would render it
+          # as a phantom alongside the dynamically-instantiated ones.
+          # Restricted to descendants of synthesized data-component
+          # elements so unrelated `data-each` elsewhere on the page
+          # (none in practice today, but the rule is conservative)
+          # stays untouched.
+          elem.css('[data-each]').each { |each_el| each_el.children.unlink }
         end
 
         [synthesized, doc.to_html, used_inline, synthesized_names]
@@ -513,9 +518,10 @@ module Lilac
 
         # `.lil` class names (skip synthesized in-memory entries — those
         # are the page-inline data-component snapshots, not real .lil files).
-        lil_class_names = {}  # ruby_class_name => kebab (original file)
-        components.each do |name, _comp|
+        lil_class_names = {} # ruby_class_name => kebab (original file)
+        components.each_key do |name|
           next if synthesized_names.include?(name)
+
           ruby_name = ComponentName.new(name).ruby_class
           lil_class_names[ruby_name] = name
         end
@@ -524,11 +530,12 @@ module Lilac
         page_inline_scripts.each do |script|
           ScriptAnalyzer.extract_top_level_class_names(script).each do |declared|
             next unless lil_class_names.key?(declared)
+
             raise Error, build_scope_error_message(
               kind: :class_name_vs_lil,
               name: declared,
               page_path: page_path,
-              lil_basename: "#{lil_class_names[declared]}.lil",
+              lil_basename: "#{lil_class_names[declared]}.lil"
             )
           end
         end
@@ -539,8 +546,8 @@ module Lilac
       # normalised so cosmetic indentation differences across pages don't
       # spuriously fire the warning.
       def signature_for(body_html)
-        require "digest" unless defined?(Digest)
-        Digest::SHA1.hexdigest(body_html.gsub(/\s+/, " ").strip)
+        require 'digest' unless defined?(Digest)
+        Digest::SHA1.hexdigest(body_html.gsub(/\s+/, ' ').strip)
       end
 
       # R3: after every page is built, scan recorded signatures for the
@@ -549,18 +556,20 @@ module Lilac
       # decide whether to rename one of them or align the shapes.
       def warn_cross_page_signature_drift!
         return unless @page_inline_signatures
+
         @page_inline_signatures.each do |name, entries|
           unique_sigs = entries.map { |sig, _| sig }.uniq
           next if unique_sigs.size <= 1
+
           pages_str = entries.uniq { |sig, _| sig }
                              .map { |_sig, page| File.basename(page) }
-                             .join(", ")
+                             .join(', ')
           warn(
             "[lilac] page-inline component #{name.inspect} appears with " \
             "different shapes across pages (#{pages_str}). " \
-            "Page-inline names are page-local so this is allowed, but " \
-            "is likely unintentional drift — consider renaming or moving " \
-            "the component to components/#{name}.lil to share one shape.",
+            'Page-inline names are page-local so this is allowed, but ' \
+            'is likely unintentional drift — consider renaming or moving ' \
+            "the component to components/#{name}.lil to share one shape."
           )
         end
       end
@@ -574,22 +583,22 @@ module Lilac
       # inline `data-component` (page-local) vs page-inline script
       # (page-local execution).
       def build_scope_error_message(kind:, name:, page_path:, **detail)
-        page_rel = page_path ? File.basename(page_path) : "(page)"
+        page_rel = page_path ? File.basename(page_path) : '(page)'
         case kind
         when :lil_vs_page_inline
           lil_rel = detail[:lil_path] ? File.basename(detail[:lil_path]) : "components/#{name}.lil"
           "data-component=#{name.inspect} on #{page_rel}:#{detail[:elem_line]} " \
             "collides with components/#{lil_rel} (project-global). " \
-            "Page-inline components are page-local, so the silent shadowing " \
-            "would surprise. Rename one of them."
+            'Page-inline components are page-local, so the silent shadowing ' \
+            'would surprise. Rename one of them.'
         when :same_page_duplicate
           "data-component=#{name.inspect} on #{page_rel}:#{detail[:elem_line]} " \
             "is declared twice in the same page (first at line #{detail[:previous_line]}). " \
-            "Page-inline component names must be unique within a page."
+            'Page-inline component names must be unique within a page.'
         when :class_name_vs_lil
           "page-inline class #{name} in #{page_rel} collides with the class " \
             "derived from components/#{detail[:lil_basename]}. " \
-            "Rename either the page-inline class or the .lil file."
+            'Rename either the page-inline class or the .lil file.'
         else
           "scope violation: #{kind} (name=#{name.inspect}, page=#{page_rel})"
         end
@@ -605,12 +614,12 @@ module Lilac
         # so the bundle doesn't end up with the inline scripts twice.
         synth_lint_script = page_inline_scripts.join("\n\n")
 
-        named_templates = used_names.flat_map { |name|
+        named_templates = used_names.flat_map do |name|
           parsed = template_ast_for(name, components[name])
           parsed[:named].map { |nt| render_named_template(nt.name, nt.html) }
-        }
+        end
 
-        scripts = used_names.map { |name|
+        scripts = used_names.map do |name|
           comp = components[name]
           parsed = template_ast_for(name, comp)
           user_script = comp.script.strip
@@ -629,7 +638,7 @@ module Lilac
             directives: parsed[:default_directives],
             refs_map: parsed[:default_refs_map],
             component_name: ComponentName.new(name).ruby_class,
-            file: parsed[:source_path] ? File.basename(parsed[:source_path]) : "(template)",
+            file: parsed[:source_path] ? File.basename(parsed[:source_path]) : '(template)'
           )
           # Fatal cross-ref violations (e.g. data-button referencing an
           # undeclared `f.button :X`) abort the build — runtime would
@@ -638,11 +647,12 @@ module Lilac
           if lint_result.errors?
             raise Error, "build failed: #{lint_result.errors} lint error(s) in template; see warnings above."
           end
+
           generated =
             if @codegen == :off
               # Runtime scanner mode: emit no bind_template_hook,
               # leaving the runtime to interpret data-* at mount.
-              ""
+              ''
             else
               # Both targets rely on Component#bind_template_hook to
               # look up `Lilac::Bindings::<Class>` by name. The explicit
@@ -654,7 +664,7 @@ module Lilac
                 component_name: name,
                 directives: parsed[:default_directives],
                 source_path: parsed[:source_path],
-                emit_include: false,
+                emit_include: false
               ).strip
             end
           # Generated FIRST so that `Lilac::Bindings::<Class>` is
@@ -664,7 +674,7 @@ module Lilac
           # module on demand at that point.
           parts = [generated, user_script]
           parts.reject(&:empty?).join("\n\n")
-        }.reject(&:empty?)
+        end.reject(&:empty?)
 
         # Page-inline `<script type="text/ruby">` blocks join the bundle
         # only on the compiled target — they're emitted last so any
@@ -687,7 +697,7 @@ module Lilac
         bundle_scripts =
           if @target == :compiled
             user_scripts = scripts + page_inline_scripts.reject { |s| s.strip.empty? }
-            user_scripts.empty? ? [] : user_scripts + ["Lilac.start"]
+            user_scripts.empty? ? [] : user_scripts + ['Lilac.start']
           else
             scripts
           end
@@ -701,7 +711,7 @@ module Lilac
             # lilac-compiled wasm. The `data-lilac-bootstrap` attribute
             # marks the tag so a future asset-pipeline pass can rewrite
             # the URLs.
-            label = page_path ? "page #{File.basename(page_path)}" : "page bundle"
+            label = page_path ? "page #{File.basename(page_path)}" : 'page bundle'
             mrb_file = bytecode_builder.build(ruby_source, source_label: label)
             render_compiled_boot_module(mrb_file)
           else
@@ -723,6 +733,7 @@ module Lilac
         @bytecode_builder ||= BytecodeBuilder.new(
           mrbc_path: @mrbc_path,
           output_dir: @output_dir,
+          disable_gem_discovery: @disable_gem_discovery
         )
       end
 
@@ -735,6 +746,7 @@ module Lilac
           lilac_compiled_path: @lilac_compiled_path,
           mruby_wasm_js_path: @mruby_wasm_js_path,
           project_root: @project_root,
+          disable_gem_discovery: @disable_gem_discovery
         )
       end
 
@@ -748,16 +760,17 @@ module Lilac
       # with an actionable message — the caller (the build command) lets
       # it propagate.
       def auto_vendor_compiled_runtime!
-        vendor_dir = File.join(@output_dir, "vendor", "lilac-compiled")
-        bridge_out = File.join(vendor_dir, "mruby-wasm-js")
+        vendor_dir = File.join(@output_dir, 'vendor', 'lilac-compiled')
+        bridge_out = File.join(vendor_dir, 'mruby-wasm-js')
         FileUtils.mkdir_p(bridge_out)
 
         wasm_src = compiled_runtime_resolver.resolve_wasm!
-        FileUtils.cp(wasm_src, File.join(vendor_dir, "lilac.wasm"))
+        FileUtils.cp(wasm_src, File.join(vendor_dir, 'lilac.wasm'))
 
         bridge_src = compiled_runtime_resolver.resolve_bridge!
-        Dir.glob(File.join(bridge_src, "*")).each do |entry|
+        Dir.glob(File.join(bridge_src, '*')).each do |entry|
           next if File.directory?(entry)
+
           FileUtils.cp(entry, File.join(bridge_out, File.basename(entry)))
         end
       end
@@ -798,7 +811,7 @@ module Lilac
       end
 
       def escape_attr(value)
-        value.gsub("&", "&amp;").gsub('"', "&quot;").gsub("<", "&lt;")
+        value.gsub('&', '&amp;').gsub('"', '&quot;').gsub('<', '&lt;')
       end
 
       def inject_before_body_close(html, injection)

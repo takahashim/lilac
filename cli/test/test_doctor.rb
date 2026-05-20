@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require_relative "test_helper"
-require "tmpdir"
-require "fileutils"
-require "stringio"
+require_relative 'test_helper'
+require 'tmpdir'
+require 'fileutils'
+require 'stringio'
 
 class TestDoctor < Minitest::Test
   def setup
-    @tmp = Dir.mktmpdir("lilac-doctor-test")
+    @tmp = Dir.mktmpdir('lilac-doctor-test')
   end
 
   def teardown
@@ -22,17 +22,17 @@ class TestDoctor < Minitest::Test
   end
 
   def scaffold_minimal_project
-    FileUtils.mkdir_p(File.join(@tmp, "pages"))
-    FileUtils.mkdir_p(File.join(@tmp, "components"))
-    FileUtils.mkdir_p(File.join(@tmp, "public", "vendor", "lilac-full", "mruby-wasm-js"))
-    File.write(File.join(@tmp, "pages", "index.html"),
+    FileUtils.mkdir_p(File.join(@tmp, 'pages'))
+    FileUtils.mkdir_p(File.join(@tmp, 'components'))
+    FileUtils.mkdir_p(File.join(@tmp, 'public', 'vendor', 'lilac-full', 'mruby-wasm-js'))
+    File.write(File.join(@tmp, 'pages', 'index.html'),
                '<html><body><lilac-component name="counter"></lilac-component></body></html>')
-    File.write(File.join(@tmp, "components", "counter.lil"), <<~GNT)
+    File.write(File.join(@tmp, 'components', 'counter.lil'), <<~GNT)
       <template><div data-component="counter"></div></template>
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
-    File.write(File.join(@tmp, "public", "vendor", "lilac-full", "lilac-full.wasm"), "WASM")
-    File.write(File.join(@tmp, "public", "vendor", "lilac-full", "mruby-wasm-js", "index.js"), "export {}")
+    File.write(File.join(@tmp, 'public', 'vendor', 'lilac-full', 'lilac-full.wasm'), 'WASM')
+    File.write(File.join(@tmp, 'public', 'vendor', 'lilac-full', 'mruby-wasm-js', 'index.js'), 'export {}')
   end
 
   def test_passes_on_fully_set_up_project
@@ -47,12 +47,12 @@ class TestDoctor < Minitest::Test
     # check we care about is pages/.
     status, out = run_doctor
     refute_equal 0, status
-    assert_match(/\[FAIL\].*pages\/ directory missing/, out)
+    assert_match(%r{\[FAIL\].*pages/ directory missing}, out)
   end
 
   def test_fails_when_runtime_wasm_missing
     scaffold_minimal_project
-    FileUtils.rm(File.join(@tmp, "public", "vendor", "lilac-full", "lilac-full.wasm"))
+    FileUtils.rm(File.join(@tmp, 'public', 'vendor', 'lilac-full', 'lilac-full.wasm'))
 
     status, out = run_doctor
     refute_equal 0, status
@@ -61,7 +61,7 @@ class TestDoctor < Minitest::Test
 
   def test_fails_when_js_adapter_missing
     scaffold_minimal_project
-    FileUtils.rm(File.join(@tmp, "public", "vendor", "lilac-full", "mruby-wasm-js", "index.js"))
+    FileUtils.rm(File.join(@tmp, 'public', 'vendor', 'lilac-full', 'mruby-wasm-js', 'index.js'))
 
     status, out = run_doctor
     refute_equal 0, status
@@ -70,29 +70,29 @@ class TestDoctor < Minitest::Test
 
   def test_fails_when_page_references_unknown_widget
     scaffold_minimal_project
-    File.write(File.join(@tmp, "pages", "other.html"),
+    File.write(File.join(@tmp, 'pages', 'other.html'),
                '<html><body><lilac-component name="ghost"></lilac-component></body></html>')
 
     status, out = run_doctor
     refute_equal 0, status
-    assert_match(/no components\/ghost\.lil exists/, out)
+    assert_match(%r{no components/ghost\.lil exists}, out)
   end
 
   def test_warns_on_unused_widget
     scaffold_minimal_project
-    File.write(File.join(@tmp, "components", "spare.lil"), <<~GNT)
+    File.write(File.join(@tmp, 'components', 'spare.lil'), <<~GNT)
       <template><div data-component="spare"></div></template>
       <script type="text/ruby">class Spare < Lilac::Component; end</script>
     GNT
 
     status, out = run_doctor
-    assert_equal 0, status, "warning should not fail the run"
+    assert_equal 0, status, 'warning should not fail the run'
     assert_match(/\[WARN\].*unused components: spare/, out)
   end
 
   def test_fails_on_widget_parse_error
     scaffold_minimal_project
-    File.write(File.join(@tmp, "components", "broken.lil"), "<template>unterminated")
+    File.write(File.join(@tmp, 'components', 'broken.lil'), '<template>unterminated')
 
     status, out = run_doctor
     refute_equal 0, status
@@ -111,8 +111,8 @@ class TestDoctor < Minitest::Test
 
   def test_compiled_runtime_reports_ok_when_discoverable
     scaffold_minimal_project
-    fake = File.join(@tmp, "fake-lilac-compiled.wasm")
-    File.binwrite(fake, "wasm")
+    fake = File.join(@tmp, 'fake-lilac-compiled.wasm')
+    File.binwrite(fake, 'wasm')
 
     status, out = run_doctor(lilac_compiled_path: fake)
     assert_equal 0, status, out
@@ -128,6 +128,16 @@ class TestDoctor < Minitest::Test
     # that doesn't exist; the resolver then walks its other lookups.
     # On CI / monorepo machines without `build/lilac-compiled.wasm`,
     # this naturally lands in the warn branch.
-    skip "needs a sandboxed monorepo to be deterministic; covered by resolver tests"
+    skip 'needs a sandboxed monorepo to be deterministic; covered by resolver tests'
+  end
+
+  def test_mrbc_backend_check_reports_a_line
+    scaffold_minimal_project
+    _status, out = run_doctor
+    # Backend resolution is environment-dependent (PATH mrbc / gem wasm /
+    # ENV overrides), so we just assert the check ran and produced one
+    # of the expected outcomes. The specific branch is exercised by
+    # `test_bytecode_builder.rb`.
+    assert_match(/mrbc backend|no mrbc backend discoverable/, out)
   end
 end
