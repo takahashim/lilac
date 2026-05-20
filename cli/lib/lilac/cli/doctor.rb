@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "builder"
+require_relative "compiled_runtime_resolver"
 require_relative "sfc"
 
 module Lilac
@@ -50,6 +51,7 @@ module Lilac
           check_public_dir,
           check_runtime_wasm,
           check_js_adapter,
+          check_compiled_runtime,
         ]
       end
 
@@ -142,6 +144,32 @@ module Lilac
         end
       end
 
+      # `lilac build` defaults to `--target compiled`, which requires
+      # a discoverable `lilac-compiled.wasm` (monorepo build/ dir, npm
+      # package, or explicit config). This check reports whether one is
+      # available, but doesn't fail the run — `lilac dev` and
+      # `lilac build --target full` work without it, so a project that
+      # only uses the full target shouldn't be forced to set up
+      # compiled deps.
+      def check_compiled_runtime
+        resolver = CompiledRuntimeResolver.new(
+          lilac_compiled_path: @config.lilac_compiled_path,
+          mruby_wasm_js_path: @config.mruby_wasm_js_path,
+          project_root: @config.root,
+        )
+        path = resolver.send(:resolve_wasm)
+        if path && File.file?(path)
+          ok("compiled wasm discoverable: #{relative(path)} (#{format_size(File.size(path))})")
+        else
+          warn(
+            "lilac-compiled.wasm not discoverable — `lilac build` (default " \
+            "target=compiled) will fail. Either run `make lilac-compiled` " \
+            "in the lilac monorepo, `npm install @takahashim/lilac-compiled` " \
+            "in this project, or use `lilac build --target full` to skip it."
+          )
+        end
+      end
+
       def gnt_paths
         return [] unless File.directory?(@config.components_dir)
 
@@ -155,7 +183,11 @@ module Lilac
       end
 
       def relative(path)
-        Pathname.new(path).relative_path_from(Pathname.new(@config.root)).to_s
+        rel = Pathname.new(path).relative_path_from(Pathname.new(@config.root)).to_s
+        # Paths outside the project root produce ugly `../../../../...`
+        # forms — fall back to the absolute path which is easier to
+        # read (and grep) than a long traversal sequence.
+        rel.start_with?("../..") ? path : rel
       rescue ArgumentError
         path
       end

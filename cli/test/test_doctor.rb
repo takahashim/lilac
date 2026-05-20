@@ -14,9 +14,9 @@ class TestDoctor < Minitest::Test
     FileUtils.remove_entry(@tmp)
   end
 
-  def run_doctor
+  def run_doctor(lilac_compiled_path: nil)
     out = StringIO.new
-    config = Lilac::CLI::Config.new(root: @tmp)
+    config = Lilac::CLI::Config.new(root: @tmp, lilac_compiled_path: lilac_compiled_path)
     status = Lilac::CLI::Doctor.new(config, out: out).run
     [status, out.string]
   end
@@ -107,5 +107,27 @@ class TestDoctor < Minitest::Test
     # just assert format presence.
     assert_match(/\d+ ok, \d+ warning\(s\), \d+ error\(s\)/, out)
     assert_equal 0, status
+  end
+
+  def test_compiled_runtime_reports_ok_when_discoverable
+    scaffold_minimal_project
+    fake = File.join(@tmp, "fake-lilac-compiled.wasm")
+    File.binwrite(fake, "wasm")
+
+    status, out = run_doctor(lilac_compiled_path: fake)
+    assert_equal 0, status, out
+    assert_match(/\[OK\].*compiled wasm discoverable/, out)
+  end
+
+  def test_compiled_runtime_warns_when_undiscoverable
+    scaffold_minimal_project
+    # Point at a nonexistent path AND override the gem-relative monorepo
+    # so the resolver's fallback chain produces a clean "not found".
+    # Doctor's instantiation of the resolver doesn't accept
+    # monorepo_root: directly — we simulate via an explicit config path
+    # that doesn't exist; the resolver then walks its other lookups.
+    # On CI / monorepo machines without `build/lilac-compiled.wasm`,
+    # this naturally lands in the warn branch.
+    skip "needs a sandboxed monorepo to be deterministic; covered by resolver tests"
   end
 end
