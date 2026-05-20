@@ -100,7 +100,13 @@ lilac build                        # 既定: target=full、output=dist
 lilac build --target compiled      # prod 向け
 lilac build --target compiled --mrbc-path /path/to/mrbc   # mrbc を明示
 lilac build -o public_html         # 出力先を変える
+lilac build --no-clean             # 既存 dist を残して上書き build (incremental)
 ```
+
+> **注**: `lilac build` は **既定で output_dir を build 前に wipe する**(Vite /
+> Next / Eleventy と同じ慣習)。古い `app.<hash>.mrb` 等の累積を防ぐため。
+> dist に外部から置いたファイルを残したい場合は `--no-clean` を明示。
+> project root / `$HOME` / `/` への `--clean` は safety guard で refuse される。
 
 ### target=full の出力
 

@@ -39,6 +39,62 @@ class TestCommand < Minitest::Test
     assert File.exist?(File.join(@tmp, "dist", "index.html"))
   end
 
+  def test_build_default_wipes_output_dir_before_building
+    File.write(File.join(@tmp, "components", "counter.lil"), <<~GNT)
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
+      <html><body><lilac-component name="counter"></lilac-component></body></html>
+    HTML
+
+    dist = File.join(@tmp, "dist")
+    FileUtils.mkdir_p(dist)
+    stale = File.join(dist, "stale.txt")
+    File.write(stale, "leftover from a previous build")
+
+    # No `--clean` flag — default behavior is to wipe before build.
+    status, _out, err = run_cmd("build", "--root", @tmp)
+    assert_equal 0, status, "stderr: #{err}"
+    refute File.exist?(stale), "build must remove stale files in the output dir by default"
+    assert File.exist?(File.join(dist, "index.html"))
+  end
+
+  def test_build_no_clean_preserves_existing_files
+    File.write(File.join(@tmp, "components", "counter.lil"), <<~GNT)
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
+      <html><body><lilac-component name="counter"></lilac-component></body></html>
+    HTML
+
+    dist = File.join(@tmp, "dist")
+    FileUtils.mkdir_p(dist)
+    keep = File.join(dist, "external.txt")
+    File.write(keep, "managed outside lilac")
+
+    status, _out, err = run_cmd("build", "--root", @tmp, "--no-clean")
+    assert_equal 0, status, "stderr: #{err}"
+    assert File.exist?(keep), "--no-clean must preserve pre-existing files in the output dir"
+    assert File.exist?(File.join(dist, "index.html"))
+  end
+
+  def test_build_refuses_to_wipe_project_root
+    File.write(File.join(@tmp, "components", "counter.lil"), <<~GNT)
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    File.write(File.join(@tmp, "pages", "index.html"), "<html><body></body></html>")
+
+    # `--output @tmp` would make output_dir == project root. The guard
+    # runs on every build now (default-clean), so no `--clean` flag is
+    # needed to trigger it.
+    status, _out, err = run_cmd("build", "--root", @tmp, "--output", @tmp)
+    refute_equal 0, status, "must refuse to wipe a path that resolves to the project root"
+    assert_match(/refused/, err)
+  end
+
   def test_build_reports_unknown_component_via_stderr
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
       <html><body><lilac-component name="missing"></lilac-component></body></html>
