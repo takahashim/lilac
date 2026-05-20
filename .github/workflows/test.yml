@@ -63,11 +63,11 @@ jobs:
         working-directory: mruby-wasm-runtime
         run: make wasi-sdk && make js
 
-      - name: Build js-lilac-full
+      - name: Build lilac-full
         working-directory: lilac
         env:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
-        run: make js-lilac-full
+        run: make lilac-full
 
       - name: Run wasm_spec
         working-directory: lilac
