@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>2. Temperature Converter — Lilac · 7GUIs</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/lang-init.js"></script>
+    <style>
+      .temp { display: flex; gap: 0.8em; align-items: center; flex-wrap: wrap; }
+      .temp .group { display: flex; gap: 0.4em; align-items: center; }
+      .temp input { width: 6em; text-align: right; }
+    </style>
+  </head>
+  <body>
+    <lilac-component name="gallery-nav"></lilac-component>
+
+    <h1>2. Temperature Converter</h1>
+    <p class="lede">
+      Editing either input updates the other. Empty / unparseable input
+      clears the partner field.
+    </p>
+
+    <div class="panel">
+      <div class="temp" data-component="temperature">
+        <div class="group">
+          <input data-ref="celsius" type="text" inputmode="decimal" value="0">
+          <label>°C</label>
+        </div>
+        <span>=</span>
+        <div class="group">
+          <input data-ref="fahrenheit" type="text" inputmode="decimal" value="32">
+          <label>°F</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols">
+    <details class="source" open>
+      <summary>Source</summary>
+      <pre><code id="source-display" class="lang-ruby"></code></pre>
+    </details>
+
+    <section class="notes">
+      <h3 class="notes__heading">How it works</h3>
+      <div class="notes-body lang-ja">
+        <p>あえて <code>data-bind</code> による双方向 binding は使わず、<code>refs.X.on(:input)</code> で他方の input に直接書き込む。Signal を介さないので feedback loop が原理的に起きない。</p>
+        <ul>
+          <li><code>refs.celsius.on(:input) { … }</code> — DOM event listener。unmount で自動 remove</li>
+          <li><code>refs.celsius.value</code> — DOM input の <code>value</code> を直接 read/write(<code>RefElement#PROPS</code>)</li>
+          <li><code>Float(s) rescue nil</code> — 数値パース失敗を防御</li>
+          <li>双方向 binding が必要に見える場面でも、event-driven のほうがシンプルなことは多い</li>
+        </ul>
+      </div>
+      <div class="notes-body lang-en">
+        <p>Deliberately skip two-way <code>data-bind</code>: <code>refs.X.on(:input)</code> writes straight to the partner input. With no Signal round-trip, a feedback loop is impossible by construction.</p>
+        <ul>
+          <li><code>refs.celsius.on(:input) { … }</code> — DOM event listener; auto-removed on unmount</li>
+          <li><code>refs.celsius.value</code> — read/write the input's <code>value</code> directly (<code>RefElement#PROPS</code>)</li>
+          <li><code>Float(s) rescue nil</code> — guards against parse failure</li>
+          <li>Even when two-way binding looks needed, event-driven is often simpler</li>
+        </ul>
+      </div>
+    </section>
+    </div>
+
+    <p id="boot" class="boot"></p>
+
+    <script type="text/ruby">
+class Temperature < Lilac::Component
+  def setup
+    # Direct DOM-event handlers (no signal round-trip) avoid the
+    # feedback loop a naive two-way `data-bind` pair would create.
+    refs.celsius.on(:input) do
+      v = Float(refs.celsius.value) rescue nil
+      if v
+        refs.fahrenheit.value = format_num(v * 9.0 / 5.0 + 32.0)
+      elsif refs.celsius.value.strip.empty?
+        refs.fahrenheit.value = ""
+      end
+    end
+
+    refs.fahrenheit.on(:input) do
+      v = Float(refs.fahrenheit.value) rescue nil
+      if v
+        refs.celsius.value = format_num((v - 32.0) * 5.0 / 9.0)
+      elsif refs.fahrenheit.value.strip.empty?
+        refs.celsius.value = ""
+      end
+    end
+  end
+
+  private
+
+  # Drop trailing ".0" so integer answers don't carry a stray dot.
+  def format_num(f)
+    rounded = (f * 10.0).round / 10.0
+    rounded == rounded.to_i ? rounded.to_i.to_s : rounded.to_s
+  end
+end
+    </script>
+
+    <script type="module" src="/boot.js"></script>
+  </body>
+</html>

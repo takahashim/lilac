@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>1. Counter — Lilac · 7GUIs</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/lang-init.js"></script>
+    <style>
+      .counter { display: flex; gap: 0.6em; align-items: center; }
+      .counter output {
+        font: 700 1.2em ui-monospace, monospace;
+        min-width: 3em; text-align: right;
+        padding: 0.3em 0.6em;
+        background: var(--bg); border-radius: 6px;
+        border: 1px solid var(--border);
+      }
+    </style>
+  </head>
+  <body>
+    <lilac-component name="gallery-nav"></lilac-component>
+
+    <h1>1. Counter</h1>
+    <p class="lede">A read-only display and a button that increments it.</p>
+
+    <div class="panel">
+      <div class="counter" data-component="counter-task">
+        <output data-text="@count">0</output>
+        <button type="button" data-on-click="inc">Count</button>
+      </div>
+    </div>
+
+    <div class="cols">
+    <details class="source" open>
+      <summary>Source</summary>
+      <pre><code id="source-display" class="lang-ruby"></code></pre>
+    </details>
+
+    <section class="notes">
+      <h3 class="notes__heading">How it works</h3>
+      <div class="notes-body lang-ja">
+        <p>Reactive 状態を <code>signal(0)</code> で 1 行作り、ボタンの <code>data-on-click</code> がインクリメントを呼ぶだけ。<code>data-text</code> が Signal 変更を自動で DOM に反映する。</p>
+        <ul>
+          <li><code>signal(value)</code> — 書き換え可能な reactive cell</li>
+          <li><code>Signal#update {|n| n + 1 }</code> — 関数で更新(競合回避)</li>
+          <li><code>data-on-click="inc"</code> — メソッド名指定だけで bind、<code>refs</code> 不要</li>
+          <li><code>data-text="@count"</code> — Signal の値を <code>textContent</code> に流す</li>
+        </ul>
+      </div>
+      <div class="notes-body lang-en">
+        <p>One line of reactive state via <code>signal(0)</code>, and the button's <code>data-on-click</code> calls the increment. <code>data-text</code> automatically syncs Signal changes to the DOM.</p>
+        <ul>
+          <li><code>signal(value)</code> — writable reactive cell</li>
+          <li><code>Signal#update {|n| n + 1 }</code> — functional update (avoid races)</li>
+          <li><code>data-on-click="inc"</code> — bind by method name, no <code>refs</code> needed</li>
+          <li><code>data-text="@count"</code> — pushes the Signal value into <code>textContent</code></li>
+        </ul>
+      </div>
+    </section>
+    </div>
+
+    <p id="boot" class="boot"></p>
+
+    <script type="text/ruby">
+class CounterTask < Lilac::Component
+  def setup
+    @count = signal(0)
+  end
+
+  def inc(_ev) = @count.update { |n| n + 1 }
+end
+    </script>
+
+    <script type="module" src="/boot.js"></script>
+  </body>
+</html>

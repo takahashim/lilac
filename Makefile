@@ -170,7 +170,8 @@ serve: lilac-full mrbgem
 	  exit 1; \
 	}
 	@echo "Serving lilac/ at http://127.0.0.1:8000/"
-	@echo "Examples: http://127.0.0.1:8000/examples/"
+	@echo "Examples (runtime-only): http://127.0.0.1:8000/examples/runtime-only/"
+	@echo "Examples (7GUIs gallery): cd examples/7guis && bundle exec lilac dev"
 	@wsv .
 
 # ── npm package staging ─────────────────────────────────────────────────

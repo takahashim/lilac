@@ -1,0 +1,52 @@
+<template>
+  <header data-component="gallery-nav" class="gallery-nav">
+    <a class="gallery-nav__home" href="./">Lilac · 7GUIs</a>
+    <nav class="gallery-nav__tasks">
+      <a href="./01-counter.html">1. Counter</a>
+      <a href="./02-temperature.html">2. Temp.</a>
+      <a href="./03-flight-booker.html">3. Flight</a>
+      <a href="./04-timer.html">4. Timer</a>
+      <a href="./05-crud.html">5. CRUD</a>
+    </nav>
+    <div class="gallery-nav__lang" role="group" aria-label="Language">
+      <button type="button" data-on-click="set_ja"
+              data-class="{ 'is-active': @is_ja }"
+              data-attr-aria-pressed="@is_ja_str">JA</button>
+      <button type="button" data-on-click="set_en"
+              data-class="{ 'is-active': @is_en }"
+              data-attr-aria-pressed="@is_en_str">EN</button>
+    </div>
+    <a class="gallery-nav__ref"
+       href="https://eugenkiss.github.io/7guis/tasks/"
+       target="_blank" rel="noopener">7GUIs ref ↗</a>
+  </header>
+</template>
+
+<script type="text/ruby">
+class GalleryNav < Lilac::Component
+  def setup
+    # `persistent_signal` auto-mirrors the value into
+    # localStorage["lilac-7guis-lang"] via an effect. The initial value
+    # is whatever was already persisted (set by lang-init.js earlier in
+    # the document, or written by a previous session), else "ja".
+    @lang = persistent_signal("lilac-7guis-lang", default: "ja")
+    @is_ja = computed { @lang.value == "ja" }
+    @is_en = computed { @lang.value == "en" }
+    # `data-attr-aria-pressed` consumes a String/nil; a Boolean Signal
+    # would render as "true"/"false" but reads cleaner as an explicit
+    # toggle value sourced from a computed.
+    @is_ja_str = computed { @is_ja.value ? "true" : "false" }
+    @is_en_str = computed { @is_en.value ? "true" : "false" }
+
+    # Drive `<html data-lang>` from the signal so the language-toggle
+    # CSS rules see the change. The initial paint already has the right
+    # value because lang-init.js ran synchronously before <body>.
+    effect do
+      JS.global[:document][:documentElement][:dataset][:lang] = @lang.value
+    end
+  end
+
+  def set_ja(_ev) = @lang.value = "ja"
+  def set_en(_ev) = @lang.value = "en"
+end
+</script>

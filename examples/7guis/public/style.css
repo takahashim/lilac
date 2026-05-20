@@ -1,0 +1,242 @@
+/* Shared styles for the 7GUIs gallery. Mirrored from public/ to dist/ at
+   build time; each page links it as `/style.css`. */
+
+:root {
+  --bg: #fafafa;
+  --panel: #fff;
+  --border: #e5e5e5;
+  --accent: #b94f3f;
+  --ok: #2a7a4e;
+  --err: #c4452f;
+  --text: #222;
+  --muted: #888;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 1em 3em;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* Demo widget + intro stay narrow (centered) even though the body is
+   wide, so the sample itself doesn't stretch. The Source / How-it-works
+   side-by-side pair below uses the wider body width. */
+h1, p.lede, .panel, .boot, .task-list { max-width: 720px; margin-inline: auto; }
+h1 { margin: 0.5em auto 0.2em; font-size: 1.4em; }
+h2 { margin: 1.2em 0 0.4em; font-size: 1.1em; }
+p.lede { color: var(--muted); margin-top: 0; }
+
+/* Two-column layout for Source + How it works under each demo. */
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1em;
+  margin: 1em 0;
+}
+.cols > details { margin: 0; }
+@media (max-width: 900px) {
+  .cols { grid-template-columns: 1fr; }
+}
+
+a { color: var(--accent); }
+
+.gallery-nav {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  padding: 0.6em 0;
+  margin: 0 0 1em;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9em;
+  flex-wrap: wrap;
+}
+.gallery-nav__home {
+  font-weight: 600;
+  text-decoration: none;
+}
+.gallery-nav__tasks {
+  display: flex;
+  gap: 0.8em;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.gallery-nav__tasks a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.gallery-nav__tasks a:hover { color: var(--accent); }
+.gallery-nav__ref {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.85em;
+}
+.gallery-nav__ref:hover { color: var(--accent); }
+
+.gallery-nav__lang {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.gallery-nav__lang button {
+  font-size: 0.8em;
+  font-weight: 600;
+  padding: 0.2em 0.6em;
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+.gallery-nav__lang button + button { border-left: 1px solid var(--border); }
+.gallery-nav__lang button.is-active {
+  background: var(--accent);
+  color: white;
+}
+
+/* Language toggle: hide the inactive side. The default is `ja`; the
+   inline lang-init.js writes `data-lang` on <html> before paint, so
+   there is no flash on initial load. */
+html[data-lang="ja"] .lang-en,
+html[data-lang="en"] .lang-ja { display: none; }
+
+.panel {
+  background: var(--panel);
+  padding: 1em 1.2em;
+  border-radius: 10px;
+  margin: 1em 0;
+  border: 1px solid var(--border);
+}
+
+.row { display: flex; gap: 0.6em; align-items: center; }
+.row + .row { margin-top: 0.6em; }
+
+label { color: var(--muted); font-size: 0.9em; }
+
+input, select {
+  font-size: 1em;
+  padding: 0.4em 0.6em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+input.is-invalid { border-color: var(--err); background: #fff4f1; }
+
+button {
+  font-size: 1em;
+  padding: 0.4em 1em;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { opacity: 0.88; }
+button:disabled {
+  background: var(--border);
+  border-color: var(--border);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+button.subtle {
+  background: transparent;
+  color: var(--accent);
+}
+
+.status { color: var(--muted); font-size: 0.9em; }
+.boot { color: var(--muted); font-size: 0.85em; margin-top: 2em; }
+
+.task-list { list-style: none; padding: 0; margin: 0; }
+.task-list li {
+  display: flex;
+  gap: 0.8em;
+  padding: 0.8em 0;
+  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+}
+.task-list li:last-child { border-bottom: none; }
+.task-list .task-num {
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 1.5em;
+}
+.task-list .task-body { flex: 1; }
+.task-list .task-name { font-weight: 600; }
+.task-list .task-name.is-pending { color: var(--muted); font-weight: normal; }
+.task-list .task-desc {
+  color: var(--muted);
+  font-size: 0.9em;
+  margin: 0.2em 0 0;
+}
+
+/* Source + notes blocks under each demo. Source stays a <details>
+   (collapsible), notes are a plain <section> that is always shown — the
+   inner JA/EN content is toggled by the language switcher in the nav. */
+details.source, section.notes {
+  margin: 1em 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+details.source > summary, section.notes > .notes__heading {
+  padding: 0.5em 0.9em;
+  font-weight: 600;
+  font-size: 0.9em;
+  color: var(--muted);
+  margin: 0;
+}
+details.source > summary {
+  cursor: pointer;
+  list-style: none;
+}
+details.source > summary::before {
+  content: "▸ ";
+  display: inline-block;
+  width: 1em;
+}
+details.source[open] > summary::before { content: "▾ "; }
+
+details.source pre {
+  margin: 0;
+  padding: 0.8em 1em;
+  background: #1f2024;
+  color: #e8e8e8;
+  border-radius: 0 0 8px 8px;
+  overflow: auto;
+  max-height: 60vh;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.0em;
+  line-height: 1.1;
+}
+details.source code { white-space: pre; }
+
+section.notes .notes-body {
+  padding: 0 1em 0.8em;
+}
+section.notes .notes-body > p:first-child {
+  margin-top: 0;
+  font-weight: 500;
+  color: var(--text);
+}
+section.notes ul { padding-left: 1.4em; margin: 0.4em 0; }
+section.notes li { margin: 0.3em 0; }
+/* Inline `<code>` — match the surrounding text size. The default
+   browser stylesheet renders the bare `monospace` keyword visibly
+   smaller than the proportional body font; we pin an explicit
+   monospace stack at 1em so inline code reads at the same size as the
+   prose around it. `pre code` is excluded so the source block keeps
+   its own (smaller) sizing. */
+:not(pre) > code {
+  background: #f0e4df;
+  color: var(--accent);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  font-size: 1em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

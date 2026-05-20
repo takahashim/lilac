@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>5. CRUD — Lilac · 7GUIs</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/lang-init.js"></script>
+    <style>
+      .crud {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.8em 1em;
+      }
+      .crud .filter { grid-column: 1 / span 2; display: flex; gap: 0.5em; align-items: center; }
+      .crud .filter input { flex: 1; }
+      .crud .listbox {
+        list-style: none; margin: 0; padding: 0.4em;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--panel);
+        min-height: 8em;
+        max-height: 12em;
+        overflow-y: auto;
+      }
+      .crud .listbox li {
+        padding: 0.25em 0.5em;
+        border-radius: 4px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .crud .listbox li:hover { background: var(--bg); }
+      .crud .listbox li.is-selected {
+        background: var(--accent); color: white;
+      }
+      .crud .fields { display: flex; flex-direction: column; gap: 0.5em; }
+      .crud .fields .row { gap: 0.4em; }
+      .crud .fields label { min-width: 5em; }
+      .crud .fields input { flex: 1; }
+      .crud .actions { grid-column: 1 / span 2; display: flex; gap: 0.5em; }
+    </style>
+  </head>
+  <body>
+    <lilac-component name="gallery-nav"></lilac-component>
+
+    <h1>5. CRUD</h1>
+    <p class="lede">
+      Prefix-filter a list, select a row to load the inputs, then
+      create / update / delete. The row is a separate component that
+      looks up shared state via <code>expose</code> / <code>lookup</code>.
+    </p>
+
+    <div class="panel">
+      <div class="crud" data-component="crud">
+        <div class="filter">
+          <label>Filter prefix:</label>
+          <input type="text" data-bind="@filter">
+        </div>
+
+        <ul class="listbox" data-each="@visible" data-key="id">
+          <li data-component="crud-row"
+              data-class="{ 'is-selected': @is_selected }">
+            <span data-text="@label"></span>
+          </li>
+        </ul>
+
+        <div class="fields">
+          <div class="row">
+            <label>Name:</label>
+            <input type="text" data-bind="@name">
+          </div>
+          <div class="row">
+            <label>Surname:</label>
+            <input type="text" data-bind="@surname">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" data-on-click="create_item" data-attr-disabled="@cannot_create">Create</button>
+          <button type="button" data-on-click="update_item" data-attr-disabled="@cannot_modify">Update</button>
+          <button type="button" data-on-click="delete_item" data-attr-disabled="@cannot_modify">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols">
+    <details class="source" open>
+      <summary>Source</summary>
+      <pre><code id="source-display" class="lang-ruby"></code></pre>
+    </details>
+
+    <section class="notes">
+      <h3 class="notes__heading">How it works</h3>
+      <div class="notes-body lang-ja">
+        <p>list は <code>data-each</code> + key で render し、行 component は <code>prop</code> 宣言だけで iteration item の同名 field を auto-fill 受け取る。親子間の共有 state は <code>expose</code> / <code>lookup</code>。</p>
+        <ul>
+          <li><code>data-each="@visible" data-key="id"</code> — Signal 配列を key 付きで render(行再利用が効く)</li>
+          <li><code>prop :name, String</code> — Signal として <code>@name</code> ivar と <code>name</code> accessor を生成。<code>data-each</code> 内では item の同名 field から auto-fill(prop auto-fill, §7.6)</li>
+          <li><code>expose :selected_id, @selected_id</code>(<code>prepare_setup</code> 内) — 子の <code>lookup(:selected_id)</code> から参照される</li>
+          <li>行の click は <code>root.dispatch(:row_chosen, bubbles: true)</code> で親へ。親側で <code>component_for(event[:target])</code> → row の <code>id</code> accessor で解決</li>
+          <li>filter 入力も <code>data-bind="@filter"</code> + <code>computed</code> の組み合わせで list 表示が即追従</li>
+        </ul>
+      </div>
+      <div class="notes-body lang-en">
+        <p>The list renders with <code>data-each</code> + key; each row component receives its iteration item's same-named fields automatically through <code>prop</code> declarations. Shared parent / child state uses <code>expose</code> / <code>lookup</code>.</p>
+        <ul>
+          <li><code>data-each="@visible" data-key="id"</code> — renders the Signal array with stable row reuse</li>
+          <li><code>prop :name, String</code> — exposes <code>@name</code> as a Signal and <code>name</code> accessor; inside <code>data-each</code> it auto-fills from the current item's <code>name</code> field (prop auto-fill, §7.6)</li>
+          <li><code>expose :selected_id, @selected_id</code> (inside <code>prepare_setup</code>) — children read it via <code>lookup(:selected_id)</code></li>
+          <li>Row clicks <code>root.dispatch(:row_chosen, bubbles: true)</code>; the parent resolves the row via <code>component_for(event[:target])</code> and reads its <code>id</code> accessor</li>
+          <li>The filter input is <code>data-bind="@filter"</code> + <code>computed</code>; the list updates as you type</li>
+        </ul>
+      </div>
+    </section>
+    </div>
+
+    <p id="boot" class="boot"></p>
+
+    <script type="text/ruby">
+class CrudRow < Lilac::Component
+  # Props are populated automatically from each iteration item's
+  # same-named fields (data-each prop auto-fill). `prop :X` exposes
+  # `@X` as a Signal and a same-named accessor that returns `.value`.
+  prop :id, Integer
+  prop :name, String
+  prop :surname, String
+
+  def setup
+    selected = lookup(:selected_id)
+    # `surname` / `name` accessors return Signal#value and subscribe
+    # inside `computed`, so the row updates when its item changes.
+    @label       = computed { "#{surname}, #{name}" }
+    @is_selected = computed { selected.value == id }
+
+    root.on(:click) do
+      root.dispatch(:row_chosen, bubbles: true)
+    end
+  end
+end
+
+class Crud < Lilac::Component
+  # `selected_id` is exposed BEFORE setup so child rows can `lookup` it
+  # when they mount inside `data-each`. The items themselves are read by
+  # each row via prop auto-fill (§7.6 of lilac-props-spec.md), so they
+  # don't need to be exposed.
+  def prepare_setup
+    @items = signal([
+      { "id" => 1, "name" => "Hans",  "surname" => "Emil"       },
+      { "id" => 2, "name" => "Max",   "surname" => "Mustermann" },
+      { "id" => 3, "name" => "Roman", "surname" => "Tisch"      },
+    ])
+    @selected_id = signal(nil)
+    expose :selected_id, @selected_id
+  end
+
+  def setup
+    @filter  = signal("")
+    @name    = signal("")
+    @surname = signal("")
+    @next_id = signal(4)
+
+    @visible = computed do
+      f = @filter.value.to_s.downcase
+      @items.value.select { |it| f.empty? || it["surname"].downcase.start_with?(f) }
+    end
+
+    @cannot_create = computed { @name.value.strip.empty? && @surname.value.strip.empty? }
+    @cannot_modify = computed { @selected_id.value.nil? }
+
+    # Match the TodoList pattern: resolve the clicked row component via
+    # `component_for(event[:target])` and read its `id` accessor.
+    root.on(:row_chosen) do |event|
+      row = component_for(event[:target])
+      next unless row
+      sid = row.id
+      @selected_id.value = sid
+      if (it = @items.value.find { |x| x["id"] == sid })
+        @name.value    = it["name"]
+        @surname.value = it["surname"]
+      end
+    end
+  end
+
+  def create_item(_ev)
+    id = @next_id.value
+    @next_id.update { |n| n + 1 }
+    @items.update do |arr|
+      arr + [{ "id" => id, "name" => @name.value.strip, "surname" => @surname.value.strip }]
+    end
+    @selected_id.value = id
+  end
+
+  def update_item(_ev)
+    sid = @selected_id.value
+    return unless sid
+    @items.update do |arr|
+      arr.map do |it|
+        it["id"] == sid ? it.merge("name" => @name.value.strip, "surname" => @surname.value.strip) : it
+      end
+    end
+  end
+
+  def delete_item(_ev)
+    sid = @selected_id.value
+    return unless sid
+    @items.update { |arr| arr.reject { |it| it["id"] == sid } }
+    @selected_id.value = nil
+    @name.value = ""
+    @surname.value = ""
+  end
+end
+    </script>
+
+    <script type="module" src="/boot.js"></script>
+  </body>
+</html>

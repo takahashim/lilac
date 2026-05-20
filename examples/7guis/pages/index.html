@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Lilac · 7GUIs</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/lang-init.js"></script>
+  </head>
+  <body>
+    <lilac-component name="gallery-nav"></lilac-component>
+
+    <h1>Lilac · 7GUIs</h1>
+    <p class="lede">
+      <a href="https://eugenkiss.github.io/7guis/" target="_blank" rel="noopener">7GUIs</a>
+      is a benchmark of 7 small GUI tasks that exercise the typical pain
+      points of UI frameworks. This gallery is a Lilac implementation,
+      built with <code>lilac-cli</code> from
+      <code>components/gallery-nav.lil</code> + plain HTML pages with
+      inline <code>&lt;script type="text/ruby"&gt;</code>.
+    </p>
+
+    <ol class="task-list">
+      <li>
+        <span class="task-num">1</span>
+        <div class="task-body">
+          <a class="task-name" href="./01-counter.html">Counter</a>
+          <p class="task-desc">Basic signal + button.</p>
+        </div>
+      </li>
+      <li>
+        <span class="task-num">2</span>
+        <div class="task-body">
+          <a class="task-name" href="./02-temperature.html">Temperature Converter</a>
+          <p class="task-desc">Two-way binding between two inputs via computed.</p>
+        </div>
+      </li>
+      <li>
+        <span class="task-num">3</span>
+        <div class="task-body">
+          <a class="task-name" href="./03-flight-booker.html">Flight Booker</a>
+          <p class="task-desc">Dependent inputs, validation, enabled/disabled submit.</p>
+        </div>
+      </li>
+      <li>
+        <span class="task-num">4</span>
+        <div class="task-body">
+          <a class="task-name" href="./04-timer.html">Timer</a>
+          <p class="task-desc">Effect-driven setInterval + progress bar + adjustable duration.</p>
+        </div>
+      </li>
+      <li>
+        <span class="task-num">5</span>
+        <div class="task-body">
+          <a class="task-name" href="./05-crud.html">CRUD</a>
+          <p class="task-desc">Filter, list, create / update / delete with bind_list.</p>
+        </div>
+      </li>
+      <li>
+        <span class="task-num">6</span>
+        <div class="task-body">
+          <span class="task-name is-pending">Circle Drawer — TBD</span>
+          <p class="task-desc">Canvas / SVG + undo / redo. Not yet implemented.</p>
+        </div>
+      </li>
+      <li>
+        <span class="task-num">7</span>
+        <div class="task-body">
+          <span class="task-name is-pending">Cells — TBD</span>
+          <p class="task-desc">Spreadsheet with formula parsing and dependency graph. Not yet implemented.</p>
+        </div>
+      </li>
+    </ol>
+  </body>
+</html>

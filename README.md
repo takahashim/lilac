@@ -28,7 +28,9 @@ lilac/
 │   └── lilac-cli.gemspec
 ├── build_config/   # mruby cross-build configs for the wasm bundles
 ├── docs/           # directive spec, framework design notes
-├── examples/       # standalone Lilac apps
+├── examples/
+│   ├── runtime-only/  # no-build demos (inline <script type="text/ruby">)
+│   └── 7guis/         # 7GUIs benchmark gallery built by `lilac build` / `lilac dev`
 └── Makefile        # builds lilac-{full,compiled}.wasm
 ```
 
@@ -99,14 +101,14 @@ file with `data-*` directives and an inline `<script type="text/ruby">`:
 
 The runtime walks the DOM at mount time, parses each `data-*`
 directive, and wires the equivalent `bind` / `bind_input` /
-`bind_list` calls automatically. See `examples/` for fuller demos
+`bind_list` calls automatically. See `examples/runtime-only/` for fuller demos
 including `data-each` lists, forms, and shared theme state.
 
 To run the examples locally:
 
 ```bash
 make serve   # builds the wasm bundle, symlinks mrbgem, starts wsv
-# then visit http://127.0.0.1:8000/examples/
+# then visit http://127.0.0.1:8000/examples/runtime-only/
 ```
 
 ## Build variants

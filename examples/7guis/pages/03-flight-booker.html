@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>3. Flight Booker — Lilac · 7GUIs</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/lang-init.js"></script>
+    <style>
+      .flight { display: flex; flex-direction: column; gap: 0.6em; max-width: 22em; }
+      .flight select, .flight input { width: 100%; }
+      .flight .result { color: var(--ok); font-weight: 600; min-height: 1.2em; }
+    </style>
+  </head>
+  <body>
+    <lilac-component name="gallery-nav"></lilac-component>
+
+    <h1>3. Flight Booker</h1>
+    <p class="lede">
+      The return date is only editable for a return flight, and must not
+      precede the outbound date. Book is disabled until inputs are
+      consistent.
+    </p>
+
+    <div class="panel">
+      <div class="flight" data-component="flight-booker">
+        <select data-bind="@kind">
+          <option value="one-way">one-way flight</option>
+          <option value="return">return flight</option>
+        </select>
+
+        <input type="date" data-bind="@start" data-class="{ 'is-invalid': @start_invalid }">
+
+        <input type="date" data-bind="@ret"
+               data-attr-disabled="@return_disabled"
+               data-class="{ 'is-invalid': @return_invalid }">
+
+        <button type="button" data-on-click="book" data-attr-disabled="@cannot_submit">
+          Book
+        </button>
+
+        <p class="result" data-text="@result"></p>
+      </div>
+    </div>
+
+    <div class="cols">
+    <details class="source" open>
+      <summary>Source</summary>
+      <pre><code id="source-display" class="lang-ruby"></code></pre>
+    </details>
+
+    <section class="notes">
+      <h3 class="notes__heading">How it works</h3>
+      <div class="notes-body lang-ja">
+        <p><code>computed</code> で「各 field が valid か」「Book できるか」を Signal 群から導出し、<code>data-attr-disabled</code> / <code>data-class</code> で submit ボタン活性化や error 表示に直結させる。</p>
+        <ul>
+          <li><code>data-bind="@kind"</code> — <code>&lt;select&gt;</code> の選択値を Signal に双方向 bind</li>
+          <li><code>computed { … }</code> — 依存 Signal を自動追跡する read-only Signal</li>
+          <li><code>data-attr-disabled="@cannot_submit"</code> — Signal が truthy なら <code>disabled</code> attribute が立つ</li>
+          <li><code>data-class="{ 'is-invalid': @start_invalid }"</code> — Signal が truthy なら class 追加</li>
+          <li>ISO 日付文字列(<code>YYYY-MM-DD</code>)は辞書順 = 時系列順なので Date パース不要</li>
+        </ul>
+      </div>
+      <div class="notes-body lang-en">
+        <p>Use <code>computed</code> to derive per-field validity and overall bookability from the underlying Signals; <code>data-attr-disabled</code> / <code>data-class</code> then drive the submit button and error styling directly.</p>
+        <ul>
+          <li><code>data-bind="@kind"</code> — two-way binds the <code>&lt;select&gt;</code> value</li>
+          <li><code>computed { … }</code> — read-only Signal that auto-tracks dependencies</li>
+          <li><code>data-attr-disabled="@cannot_submit"</code> — sets <code>disabled</code> when the Signal is truthy</li>
+          <li><code>data-class="{ 'is-invalid': @start_invalid }"</code> — adds the class conditionally</li>
+          <li>ISO date strings (<code>YYYY-MM-DD</code>) sort lexicographically the same way as chronologically — no Date parsing needed</li>
+        </ul>
+      </div>
+    </section>
+    </div>
+
+    <p id="boot" class="boot"></p>
+
+    <script type="text/ruby">
+class FlightBooker < Lilac::Component
+  ISO_DATE = /\A\d{4}-\d{2}-\d{2}\z/
+
+  def setup
+    today = JS.eval_javascript("new Date().toISOString().slice(0,10)").to_s
+
+    @kind   = signal("one-way")
+    @start  = signal(today)
+    @ret    = signal(today)
+    @result = signal("")
+
+    @is_return       = computed { @kind.value == "return" }
+    @return_disabled = computed { !@is_return.value }
+    @start_invalid   = computed { !valid_date?(@start.value) }
+    @return_invalid  = computed do
+      @is_return.value && (!valid_date?(@ret.value) || @ret.value < @start.value)
+    end
+    @cannot_submit = computed { @start_invalid.value || @return_invalid.value }
+  end
+
+  def book(_ev)
+    @result.value =
+      if @is_return.value
+        "You have booked a return flight: #{@start.value} → #{@ret.value}."
+      else
+        "You have booked a one-way flight on #{@start.value}."
+      end
+  end
+
+  private
+
+  # ISO date strings compare lexicographically the same way they compare
+  # chronologically, so no Date parsing is needed for the start/return
+  # ordering check.
+  def valid_date?(s)
+    s.is_a?(String) && s.match?(ISO_DATE)
+  end
+end
+    </script>
+
+    <script type="module" src="/boot.js"></script>
+  </body>
+</html>

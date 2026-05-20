@@ -1,0 +1,9 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# This examples project consumes lilac-cli directly from the sibling
+# `cli/` directory in this repo, so changes to the CLI are picked up
+# without a release. Outside the monorepo, replace with:
+#   gem "lilac-cli", "~> 0.1"
+gem "lilac-cli", path: "../../cli"

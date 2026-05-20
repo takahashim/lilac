@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>4. Timer — Lilac · 7GUIs</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/lang-init.js"></script>
+    <style>
+      .timer { display: grid; grid-template-columns: 7em 1fr; gap: 0.5em 1em; align-items: center; }
+      .timer label { color: var(--muted); }
+      progress {
+        width: 100%; height: 1em;
+        accent-color: var(--accent);
+      }
+      .timer input[type="range"] { width: 100%; }
+      .timer .elapsed-num {
+        font: 700 1.1em ui-monospace, monospace;
+        color: var(--text);
+      }
+      .timer .reset { grid-column: 2; justify-self: start; margin-top: 0.4em; }
+    </style>
+  </head>
+  <body>
+    <lilac-component name="gallery-nav"></lilac-component>
+
+    <h1>4. Timer</h1>
+    <p class="lede">
+      Elapsed time tracks a setInterval (auto-cancelled when the
+      component unmounts). The duration slider can extend a finished
+      timer to make it resume.
+    </p>
+
+    <div class="panel">
+      <div class="timer" data-component="timer-task">
+        <label>Elapsed:</label>
+        <progress max="100" data-attr-value="@progress"></progress>
+
+        <label>&nbsp;</label>
+        <span class="elapsed-num" data-text="@elapsed_text"></span>
+
+        <label>Duration:</label>
+        <input type="range" min="0" max="60" step="0.1" data-bind="@duration_sec">
+
+        <label>&nbsp;</label>
+        <span class="status" data-text="@duration_text"></span>
+
+        <button type="button" class="reset" data-on-click="reset">Reset</button>
+      </div>
+    </div>
+
+    <div class="cols">
+    <details class="source" open>
+      <summary>Source</summary>
+      <pre><code id="source-display" class="lang-ruby"></code></pre>
+    </details>
+
+    <section class="notes">
+      <h3 class="notes__heading">How it works</h3>
+      <div class="notes-body lang-ja">
+        <p><code>every(100) { … }</code> で setInterval を回し、component unmount 時に Lilac が自動 cancel する。残り時間 / progress は <code>computed</code> で導出するので、duration を変えれば完了済みでも自然に再開する。</p>
+        <ul>
+          <li><code>every(ms) { … }</code> — repeating timer。返値の <code>Timer#stop</code> で早期中断可</li>
+          <li>明示の <code>clearInterval</code> 不要 — cleanup は Lilac が握る</li>
+          <li><code>data-attr-value="@progress"</code> — <code>&lt;progress&gt;</code> の value 属性を Signal で driving</li>
+          <li><code>data-bind="@duration_sec"</code> — range slider と Signal の双方向 binding</li>
+          <li>elapsed が duration に達したら止めるだけで break しない → 後から duration を伸ばすと自然に resume</li>
+        </ul>
+      </div>
+      <div class="notes-body lang-en">
+        <p><code>every(100) { … }</code> drives the setInterval; Lilac auto-cancels it on unmount. Remaining time / progress are derived via <code>computed</code>, so raising the duration naturally resumes a finished timer.</p>
+        <ul>
+          <li><code>every(ms) { … }</code> — repeating timer; returns a <code>Timer#stop</code>-able handle</li>
+          <li>No explicit <code>clearInterval</code> — Lilac owns the cleanup</li>
+          <li><code>data-attr-value="@progress"</code> — drives the <code>&lt;progress&gt;</code> value attribute</li>
+          <li><code>data-bind="@duration_sec"</code> — two-way binds the range slider</li>
+          <li>The loop never breaks; elapsed simply stops at duration, so extending duration later resumes naturally</li>
+        </ul>
+      </div>
+    </section>
+    </div>
+
+    <p id="boot" class="boot"></p>
+
+    <script type="text/ruby">
+class TimerTask < Lilac::Component
+  TICK_MS = 100
+
+  def setup
+    @elapsed_ms   = signal(0)
+    @duration_sec = signal(10.0)
+
+    @duration_ms = computed { (@duration_sec.value.to_f * 1000.0).to_i }
+
+    @progress = computed do
+      dur = @duration_ms.value
+      next 0 if dur <= 0
+      pct = (@elapsed_ms.value.to_f / dur) * 100.0
+      pct.clamp(0.0, 100.0).to_i
+    end
+
+    @elapsed_text = computed do
+      sprintf("%.1fs", @elapsed_ms.value / 1000.0)
+    end
+
+    @duration_text = computed do
+      sprintf("%.1fs", @duration_sec.value.to_f)
+    end
+
+    # `every` auto-cancels on unmount.
+    every(TICK_MS) do
+      next if @elapsed_ms.value >= @duration_ms.value
+      @elapsed_ms.update do |ms|
+        [ms + TICK_MS, @duration_ms.value].min
+      end
+    end
+  end
+
+  def reset(_ev) = @elapsed_ms.value = 0
+end
+    </script>
+
+    <script type="module" src="/boot.js"></script>
+  </body>
+</html>
