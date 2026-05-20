@@ -219,10 +219,24 @@ module Lilac
     end
   end
 
-  # Refs — proxy returning RefElement instances by name. Built once per
-  # component mount by walking the root's subtree, stopping at nested
-  # `data-component` boundaries.
-  class Refs
+  # Shared base for `Refs` (mounted component root) and `TemplateRefs`
+  # (cloned `<template>` subtree). Both flavours:
+  #
+  #   - cache `data-ref`-named elements as `RefElement` for direct lookup
+  #   - keep a positional `@positional` array (DFS preorder, directive-
+  #     bearing AND `data-ref`-bearing) so codegen's `refs.lilN` resolves
+  #     to "the Nth ref slot in this scope" (decisions §19)
+  #   - stop descent at nested `data-component` subtrees (those own their
+  #     own ref scope), while the root itself is always visited
+  #
+  # Subclasses customise only:
+  #
+  #   - what `root_js` to walk (constructor — Refs derives it from the
+  #     component, TemplateRefs receives it directly)
+  #   - the wording of the "not found" raise (`missing_ref_message`)
+  #
+  # See decisions §19 for the positional `lilN` design.
+  class RefLookupBase
     # `lilN` is the codegen positional namespace (decisions §19) —
     # synthetic refs are never written into the DOM as `data-ref`
     # attributes, so a missing entry in `@cache` for that namespace
@@ -238,11 +252,14 @@ module Lilac
     # size). Keep the three regexes byte-identical.
     DIRECTIVE_ATTR_RE = /^data-(?:text|unsafe-html|bind|show|hide|each|key|class|form|field|button|on-.+|attr-.+|css-.+)$/
 
-    def initialize(component)
+    def initialize(root_js, component)
       @component = component
       @cache = {}
       @positional = []
-      collect(component.root.to_js)
+      # DFS preorder: matches the build-time TemplateAST walk so
+      # codegen's `lilN` (Nth directive-bearing element in scope) lines
+      # up with `@positional[N]` here.
+      collect_node(root_js, true)
     end
 
     def [](name)
@@ -258,12 +275,12 @@ module Lilac
           return el
         end
       end
-      raise Lilac::Error, "Missing ref: #{key} in #{@component.class.name}"
+      raise Lilac::Error, missing_ref_message(key)
     end
 
     def method_missing(sym, *args)
       unless args.empty? && !block_given?
-        raise NoMethodError, "Refs.#{sym} takes no arguments or block"
+        raise NoMethodError, "#{lookup_label}.#{sym} takes no arguments or block"
       end
       self[sym]
     end
@@ -274,11 +291,22 @@ module Lilac
 
     private
 
-    # Iterative DFS over the component subtree. Records [data-ref]
-    # elements as RefElements. Does not descend into nested
-    # `data-component` subtrees, but DOES collect refs declared on the
-    # nested component's *root* element (which belongs to the parent's
-    # scope per the spec).
+    # Subclass label used in NoMethodError text. Default to the class's
+    # short name so the message says e.g. `Refs.foo` / `TemplateRefs.bar`
+    # (matching the pre-refactor wording).
+    def lookup_label
+      self.class.name.to_s.split("::").last
+    end
+
+    # Subclasses override.
+    def missing_ref_message(_key)
+      raise NotImplementedError
+    end
+
+    # Iterative DFS over the subtree. Records [data-ref] elements as
+    # RefElements. Does not descend into nested `data-component`
+    # subtrees, but DOES collect refs declared on the nested component's
+    # *root* element (which belongs to the parent's scope per the spec).
     #
     # Walks `root_js` ITSELF first — TemplateAST may emit a synthetic
     # `data-ref="lilN"` on the component's root element when a directive
@@ -289,13 +317,6 @@ module Lilac
     # therefore the gap stayed hidden until the `:compiled` build target
     # (codegen-only, no scanner) started exercising `refs` for root
     # bindings.
-    def collect(root_js)
-      # DFS preorder: matches the build-time TemplateAST walk so
-      # codegen's `lilN` (Nth directive-bearing element in scope) lines
-      # up with `@positional[N]` here.
-      collect_node(root_js, true)
-    end
-
     def collect_node(node, is_root)
       ref_attr = node.call(:getAttribute, "data-ref")
       has_ref = !ref_attr.js_null?
@@ -348,93 +369,30 @@ module Lilac
     end
   end
 
+  # Refs — proxy returning RefElement instances by name. Built once per
+  # component mount by walking the root's subtree.
+  class Refs < RefLookupBase
+    def initialize(component)
+      super(component.root.to_js, component)
+    end
+
+    private
+
+    def missing_ref_message(key)
+      "Missing ref: #{key} in #{@component.class.name}"
+    end
+  end
+
   # Ref lookup over a cloned `<template>` subtree. Both user-declared
   # `data-ref` and codegen positional `lilN` (decisions §19) resolve
   # through the same DFS walk that `Refs` uses on the mounted root —
   # the template clone isn't mounted yet, but its DOM shape is the same
   # so the rules carry over.
-  class TemplateRefs
-    LILN_RE = /\Alil(\d+)\z/
-
-    def initialize(root_js, component)
-      @root_js = root_js
-      @component = component
-      @cache = {}
-      @positional = []
-      collect(root_js)
-    end
-
-    def [](name)
-      key = name.to_s
-      el = @cache[key]
-      return el if el
-      if (m = LILN_RE.match(key))
-        idx = m[1].to_i
-        js = @positional[idx]
-        if js
-          el = RefElement.new(js, @component, name: key)
-          @cache[key] = el
-          return el
-        end
-      end
-      raise Lilac::Error, "Missing template ref: #{key}"
-    end
-
-    def method_missing(sym, *args)
-      unless args.empty? && !block_given?
-        raise NoMethodError, "TemplateRefs.#{sym} takes no arguments or block"
-      end
-      self[sym]
-    end
-
-    def respond_to_missing?(_sym, _include_private = false)
-      true
-    end
-
+  class TemplateRefs < RefLookupBase
     private
 
-    def collect(root_js)
-      collect_node(root_js, true)
-    end
-
-    def collect_node(node, is_root)
-      ref_attr = node.call(:getAttribute, "data-ref")
-      has_ref = !ref_attr.js_null?
-      if has_ref
-        name = ref_attr.to_s
-        unless @cache[name]
-          @cache[name] = RefElement.new(node, @component, name: name)
-        end
-      end
-      unless is_root
-        component_attr = node.call(:getAttribute, "data-component")
-        return if !component_attr.js_null?
-      end
-      # Mirror Refs#collect_node — see decisions §19. Both directive-bearing
-      # and `data-ref`-bearing elements occupy a `lilN` slot.
-      if has_ref || directive_bearing?(node)
-        @positional << node
-      end
-      kids = node[:children]
-      kn = kids[:length].to_i
-      ki = 0
-      while ki < kn
-        collect_node(kids[ki], false)
-        ki += 1
-      end
-    end
-
-    def directive_bearing?(node)
-      attrs = node[:attributes]
-      n = attrs[:length].to_i
-      i = 0
-      while i < n
-        a = attrs[i]
-        name = a[:name].to_s
-        return true if Refs::DIRECTIVE_ATTR_RE.match?(name)
-        i += 1
-      end
-      false
+    def missing_ref_message(key)
+      "Missing template ref: #{key}"
     end
   end
 
