@@ -64,6 +64,13 @@ class SpecRunner
     "runtime/mruby-lilac/wasm_spec/test_prop_as_ivar.rb",
     "runtime/mruby-lilac/wasm_spec/test_prop_ivar_override_detection.rb",
     "runtime/mruby-lilac/wasm_spec/test_props.rb",
+    # Session 11 unlock — element の反射プロパティ (hidden / disabled /
+    # checked / className / value / id) + 属性名 lowercase 正規化を追加
+    # した結果で取れた spec
+    "runtime/mruby-lilac/wasm_spec/test_bind.rb",
+    "runtime/mruby-lilac/wasm_spec/test_bind_class_style.rb",
+    "runtime/mruby-lilac/wasm_spec/test_bind_input.rb",
+    "runtime/mruby-lilac/wasm_spec/test_url_sanitizer.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do

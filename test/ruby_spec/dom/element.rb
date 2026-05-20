@@ -262,9 +262,32 @@ class MrubyWasm
           @style
         when "content"
           template_content
+        when "className"
+          # DOM reflects the `class` attribute as the `className` string
+          # property (space-separated tokens, "" when absent).
+          @__node__["class"].to_s
+        when "id"
+          @__node__["id"].to_s
+        when "hidden", "disabled", "checked", "readOnly", "multiple", "required"
+          # Boolean reflected properties — true iff the matching HTML
+          # attribute is present. Real DOM normalizes attribute names to
+          # lowercase, mapped here too (e.g. `readOnly` ↔ `readonly`).
+          @__node__.key?(reflected_attr_name(key))
+        when "value"
+          # For form elements `value` is a property that defaults to the
+          # `value` attribute. We don't model the property/attribute
+          # split here — both reads and writes go through the attribute.
+          @__node__["value"].to_s
         else
           nil
         end
+      end
+
+      # Map a JS boolean property name to its underlying HTML attribute.
+      # HTML attribute names are lowercase; the DOM property may be
+      # camelCase (`readOnly` → `readonly`).
+      def reflected_attr_name(key)
+        { "readOnly" => "readonly" }.fetch(key, key)
       end
 
       def __js_set__(key, value)
@@ -279,6 +302,22 @@ class MrubyWasm
             added_nodes: @__node__.children.to_a,
             removed_nodes: removed
           )
+        when "hidden", "disabled", "checked", "readOnly", "multiple", "required"
+          # Boolean reflected property: truthy → attribute present,
+          # falsy → attribute removed. Mirrors browser DOM semantics
+          # for these reflected attrs.
+          name = reflected_attr_name(key)
+          if value
+            @__node__[name] = ""
+          else
+            @__node__.remove_attribute(name)
+          end
+        when "className"
+          @__node__["class"] = value.to_s
+        when "id"
+          @__node__["id"] = value.to_s
+        when "value"
+          @__node__["value"] = value.to_s
         else
           nil
         end
@@ -362,29 +401,33 @@ class MrubyWasm
         @document.wrap_node(Parser.fragment(@__node__.inner_html))
       end
 
+      # HTML attribute names are case-insensitive — browser DOM stores
+      # them in lowercase regardless of the case passed to setAttribute.
+      # Matches that behavior so callers using `"SRC"` / `"Action"` /
+      # etc. interoperate with `getAttribute("src")` round-trips.
       def get_attribute(name)
         return nil if name.nil?
 
-        @__node__[name.to_s]
+        @__node__[name.to_s.downcase]
       end
 
       def set_attribute(name, value)
         return nil if name.nil?
 
-        @__node__[name.to_s] = value.to_s
+        @__node__[name.to_s.downcase] = value.to_s
         nil
       end
 
       def has_attribute?(name)
         return false if name.nil?
 
-        @__node__.key?(name.to_s)
+        @__node__.key?(name.to_s.downcase)
       end
 
       def remove_attribute(name)
         return nil if name.nil?
 
-        @__node__.remove_attribute(name.to_s)
+        @__node__.remove_attribute(name.to_s.downcase)
         nil
       end
 

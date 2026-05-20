@@ -284,3 +284,56 @@ for the overall plan.
   `test_template` or `test_node_operations` since they're 1-3 asserts
   shy of green) and diagnose. Or batch the bind/* family if
   `test_bind` is a single shared cause.
+
+## Session 11 (2026-05-21): Element reflected properties + attr name normalization
+
+- Target spec(s): test_bind / test_bind_class_style / test_bind_input /
+  test_url_sanitizer / test_template / test_node_operations /
+  test_bind_list の diagnose & unlock
+- Achieved (root causes uncovered):
+  1. `set_attribute` / `get_attribute` / `has_attribute?` /
+     `remove_attribute` を **lowercase 正規化** (HTML 属性名は browser
+     DOM では大文字小文字無視で lowercase 保存される挙動に合わせる)
+  2. Element の `__js_get__` に **反射プロパティ** 追加:
+     - `hidden` / `disabled` / `checked` / `readOnly` / `multiple` /
+       `required` → 対応属性の has-attribute boolean
+     - `className` → `class` 属性の文字列
+     - `id` / `value` → 同名属性の値
+     - `readOnly` ↔ `readonly` の case mapping は
+       `reflected_attr_name` helper で行う
+  3. Element の `__js_set__` に **反射プロパティ書き込み** 追加:
+     - boolean 群 → truthy なら空文字 attr、falsy なら removeAttribute
+     - `className` / `id` / `value` → 対応属性へ書き込み
+- Unlocked (4 new spec files):
+  - `test_bind` (3 sub-asserts, 11 assertions) — boolean property
+    bind が動くようになった
+  - `test_bind_class_style` (2 sub-asserts) — `className` reader + 既存
+    classList で確定
+  - `test_bind_input` (2 sub-asserts) — `value` reader/writer 追加で
+    DOM↔signal 双方向 bind が成立
+  - `test_url_sanitizer` (4 sub-asserts) — case-insensitive 属性で `SRC`
+    も sanitize ターゲットに乗る
+
+  PURE_SPECS: 31 → 35. assertions: ~340 → ~370.
+
+- Blocked by / open (per spec):
+  - `test_template` (17/19): "bind_list with Template" — 2-arg block /
+    managed template モードでの clone+mutate 期待挙動。Template の
+    clone identity と reactive re-render の交点
+  - `test_node_operations` (11/12): "Template#remove で template clone
+    を auto-mount 経由で削除" — template tag の `.content` フラグメント
+    clone → append → 再 auto-mount の経路。`MutationObserver` 内側で
+    template clone の find_for_element までは到達できていない可能性
+  - `test_bind_list` (9/11): list reconciliation の in-place update と
+    reordering のノード identity 保持。bind_list ListReconciler の
+    insertBefore/replaceChild が正しく既存ノードを動かしているかの検証
+    が必要
+  - `test_directive_each` (0/2): data-each / data-key directive。
+    bind_list を内部で使うので、上の bind_list 問題と関連性あり
+  - `test_persistent_signal` (2/5): `localStorage` polyfill 必要
+    (plan session 15 ターゲット)
+- Next: Session 12 — `test_bind_list` を起点に reconciler の node
+  identity 問題を解明する。同根なら `test_directive_each` /
+  `test_template` の bind_list 系も同時に取れる見込み。
+  `test_node_operations` の Template#remove 問題は MutationObserver の
+  detach 経路だけかもしれないので並行で確認可能。
