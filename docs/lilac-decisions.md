@@ -1639,6 +1639,80 @@ eval loop だけを残し、loop の最後で builder が append した `Lilac.s
   - `cli/test/test_builder.rb` に §B (auto Lilac.start) と §A (R1〜R4) の 8 件
   - CLI test 390 runs, 1085 assertions, all green
 
+### 20.6 Refinement: `Lilac.start` の責務を boot helper layer に統一(2026-05-20)
+
+§20.B の初版は **builder が `Lilac.start` を auto-inject する** 実装で
+着地したが、§1(Runtime canonical / CLI optional)との整合性レビューで
+**「user が `Lilac.start` を書かない」規約が CLI 利用時にしか成立しない**
+drift が見つかった:
+
+- CLI target=compiled / target=full: builder が `Lilac.start` を append
+- runtime-only HTML(`@takahashim/mruby-wasm-js` を直接 import する Pattern B): user が手書きで `Lilac.start` を call する必要
+
+§1 の "CLI は optional な最適化レイヤ" 原則からすると、boot の framework
+責務は CLI の特権機能ではなく、**Lilac-specific boot helper layer** に
+属させるべき。
+
+#### 再構成内容
+
+`Lilac.start` の発火位置を builder から boot helper layer に移動:
+
+- **target=compiled の `render_compiled_boot_module`**: `vm.loadBytecode(bytecode)`
+  の **直後** に `vm.eval("Lilac.start")` を 1 行追加。`.mrb` bundle 自体には
+  `Lilac.start` を append しない(bytecode は user code に純化)
+- **target=full の Lilac-specific boot helper**(例: `examples/7guis/public/boot.js`):
+  `document.querySelectorAll('script[type="text/ruby"]').forEach(eval)` の
+  **直後** に `vm.eval("Lilac.start")` を呼ぶ。builder の inject は廃止
+- **runtime-only path で `@takahashim/lilac-full` の `boot()` を使う場合**:
+  将来 `boot()` 自体も eval 完了後に `Lilac.start` を呼ぶようにする(別 PR、
+  本決定の対象外。idempotent guard があるので即時の修正は不要)
+- **Pattern B(user が自前で createVM + vm.eval を組む runtime-only)**:
+  user が `Lilac.start` を Ruby 側に書くか、自前 bridge wrapper の最後で
+  `vm.eval("Lilac.start")` を呼ぶ。framework 側に責任は無い(自前 bridge を
+  書く以上 boot 呼び出しも user 責務)
+
+#### 影響
+
+- **user code の対称性**: `lilac build --target full` / `--target compiled` /
+  CLI を使わず `boot()` helper を import する runtime path、いずれも user は
+  `Lilac.start` を書かない
+- **builder の責務縮小**: `bundle_scripts` の compiled / full 分岐が単純化、
+  特に full mode で `any_user_ruby ? scripts + ["Lilac.start"] : scripts` の
+  特例処理が消える
+- **bytecode の純粋性**: target=compiled の `.mrb` には user code(class
+  defs + page-inline ruby)のみ。`Lilac.start` は JS-side bootstrap に分離
+- **§1 整合**: "CLI は optional な最適化レイヤ" 原則がより純粋に成立。
+  CLI を介さない runtime-only path でも(適切な boot helper を使う限り)
+  user code が同じ形を保つ
+
+#### 影響を受ける箇所
+
+- `cli/lib/lilac/cli/builder.rb`:
+  - `bundle_scripts` の compiled 枝から `+ ["Lilac.start"]` を削除
+  - 同 full 枝の `any_user_ruby ? scripts + ["Lilac.start"] : scripts` を
+    `scripts` に戻す
+  - `render_compiled_boot_module` に `vm.eval("Lilac.start");` を追加
+- `examples/7guis/public/boot.js`:
+  - eval loop 末尾に `vm.eval("Lilac.start");` を復活(§20.C の削除を
+    取り消す形 — boot.js こそが boot helper layer の実体)
+- `cli/test/test_builder.rb`:
+  - `test_target_full_auto_appends_lilac_start` を `test_target_full_does_not_inject_lilac_start_into_script_block` にリネーム
+    (アサーションを反転 — Lilac.start が **inject されない** ことを確認)
+  - `test_target_compiled_bundle_includes_lilac_start` を
+    `test_target_compiled_boot_module_invokes_lilac_start` にリネーム
+    (boot module 内に `vm.eval("Lilac.start")` が現れる + `.mrb` には現れない
+    ことを確認)
+  - `test_target_full_no_lilac_start_when_page_has_no_ruby` を
+    `test_target_full_pure_static_page_emits_no_script_block` にリネーム
+    (Ruby 無しの場合は injection そのものが起きないことの確認)
+- idempotent `Lilac::Registry#start`(§20.B.1)は据え置き — user が手書きで
+  `Lilac.start` を書いた既存コードへの safety net として依然必要
+
+CLI tests 390 runs, all green。examples/7guis の full / compiled 両 build も
+確認済み(target=full の dist HTML に `Lilac.start` 無し、boot.js が eval loop
+末尾で呼ぶ。target=compiled の inline boot module が `loadBytecode` 直後に
+`vm.eval("Lilac.start")` を呼ぶ)。
+
 ---
 
 ## Appendix: 設計判断の年表

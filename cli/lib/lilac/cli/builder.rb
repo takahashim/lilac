@@ -577,35 +577,27 @@ module Lilac
           parts.reject(&:empty?).join("\n\n")
         }.reject(&:empty?)
 
-        # `Lilac.start` is appended automatically so user code can stay
-        # purely declarative (see proposal §B.0): class defs + DOM
-        # attributes only, framework owns the boot. Idempotency on
-        # `Lilac::Registry#start` makes it safe even when a user has
-        # written their own `Lilac.start` explicitly.
-        #
         # Page-inline `<script type="text/ruby">` blocks join the bundle
         # only on the compiled target — they're emitted last so any
         # `Lilac.start` written there runs after the component class
         # definitions. On :full they remain in the dist HTML body and
         # the runtime parser picks them up via `vm.evalScript`, so
         # duplicating them into the injected block would re-execute
-        # them — but the auto-appended `Lilac.start` belongs at the
-        # very end of the bridge's document-order eval loop, so we
-        # emit it as the last entry in the injected block (which sits
-        # just before `</body>`, after every user page-inline script).
-        any_user_ruby = !scripts.empty? || page_inline_scripts.any? { |s| !s.strip.empty? }
+        # them.
+        #
+        # `Lilac.start` is NOT appended here — boot is owned by the
+        # bootstrap module / boot helper layer (proposal §B refined in
+        # decisions §20.6). For target=compiled the inlined boot module
+        # (`render_compiled_boot_module`) calls `vm.eval("Lilac.start")`
+        # after `loadBytecode`; for target=full the Lilac-specific
+        # boot helper (e.g. `examples/7guis/public/boot.js`,
+        # `@takahashim/lilac-full` `boot()`) calls it after evaluating
+        # every `<script type="text/ruby">` in document order.
         bundle_scripts =
           if @target == :compiled
-            # `Lilac.start` must execute as part of the loaded bytecode —
-            # the compiled wasm has no parser, so the page-side bootstrap
-            # cannot `vm.eval("Lilac.start")` post-hoc. Append it once at
-            # the end of the bundle (after every class definition). Pages
-            # with no Ruby at all stay empty so no .mrb is emitted and no
-            # bootstrap is injected.
-            user_scripts = scripts + page_inline_scripts.reject { |s| s.strip.empty? }
-            user_scripts.empty? ? [] : user_scripts + ["Lilac.start"]
+            scripts + page_inline_scripts.reject { |s| s.strip.empty? }
           else
-            any_user_ruby ? scripts + ["Lilac.start"] : scripts
+            scripts
           end
         ruby_source = bundle_scripts.join("\n\n")
         script_block =
@@ -686,6 +678,13 @@ module Lilac
       # self-contained module is one fewer moving part to keep in sync.
       # The `data-lilac-bootstrap` attribute marks the tag so a future
       # asset-pipeline pass can rewrite the URLs.
+      #
+      # `vm.eval("Lilac.start")` is fired here (post-loadBytecode) so
+      # the boot responsibility lives in the bootstrap module rather
+      # than being baked into the `.mrb` bundle (decisions §20.6).
+      # Runtime-side `Lilac::Registry#start` is idempotent so users
+      # who additionally call `Lilac.start` in their own Ruby code
+      # don't cause a double mount.
       def render_compiled_boot_module(mrb_filename)
         <<~HTML.strip
           <script type="module" data-lilac-bootstrap>
@@ -695,6 +694,7 @@ module Lilac
               await (await fetch("./#{mrb_filename}")).arrayBuffer()
             );
             vm.loadBytecode(bytecode);
+            vm.eval("Lilac.start");
           </script>
         HTML
       end

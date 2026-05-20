@@ -2,11 +2,14 @@
 //   <script type="module" src="/boot.js"></script>
 //
 // Picks up every <script type="text/ruby"> on the page (the page's own
-// inline class definitions + the lilac-cli-injected component scripts)
-// and evaluates them inside a single VM. `Lilac.start` is appended
-// automatically by the builder at the tail of the injected block (see
-// docs/lilac-proposals.md §B), so the bridge does not need to call it
-// explicitly — the eval loop terminates with boot.
+// inline class definitions + the lilac-cli-injected component scripts),
+// evaluates them inside a single VM in document order, and calls
+// `Lilac.start` at the tail of the eval loop. Boot lives in this
+// helper layer (decisions §20.6) so user Ruby stays purely declarative
+// regardless of whether the page comes from `lilac build` or from
+// hand-written runtime-only HTML — the canonical Lilac entry point
+// for any Lilac-specific boot helper is "eval all script tags, then
+// `Lilac.start`".
 //
 // `--target compiled` builds inject their own <script
 // data-lilac-bootstrap> module that handles the load. In that case the
@@ -37,10 +40,11 @@ if (document.querySelector("[data-lilac-bootstrap]")) {
     const vm = await createVM({ wasm: "/vendor/lilac-full/lilac-full.wasm" });
     document.querySelectorAll('script[type="text/ruby"]')
       .forEach((s) => vm.eval(s.textContent));
-    // No explicit `Lilac.start` here — the builder appends it to the
-    // injected block so the eval loop above terminates with boot. The
-    // runtime-side Registry#start is idempotent, so existing pages that
-    // still call it explicitly stay correct (the auto-call no-ops).
+    // Boot at the tail of the eval loop — the framework owns boot
+    // dispatch (decisions §20.B). Runtime-side `Lilac::Registry#start`
+    // is idempotent so users who additionally write `Lilac.start` in
+    // their own Ruby code don't cause a double mount.
+    vm.eval("Lilac.start");
     setStatus("ready");
   } catch (err) {
     console.error(err);

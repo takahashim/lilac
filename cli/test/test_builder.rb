@@ -757,9 +757,9 @@ class TestBuilder < Minitest::Test
     assert_includes bytes, "PageY"
   end
 
-  # ---- §B auto Lilac.start --------------------------------------
+  # ---- §B Lilac.start lives in the boot helper layer -----------
 
-  def test_target_full_auto_appends_lilac_start
+  def test_target_full_does_not_inject_lilac_start_into_script_block
     write_page "index", <<~HTML
       <html><body>
       <script type="text/ruby">
@@ -771,42 +771,48 @@ class TestBuilder < Minitest::Test
     build!(target: :full)
     out = read_output("index.html")
 
-    # The user's page-inline script is preserved verbatim, and a
-    # framework-owned `Lilac.start` is appended in a separate injected
-    # block before `</body>` (auto-boot, §B.2).
+    # User's page-inline script is preserved, but the builder does NOT
+    # inject `Lilac.start` — boot is the boot helper layer's
+    # responsibility (decisions §20.6). The Lilac-specific boot helper
+    # (e.g. `boot.js` shipped under `public/`) calls it after evaluating
+    # every `<script type="text/ruby">`.
     assert_includes out, "class PageOnlyBar"
-    assert_includes out, "Lilac.start"
-    user_pos = out.index("class PageOnlyBar")
-    start_pos = out.index("Lilac.start")
-    assert start_pos > user_pos,
-           "auto-inserted Lilac.start must come after user page-inline scripts in document order"
-  end
-
-  def test_target_full_no_lilac_start_when_page_has_no_ruby
-    write_page "index", "<html><body><h1>static</h1></body></html>"
-    build!(target: :full)
-    out = read_output("index.html")
     refute_includes out, "Lilac.start"
   end
 
-  def test_target_compiled_bundle_includes_lilac_start
+  def test_target_full_pure_static_page_emits_no_script_block
+    write_page "index", "<html><body><h1>static</h1></body></html>"
+    build!(target: :full)
+    out = read_output("index.html")
+    # No user Ruby on the page → no injected `<script type="text/ruby">`
+    # at all, and no Lilac.start anywhere (the boot helper still loads
+    # but has nothing to mount, which is fine — Registry#start is
+    # idempotent and a no-op subtree mount is harmless).
+    refute_includes out, "Lilac.start"
+    refute_match(/<script type="text\/ruby"/, out)
+  end
+
+  def test_target_compiled_boot_module_invokes_lilac_start
     mrbc = mrbc_or_skip
     write_page "index", <<~HTML
       <html><body><script type="text/ruby">class Boot1; end</script></body></html>
     HTML
 
     build!(target: :compiled, mrbc_path: mrbc)
+    out = read_output("index.html")
+
+    # The bootstrap module is inlined into the page HTML and calls
+    # `vm.eval("Lilac.start")` right after `loadBytecode` (§20.6).
+    assert_match(/loadBytecode\([^)]*\);[^"]*vm\.eval\("Lilac\.start"\)/m, out,
+                 "inline compiled boot module must call vm.eval('Lilac.start') after loadBytecode")
+
+    # The .mrb bundle itself should NOT carry the Lilac.start symbol
+    # pair — boot is no longer baked into the bytecode.
     mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))
     assert_equal 1, mrb_files.length
     bytes = File.binread(mrb_files.first)
-    # mrbc stores method calls as separate sym entries ("Lilac" + "start")
-    # in the bytecode symbol table — not as the literal source text.
-    # Both symbols appearing together is what proves the auto-append
-    # made it into the bundle.
-    assert_includes bytes, "Lilac",
-                    "compiled bundle must auto-append Lilac.start (Lilac sym missing)"
-    assert_includes bytes, "start",
-                    "compiled bundle must auto-append Lilac.start (start sym missing)"
+    refute_includes bytes, "Lilac.start",
+                    "compiled bundle must not carry Lilac.start (boot moved to inline module, §20.6)"
   end
 
   # ---- §A scope guard --------------------------------------------
