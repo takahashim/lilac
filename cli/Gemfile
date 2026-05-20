@@ -22,3 +22,21 @@ group :development do
   gem "minitest", "~> 5.0"
   gem "rake", "~> 13.0"
 end
+
+# wasmtime-rb drives `mrbc-host.wasm` from the host Ruby in
+# `WasmMrbcDriver`, replacing the external `mrbc` binary for the
+# `lilac build --target compiled` flow.
+#
+# TEMPORARY: pinned to a local checkout while
+# https://github.com/bytecodealliance/wasmtime-rb/pull/<TBD> (expose
+# `wasm_exceptions` engine option) is in review. `mrbc-host.wasm` uses
+# the wasm exception-handling proposal (because mruby's setjmp/longjmp
+# lowers through it), and the released 44.0.0 gem doesn't expose the
+# config knob needed to opt in. Once the PR lands and a release is cut,
+# replace with `gem "wasmtime", "~> X.Y"`.
+wasmtime_local = File.expand_path("../../wasmtime-rb", __dir__)
+if File.directory?(wasmtime_local)
+  gem "wasmtime", path: wasmtime_local
+else
+  gem "wasmtime", "~> 44.0"
+end
