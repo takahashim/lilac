@@ -22,9 +22,18 @@ Gem::Specification.new do |spec|
   spec.files = Dir["lib/**/*.rb", "README.md"] +
                Dir.glob("data/**/*", File::FNM_DOTMATCH).reject { |p| File.directory?(p) }
 
-  # No runtime gem dependencies. wasmtime-rb is pulled by `lilac-cli`
-  # only when its `WasmMrbcDriver` path is needed (Phase 2); this gem
-  # just exposes binary assets.
+  # wasmtime-rb drives mrbc-host.wasm from the host Ruby in lilac-cli's
+  # WasmMrbcDriver. Declaring it here (instead of on lilac-cli) means
+  # `bundle install` of a scaffolded project's Gemfile pulls in the
+  # wasm runtime + driver together — keeping the "compile Ruby to
+  # bytecode" pieces shipped as one unit.
+  #
+  # The version pin is the minimum that exposes `Engine.new(wasm_exceptions:)`
+  # (needed because mrbc-host.wasm uses the wasm exception-handling
+  # proposal). Until the upstream PR lands, that's the unreleased
+  # bytecodealliance/wasmtime-rb#expose-wasm-exceptions branch; once
+  # released, bump this to the published version.
+  spec.add_dependency "wasmtime", "~> 44.0"
 
   spec.metadata = {
     "source_code_uri" => "https://github.com/takahashim/lilac",

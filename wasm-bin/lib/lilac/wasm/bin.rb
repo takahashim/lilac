@@ -12,6 +12,7 @@ module Lilac
     #   └── data/
     #       ├── lilac-full.wasm
     #       ├── lilac-compiled.wasm
+    #       ├── mrbc-host.wasm          (compiler-only wasm, driven via wasmtime-rb)
     #       └── mruby-wasm-js/
     #           ├── index.js
     #           ├── wasi-preview1.js
@@ -44,6 +45,17 @@ module Lilac
           first_existing(
             File.join(DATA_DIR, "lilac-compiled.wasm"),
             File.join(monorepo_root, "build", "lilac-compiled.wasm"),
+          )
+        end
+
+        # Path to mrbc-host.wasm — a compiler-only wasm reactor that
+        # `lilac-cli`'s WasmMrbcDriver drives via wasmtime-rb to replace
+        # the external `mrbc` binary for `lilac build --target compiled`.
+        # Same gem-vs-monorepo discovery as the other variants.
+        def mrbc_host_wasm
+          first_existing(
+            File.join(DATA_DIR, "mrbc-host.wasm"),
+            File.join(monorepo_root, "build", "mrbc-host.wasm"),
           )
         end
 

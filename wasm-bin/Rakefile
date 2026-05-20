@@ -12,7 +12,7 @@ namespace :build do
   task :assets do
     FileUtils.mkdir_p(DATA_DIR)
 
-    %w[lilac-full.wasm lilac-compiled.wasm].each do |name|
+    %w[lilac-full.wasm lilac-compiled.wasm mrbc-host.wasm].each do |name|
       src = File.join(MONOREPO_ROOT, "build", name)
       unless File.file?(src)
         abort "missing #{src} — run `make #{name.sub('.wasm', '')}` in the monorepo first"
