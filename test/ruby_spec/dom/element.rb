@@ -223,6 +223,62 @@ class MrubyWasm
       end
     end
 
+    # `Element#dataset` proxy. `el.dataset.fooBar` reads / writes
+    # `data-foo-bar` per the HTMLOrForeignElement.dataset spec
+    # (camelCase ↔ kebab-case round-trip).
+    class DatasetMap
+      def initialize(element)
+        @element = element
+      end
+
+      def __js_get__(key)
+        @element.__node__[attr_name(key)]
+      end
+
+      def __js_set__(key, value)
+        @element.__node__[attr_name(key)] = value.to_s
+        nil
+      end
+
+      def __js_call__(_method, _args)
+        nil
+      end
+
+      private
+
+      def attr_name(key)
+        "data-#{key.to_s.gsub(/[A-Z]/) { |m| "-#{m.downcase}" }}"
+      end
+    end
+
+    # Stub `DOMRect` for `getBoundingClientRect` — no layout engine,
+    # so all values are 0. Lilac code that uses these for *relative*
+    # positioning sees zeroed values; absolute layout assertions need
+    # the real browser.
+    class DOMRect
+      def initialize(x: 0, y: 0, width: 0, height: 0)
+        @x = x
+        @y = y
+        @width = width
+        @height = height
+      end
+
+      def __js_get__(key)
+        case key
+        when "x", "left"   then @x
+        when "y", "top"    then @y
+        when "width"       then @width
+        when "height"      then @height
+        when "right"       then @x + @width
+        when "bottom"      then @y + @height
+        end
+      end
+
+      def js_null?
+        false
+      end
+    end
+
     class StyleDeclaration
       def initialize(element)
         @element = element
@@ -291,6 +347,7 @@ class MrubyWasm
         @__node__ = nokogiri_node
         @class_list = ClassList.new(self)
         @style = StyleDeclaration.new(self)
+        @dataset = DatasetMap.new(self)
         # `LiveChildren` re-evaluates the child list on every property
         # access so callers that capture `el[:children]` once see DOM
         # mutations made between iterations (required by Lilac's
@@ -331,6 +388,8 @@ class MrubyWasm
           @class_list
         when "style"
           @style
+        when "dataset"
+          @dataset
         when "content"
           template_content
         when "className"
@@ -470,6 +529,10 @@ class MrubyWasm
           replace_with(args)
         when "click"
           dispatch_event(MouseEvent.new("click", "bubbles" => true, "cancelable" => true, "button" => 0))
+        when "getBoundingClientRect"
+          DOMRect.new
+        when "focus", "blur"
+          nil
         else
           nil
         end

@@ -29,11 +29,16 @@ class MrubyWasm
         case key
         when "body" then @body
         when "defaultView" then @default_view
+        when "documentElement" then wrap_node(@nokogiri_doc.at_css("html"))
+        when "title" then read_title
         else nil
         end
       end
 
-      def __js_set__(_key, _value)
+      def __js_set__(key, value)
+        case key
+        when "title" then write_title(value.to_s)
+        end
         nil
       end
 
@@ -182,6 +187,25 @@ class MrubyWasm
       end
 
       private
+
+      def read_title
+        head = @nokogiri_doc.at_css("head")
+        title = head&.at_css("title")
+        title ? title.text : ""
+      end
+
+      def write_title(value)
+        head = @nokogiri_doc.at_css("head")
+        return unless head
+
+        title = head.at_css("title")
+        unless title
+          title = Nokogiri::XML::Node.new("title", @nokogiri_doc)
+          head.add_child(title)
+        end
+        title.children.each(&:unlink)
+        title.add_child(Nokogiri::XML::Text.new(value, @nokogiri_doc))
+      end
 
       def seed_template_content(template_element)
         node = template_element.__node__
