@@ -153,7 +153,7 @@ class MrubyWasm
         else
           handler.child.fulfill(result)
         end
-      rescue => e
+      rescue StandardError => e
         handler.child.reject(ErrorValue.new(e.message, name: e.class.to_s))
       end
 

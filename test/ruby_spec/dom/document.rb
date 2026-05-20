@@ -37,24 +37,24 @@ class MrubyWasm
         nil
       end
 
-      def __js_call__(_method, _args)
-        case _method
+      def __js_call__(method, args)
+        case method
         when "createElement"
-          create_element(_args[0])
+          create_element(args[0])
         when "createTextNode"
-          create_text_node(_args[0])
+          create_text_node(args[0])
         when "querySelector"
-          query_selector(_args[0])
+          query_selector(args[0])
         when "querySelectorAll"
-          query_selector_all(_args[0])
+          query_selector_all(args[0])
         when "getElementById"
-          get_element_by_id(_args[0])
+          get_element_by_id(args[0])
         when "addEventListener"
-          add_event_listener(_args[0], _args[1], _args[2])
+          add_event_listener(args[0], args[1], args[2])
         when "removeEventListener"
-          remove_event_listener(_args[0], _args[1])
+          remove_event_listener(args[0], args[1])
         when "dispatchEvent"
-          dispatch_event(_args[0])
+          dispatch_event(args[0])
         else
           nil
         end

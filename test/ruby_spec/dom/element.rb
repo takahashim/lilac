@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "uri"
+
 require_relative "parser"
 
 class MrubyWasm
@@ -157,7 +159,7 @@ class MrubyWasm
 
       def current
         @element.__node__.element_children.each_with_object([]) do |node, out|
-          wrapped = @element.instance_variable_get(:@document).wrap_node(node)
+          wrapped = @element.document.wrap_node(node)
           out << wrapped if wrapped
         end
       end
@@ -282,7 +284,7 @@ class MrubyWasm
     class Element
       include EventTarget
 
-      attr_reader :__node__
+      attr_reader :__node__, :document
 
       def initialize(document, nokogiri_node)
         @document = document
@@ -363,7 +365,6 @@ class MrubyWasm
 
         win = @document.default_view
         base = win&.location ? win.location.href : ""
-        require "uri"
         URI.join(base, raw.to_s).to_s
       rescue URI::InvalidURIError, ArgumentError
         raw.to_s
@@ -686,7 +687,7 @@ class MrubyWasm
         when Fragment
           value.extract_children
         when String
-          [Nokogiri::XML::Text.new(value, @__node__.document)]
+          [@document.create_text_node(value).__node__]
         else
           node = unwrap_dom_node(value)
           return [] unless node

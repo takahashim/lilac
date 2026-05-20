@@ -3,7 +3,6 @@
 require "wasmtime"
 require "json"
 
-require_relative "dom/dispatch"
 require_relative "dom/event"
 require_relative "dom/scheduler"
 require_relative "dom/observer"

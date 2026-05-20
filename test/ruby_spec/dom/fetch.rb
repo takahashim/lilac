@@ -186,7 +186,13 @@ class MrubyWasm
         when "forEach"
           # Browser API: forEach(callback) — callback(value, key)
           cb = args[0]
-          @hash.each { |k, v| cb.__js_call__("call", [v, k]) if cb.respond_to?(:__js_call__) }
+          @hash.each do |k, v|
+            if cb.respond_to?(:__js_call__)
+              cb.__js_call__("call", [v, k])
+            elsif cb.respond_to?(:call)
+              cb.call(v, k)
+            end
+          end
           nil
         end
       end

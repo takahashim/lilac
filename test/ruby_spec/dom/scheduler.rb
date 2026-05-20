@@ -75,6 +75,12 @@ class MrubyWasm
         advance_time(advance)
       end
 
+      # Public accessor for eval-time auto-drain: keep advancing the
+      # clock until no timers remain (or a safety budget runs out).
+      def next_due_timer_at
+        @timers.values.select(&:active).map(&:due_at).min
+      end
+
       private
 
       def next_id
@@ -96,14 +102,6 @@ class MrubyWasm
         @timers.delete(id.to_i)
         nil
       end
-
-      def next_due_timer_at
-        @timers.values.select(&:active).map(&:due_at).min
-      end
-
-      # Public accessor for eval-time auto-drain: keep advancing the
-      # clock until no timers remain (or a safety budget runs out).
-      public :next_due_timer_at
 
       def run_due_timers
         due = @timers.values.select { |timer| timer.active && timer.due_at <= @now_ms }
