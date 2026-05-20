@@ -63,7 +63,8 @@ BUILD_WASM_LILAC_COMPILED_RELEASE := $(BUILD_DIR)/lilac-compiled.release.wasm
         lilac-compiled lilac-compiled-release \
         lilac-all lilac-all-release \
         check-pair-diff \
-        test node-deps clean
+        test test-wasm test-cli test-all \
+        node-deps clean
 
 all: lilac-full
 
@@ -148,10 +149,29 @@ node_modules: package.json
 	npm install --no-audit --no-fund --silent
 	@touch node_modules
 
-test: check-pair-diff lilac-full node_modules
+# Default `make test` is the wasm test suite (legacy invocation kept
+# for back-compat — CI / scripts that say `make test` keep working).
+# Use `make test-all` to also run the CLI gem's RSpec/Minitest suite,
+# or `make test-cli` to run only the Ruby-side tests (fast — no wasm
+# rebuild needed).
+test: test-wasm
+
+test-wasm: check-pair-diff lilac-full node_modules
 	MRUBY_WASM_PATH=$(BUILD_WASM_LILAC_FULL) \
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node test/runner.mjs
+
+# Ruby-side CLI gem tests. The gem owns its own Gemfile / Rakefile
+# under `cli/` (standard Ruby monorepo layout — see README), so the
+# convention is to `cd cli` for any `bundle exec` work. This target
+# wraps that so the root-level workflow doesn't have to.
+test-cli:
+	cd cli && bundle exec rake test
+
+# Everything — wasm runtime + CLI gem. Slow because `test-wasm`
+# triggers a `lilac-full` rebuild if anything changed; use during
+# pre-commit / pre-release sweeps.
+test-all: test-cli test-wasm
 
 # ── serve (examples in a browser) ──────────────────────────────────────
 # Examples reference `../mrbgem/mruby-wasm-js/js/index.js`, which lives

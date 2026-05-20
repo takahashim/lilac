@@ -152,9 +152,13 @@ See `cli/README.md` for usage details.
 ## Tests
 
 ```bash
-make test    # wasm_spec — exercises runtime/mruby-lilac*/wasm_spec/
+make test         # wasm_spec — exercises runtime/mruby-lilac*/wasm_spec/
+                  # (alias of `make test-wasm`; kept for back-compat)
+make test-cli     # Ruby CLI gem tests — fast, no wasm rebuild
+make test-all     # both of the above, used pre-commit / pre-release
 
-cd cli && bundle exec rake test    # CLI unit tests (no wasm needed)
+# Equivalent low-level invocation for the CLI tests:
+cd cli && bundle exec rake test
 ```
 
 ## Dependency on mruby-wasm-runtime
