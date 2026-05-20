@@ -46,21 +46,27 @@ JS_WASM_RELEASE_LDFLAGS := -Wl,--strip-debug
 
 MRUBY_CONFIG_LILAC_FULL     := $(CURDIR)/build_config/lilac-full.rb
 MRUBY_CONFIG_LILAC_COMPILED := $(CURDIR)/build_config/lilac-compiled.rb
+MRUBY_CONFIG_MRBC_HOST      := $(CURDIR)/build_config/mrbc-host.rb
 
 LIBMRUBY_LILAC_FULL             := $(MRUBY_DIR)/build/lilac-full/lib/libmruby.a
 LIBMRUBY_LILAC_FULL_RELEASE     := $(MRUBY_DIR)/build/lilac-full-release/lib/libmruby.a
 LIBMRUBY_LILAC_COMPILED         := $(MRUBY_DIR)/build/lilac-compiled/lib/libmruby.a
 LIBMRUBY_LILAC_COMPILED_RELEASE := $(MRUBY_DIR)/build/lilac-compiled-release/lib/libmruby.a
+LIBMRUBY_MRBC_HOST              := $(MRUBY_DIR)/build/mrbc-host/lib/libmruby.a
+LIBMRUBY_MRBC_HOST_RELEASE      := $(MRUBY_DIR)/build/mrbc-host-release/lib/libmruby.a
 
 BUILD_DIR := $(CURDIR)/build
 BUILD_WASM_LILAC_FULL             := $(BUILD_DIR)/lilac-full.wasm
 BUILD_WASM_LILAC_FULL_RELEASE     := $(BUILD_DIR)/lilac-full.release.wasm
 BUILD_WASM_LILAC_COMPILED         := $(BUILD_DIR)/lilac-compiled.wasm
 BUILD_WASM_LILAC_COMPILED_RELEASE := $(BUILD_DIR)/lilac-compiled.release.wasm
+BUILD_WASM_MRBC_HOST              := $(BUILD_DIR)/mrbc-host.wasm
+BUILD_WASM_MRBC_HOST_RELEASE      := $(BUILD_DIR)/mrbc-host.release.wasm
 
 .PHONY: all \
         lilac-full lilac-full-release \
         lilac-compiled lilac-compiled-release \
+        mrbc-host mrbc-host-release \
         lilac-all lilac-all-release \
         check-pair-diff \
         test test-wasm test-cli test-all \
@@ -80,6 +86,12 @@ $(LIBMRUBY_LILAC_COMPILED):
 
 $(LIBMRUBY_LILAC_COMPILED_RELEASE):
 	cd $(MRUBY_DIR) && MRUBY_WASM_NO_COMPILER=1 MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_LILAC_COMPILED)
+
+$(LIBMRUBY_MRBC_HOST):
+	cd $(MRUBY_DIR) && rake MRUBY_CONFIG=$(MRUBY_CONFIG_MRBC_HOST)
+
+$(LIBMRUBY_MRBC_HOST_RELEASE):
+	cd $(MRUBY_DIR) && MRUBY_WASM_RELEASE=1 rake MRUBY_CONFIG=$(MRUBY_CONFIG_MRBC_HOST)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -123,6 +135,8 @@ lilac-full: $(BUILD_WASM_LILAC_FULL)
 lilac-full-release: $(BUILD_WASM_LILAC_FULL_RELEASE)
 lilac-compiled: $(BUILD_WASM_LILAC_COMPILED)
 lilac-compiled-release: $(BUILD_WASM_LILAC_COMPILED_RELEASE)
+mrbc-host: $(BUILD_WASM_MRBC_HOST)
+mrbc-host-release: $(BUILD_WASM_MRBC_HOST_RELEASE)
 lilac-all: lilac-full lilac-compiled
 lilac-all-release: lilac-full-release lilac-compiled-release
 
@@ -137,6 +151,34 @@ $(BUILD_WASM_LILAC_COMPILED): $(LIBMRUBY_LILAC_COMPILED) | $(BUILD_DIR)
 
 $(BUILD_WASM_LILAC_COMPILED_RELEASE): $(LIBMRUBY_LILAC_COMPILED_RELEASE) | $(BUILD_DIR)
 	$(call LINK_JS_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_LILAC_COMPILED_RELEASE),$(BUILD_WASM_LILAC_COMPILED_RELEASE),)
+
+# ── mrbc-host wasm (compiler-only reactor, no JS bridge) ────────────────
+# Loaded by `lilac-cli`'s WasmMrbcDriver via wasmtime-rb. Only exports
+# `compile_source` / `mrbc_alloc` / `mrbc_free` — no JS bridge symbols
+# (the trio in LINK_JS_WASM) because nothing on the host side calls
+# them and they'd pull in unused dead code.
+#
+# Args mirror LINK_JS_WASM but the export list is fixed.
+define LINK_MRBC_HOST_WASM
+$(CLANG) --target=$(TARGET) --sysroot=$(SYSROOT) \
+  $(1) \
+  -mexec-model=reactor \
+  -Wl,--allow-undefined \
+  $(2) \
+  -Wl,--export=compile_source \
+  -Wl,--export=mrbc_alloc \
+  -Wl,--export=mrbc_free \
+  -Wl,--whole-archive $(3) -Wl,--no-whole-archive \
+  -o $(4) \
+  -lsetjmp
+@echo "Built $(4) ($$(du -h $(4) | cut -f1))"
+endef
+
+$(BUILD_WASM_MRBC_HOST): $(LIBMRUBY_MRBC_HOST) | $(BUILD_DIR)
+	$(call LINK_MRBC_HOST_WASM,,,$(LIBMRUBY_MRBC_HOST),$(BUILD_WASM_MRBC_HOST))
+
+$(BUILD_WASM_MRBC_HOST_RELEASE): $(LIBMRUBY_MRBC_HOST_RELEASE) | $(BUILD_DIR)
+	$(call LINK_MRBC_HOST_WASM,-Oz,$(JS_WASM_RELEASE_LDFLAGS),$(LIBMRUBY_MRBC_HOST_RELEASE),$(BUILD_WASM_MRBC_HOST_RELEASE))
 
 # ── duplicate-pair drift check ─────────────────────────────────────────
 # Per decisions §17, the directive grammar layer is intentionally
@@ -248,4 +290,5 @@ npm-clean:
 # wasm (during a release flow that's about to repack from build/).
 clean: npm-clean
 	rm -rf $(MRUBY_DIR)/build/lilac-*
+	rm -rf $(MRUBY_DIR)/build/mrbc-host*
 	rm -rf $(BUILD_DIR)

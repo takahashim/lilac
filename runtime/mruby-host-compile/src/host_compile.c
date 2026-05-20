@@ -44,6 +44,27 @@
 
 /* ----- buffer helpers -------------------------------------------- */
 
+/*
+ * mrbgems' generated gem_init.c declares these symbols and the
+ * mruby init path calls them when mrb_open() runs. We don't register
+ * any Ruby-visible classes — `compile_source` is a wasm-export only,
+ * not exposed back to mruby code — so both bodies are no-ops. They
+ * exist purely to satisfy the linker (otherwise --allow-undefined
+ * leaves them as imports and instantiation fails with "unknown
+ * import").
+ */
+void
+mrb_mruby_host_compile_gem_init(mrb_state *mrb)
+{
+  (void)mrb;
+}
+
+void
+mrb_mruby_host_compile_gem_final(mrb_state *mrb)
+{
+  (void)mrb;
+}
+
 int32_t
 mrbc_alloc(int32_t len)
 {
