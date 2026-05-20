@@ -219,6 +219,14 @@ npm-clean:
 	rm -f $(NPM_DIR)/lilac-compiled/lilac.wasm
 
 # ── clean ───────────────────────────────────────────────────────────────
-clean:
+# `clean` removes everything Lilac generates: the wasm build dir, the
+# mruby per-config build cache, and the npm-staged wasm artefacts.
+# The latter used to be excluded, which let stale (e.g. LTO-era) wasm
+# files survive a `make clean` and then trip up `CompiledRuntimeResolver`
+# when it fell through to the npm fallback — keep this scoped wide so
+# the obvious "wipe everything" workflow really does wipe everything.
+# Use `make npm-clean` standalone when you only want to drop the npm
+# wasm (during a release flow that's about to repack from build/).
+clean: npm-clean
 	rm -rf $(MRUBY_DIR)/build/lilac-*
 	rm -rf $(BUILD_DIR)
