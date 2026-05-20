@@ -337,3 +337,52 @@ for the overall plan.
   `test_template` の bind_list 系も同時に取れる見込み。
   `test_node_operations` の Template#remove 問題は MutationObserver の
   detach 経路だけかもしれないので並行で確認可能。
+
+## Session 12 (2026-05-22): Reconciler node identity / LiveChildren / replaceChild
+
+- Target spec(s): test_bind_list / test_template / test_node_operations
+  / test_directive_each の reconciler 系
+- Achieved (3 root causes uncovered + fixed):
+  1. **`replaceChild` 未実装** — Lilac `ListReconciler#apply_string` が
+     in-place update で `parent.call(:replaceChild, new, old)` する。
+     `Element#__js_call__("replaceChild", ...)` を追加し、`new` を
+     `old` の前に insert → `old` を unlink、mutation observer 通知も
+     1 record で配送
+  2. **`parentNode` 未実装** — Lilac は `[:parentNode]` でホスト要素を
+     取得する (`[:parentElement]` は使わない)。`Element#__js_get__`
+     に `parentNode` ブランチを追加 (parentElement と異なり Fragment
+     親も拾う)
+  3. **`children` が snapshot Array だった** — Lilac の `reorder_nodes`
+     は **live HTMLCollection** 想定で `children[i]` を loop 中に
+     再評価する。`MrubyWasm::Dom::LiveChildren` クラスを追加し、
+     `[:length]` / `[i]` で都度 `element_children` を再評価
+  4. **libxml2 cross-document `add_child` がノードを COPY する** — 一番
+     深い bug。`Parser.fragment(html)` は別 Nokogiri::HTML5::Document
+     を生む → そこから取った node を main doc の ul に add_child すると
+     libxml2 が **新しい object_id でコピー**する。`@by_key[1][:node]`
+     はオリジナル (orphan)、`ul.children[0]` はコピーで identity 不一致
+     → 全 reconciler 操作が誤動作。`Parser.fragment(html, owner_doc:
+     @document.nokogiri_doc)` で main doc 配下のフラグメントを作るよう
+     に変更し identity 保持
+- Unlocked (2 new spec files):
+  - `test_bind_list` (11 sub-asserts) — append / remove / reorder /
+    in-place update / nested cleanup すべて green
+  - `test_template` (19 sub-asserts) — template clone + bind_list
+    template-mode の全パスも green
+
+  PURE_SPECS: 35 → 37. assertions: ~370 → ~410.
+
+- Blocked by / open:
+  - `test_node_operations` (11/12) — Template#remove via auto-mount。
+    template clone を append → MutationObserver → auto-mount →
+    `Lilac.find_for_element(modal_el)` が nil。registry が template
+    clone の Element wrapper を component instance に紐付けて
+    いない可能性。Session 13 で深掘り
+  - `test_directive_each` (0/2) — data-each / data-key directive。
+    内部で bind_list を使うはずだが、何か別の経路で失敗。Session 13
+    で観測
+  - `test_persistent_signal` (2/5) — `localStorage` polyfill 必要
+    (plan session 15 ターゲット)
+- Next: Session 13 — `test_directive_each` と `test_node_operations`
+  の Template#remove via auto-mount 経路を解明。両方とも MutationObserver
+  + component registry の交点なので同根の可能性あり。

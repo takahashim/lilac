@@ -31,7 +31,7 @@ class MrubyWasm
         case method
         when "cloneNode"
           deep = args.empty? ? false : !!args[0]
-          deep ? @document.wrap_node(Parser.fragment(@__node__.to_html)) : @document.wrap_node(Parser.fragment(""))
+          deep ? @document.wrap_node(Parser.fragment(@__node__.to_html, owner_doc: @document.nokogiri_doc)) : @document.wrap_node(Parser.fragment("", owner_doc: @document.nokogiri_doc))
         when "querySelector"
           query_selector(args[0])
         when "querySelectorAll"
@@ -106,6 +106,59 @@ class MrubyWasm
           nil
         else
           nil
+        end
+      end
+    end
+
+    # Live HTMLCollection equivalent. Each `[:length]` / `["0"]` /
+    # `["1"]` read re-walks the underlying Nokogiri element_children,
+    # so callers that snapshot `el[:children]` at the top of a loop
+    # still see DOM mutations performed inside the loop. Lilac's
+    # `ListReconciler#reorder_nodes` depends on this semantics —
+    # without it, reordering produces wrong positions.
+    class LiveChildren
+      def initialize(element)
+        @element = element
+      end
+
+      def __js_get__(key)
+        if key == "length"
+          current.size
+        elsif (idx = Integer(key, exception: false))
+          current[idx]
+        end
+      end
+
+      def __js_set__(_key, _value)
+        nil
+      end
+
+      def __js_call__(_method, _args)
+        nil
+      end
+
+      # Used by host-side Ruby callers that want to iterate; the
+      # bridge path goes through `__js_get__`.
+      include Enumerable
+      def each(&blk)
+        current.each(&blk)
+      end
+
+      def size
+        current.size
+      end
+      alias length size
+
+      def [](idx)
+        current[idx]
+      end
+
+      private
+
+      def current
+        @element.__node__.element_children.each_with_object([]) do |node, out|
+          wrapped = @element.instance_variable_get(:@document).wrap_node(node)
+          out << wrapped if wrapped
         end
       end
     end
@@ -236,6 +289,13 @@ class MrubyWasm
         @__node__ = nokogiri_node
         @class_list = ClassList.new(self)
         @style = StyleDeclaration.new(self)
+        # `LiveChildren` re-evaluates the child list on every property
+        # access so callers that capture `el[:children]` once see DOM
+        # mutations made between iterations (required by Lilac's
+        # ListReconciler#reorder_nodes — it relies on browser DOM's
+        # live HTMLCollection semantics to detect already-positioned
+        # nodes).
+        @live_children = LiveChildren.new(self)
       end
 
       def __js_get__(key)
@@ -245,11 +305,16 @@ class MrubyWasm
         when "isConnected"
           !@__node__.document.nil? && !@__node__.ancestors("html").empty?
         when "children"
-          element_children
+          @live_children
         when "firstElementChild"
           @document.wrap_node(@__node__.element_children.first)
         when "parentElement", "parent"
           wrap_parent(@__node__.parent)
+        when "parentNode"
+          # `parentNode` is broader than `parentElement` — includes
+          # DocumentFragment / Document parents too. Lilac's ListReconciler
+          # uses this to find the host before calling replaceChild.
+          @__node__.parent && @document.wrap_node(@__node__.parent)
         when "textContent"
           @__node__.text
         when "innerHTML"
@@ -353,6 +418,8 @@ class MrubyWasm
           insert_before(args[0], args[1])
         when "removeChild"
           remove_child(args[0])
+        when "replaceChild"
+          replace_child(args[0], args[1])
         when "cloneNode"
           clone_node(args[0])
         when "append"
@@ -398,7 +465,7 @@ class MrubyWasm
       def template_content
         return nil unless @__node__.name == "template"
 
-        @document.wrap_node(Parser.fragment(@__node__.inner_html))
+        @document.wrap_node(Parser.fragment(@__node__.inner_html, owner_doc: @document.nokogiri_doc))
       end
 
       # HTML attribute names are case-insensitive — browser DOM stores
@@ -487,10 +554,30 @@ class MrubyWasm
         child
       end
 
+      # `node.replaceChild(newChild, oldChild)` — required by Lilac's
+      # ListReconciler#apply_string for in-place item updates. Inserts
+      # newChild where oldChild was, then unlinks oldChild. Notifies
+      # MutationObserver of both changes in one record so observers see
+      # the swap atomically.
+      def replace_child(new_child, old_child)
+        old_node = unwrap_dom_node(old_child)
+        return nil unless old_node&.parent == @__node__
+
+        new_nodes = detach_dom_nodes(new_child)
+        new_nodes.reverse_each { |node| old_node.add_previous_sibling(node) }
+        old_node.unlink
+        @document.notify_child_list_mutation(
+          target_node: @__node__,
+          added_nodes: new_nodes,
+          removed_nodes: [old_node]
+        )
+        old_child
+      end
+
       def clone_node(deep_arg)
         deep = !!deep_arg
         if deep
-          @document.wrap_node(Parser.fragment(@__node__.to_html).children.find(&:element?))
+          @document.wrap_node(Parser.fragment(@__node__.to_html, owner_doc: @document.nokogiri_doc).children.find(&:element?))
         else
           clone = @document.create_element(@__node__.name)
           @__node__.attribute_nodes.each do |attr|

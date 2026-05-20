@@ -71,6 +71,11 @@ class SpecRunner
     "runtime/mruby-lilac/wasm_spec/test_bind_class_style.rb",
     "runtime/mruby-lilac/wasm_spec/test_bind_input.rb",
     "runtime/mruby-lilac/wasm_spec/test_url_sanitizer.rb",
+    # Session 12 unlock — replaceChild / parentNode / LiveChildren +
+    # Parser.fragment が owner_doc を受けるよう改修 (libxml2 が cross-doc
+    # add_child でノードを copy する挙動への対処)
+    "runtime/mruby-lilac/wasm_spec/test_bind_list.rb",
+    "runtime/mruby-lilac/wasm_spec/test_template.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do

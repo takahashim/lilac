@@ -8,7 +8,7 @@ class MrubyWasm
     class Document
       include EventTarget
 
-      attr_reader :body
+      attr_reader :body, :nokogiri_doc
       attr_accessor :default_view
 
       def initialize(host)

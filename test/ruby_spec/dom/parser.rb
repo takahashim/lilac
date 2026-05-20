@@ -22,9 +22,21 @@ class MrubyWasm
     #     fragments, but worth noting.
     #
     # Returns a Nokogiri::HTML5::DocumentFragment.
+    #
+    # The `owner_doc` parameter is critical: when a node parsed via a
+    # detached fragment gets `add_child`'d into a Document that owns a
+    # different Nokogiri document, libxml2 silently **copies** the node
+    # (new object_id) instead of moving it. That breaks identity-
+    # dependent caches (`Document#wrap_node`, `@by_key[k][:node]` in
+    # Lilac's reconciler). Always pass the destination document so the
+    # parsed nodes are born in the right owner.
     module Parser
-      def self.fragment(html)
-        Nokogiri::HTML5.fragment(html.to_s, max_errors: 0)
+      def self.fragment(html, owner_doc: nil)
+        if owner_doc
+          owner_doc.fragment(html.to_s)
+        else
+          Nokogiri::HTML5.fragment(html.to_s, max_errors: 0)
+        end
       end
     end
   end
