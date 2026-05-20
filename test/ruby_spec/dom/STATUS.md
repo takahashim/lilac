@@ -507,3 +507,38 @@ for the overall plan.
 - Next: Session 16 — `fetch` polyfill (Promise を返す stub-injectable な
   fetcher) で Fetchy / Resource 系 (3 spec) を狙う。これで lilac-async
   も 100%。Session 17 を router (history + location + URL) に充てる。
+
+## Session 16 (2026-05-22): fetch polyfill — 部分 unlock
+
+- Target spec(s): test_fetchy / test_resource / test_resource_signal_inject
+- Achieved:
+  1. **`MrubyWasm::Dom::FetchFn` + `Response` + `Headers`** 新設。
+     `JS.global[:__fetchy_stub__]` (Hash) を読み Promise<Response> を
+     返す stub-injectable fetcher。real network 無しでホスト Ruby が
+     fixture を直接書ける
+  2. **`Window#__js_set__`** が unknown key を `@globals` Hash に格納。
+     `JS.global[:__fetchy_stub__] = map` 等の dynamic key が保存可能
+  3. **`Array.from(iterable)`** を `:array_ctor` dispatch に追加。
+     Fetchy の Headers `.entries` を Ruby Array に変換する経路が動く
+  4. **fetch の delay + AbortController 連動**: setTimeout で resolve
+     を遅延し、init.signal の "abort" event listener で timer cancel +
+     reject 配線
+- 進捗 (いずれも PURE_SPECS 未追加、部分 pass):
+  - `test_fetchy`: 0/12 → **9/12** (json/text/url/HTTP error/parse
+    error/auto-stringify/base URL prefix/timeout 全て pass)
+  - `test_resource`: 1/4 → 1/4 (深い NilClass#[] 残)
+  - `test_resource_signal_inject`: 1/3 → **3/5** (sub-asserts 数が増えた
+    のは Fetchy の signal injection branch も入ったため)
+- PURE_SPECS: 64 維持 (全 green が unlock 条件)
+- Blocked by / open:
+  - Fetchy builder params: URL query string 組み立てで stub map と URL
+    がマッチしない (404)
+  - External abort signal: `AbortError` の reject chain が Fetchy 側に
+    届かない (Promise.catch の wiring 周り)
+  - Request cache: 1 回想定が 12 回 fetch — Promise の `.await` semantics
+    が同期化された経路で再 fetch を起こしている可能性
+  - Resource NilClass#[]: Fetchy/Response の使い方の細部で nil 経路
+- Next: Session 17 — URL query string で stub map を正規化する fix、
+  Promise reject chain の trace、Request cache 化の Promise re-await
+  semantics 確認、Resource 内部の print debug。router (history /
+  location) は Session 18 へ延期。

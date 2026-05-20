@@ -34,6 +34,12 @@ class MrubyWasm
         @abort_controller_ctor  = Constructor.new { |_args| AbortController.new }
         @local_storage   = Storage.new
         @session_storage = Storage.new
+        # `JS.global[:__some_key__] = ...` from user code lands here.
+        # Lilac specs use this for stub installation (e.g.
+        # `__fetchy_stub__`); production code stays on the typed
+        # accessors above. We keep it last in the read fallback to
+        # avoid shadowing intentional getters.
+        @globals = {}
         @document = Document.new(host)
         @document.default_view = self
       end
@@ -65,18 +71,23 @@ class MrubyWasm
         when "performance"  then { "now" => @scheduler.now_ms.to_f }
         when "localStorage" then @local_storage
         when "sessionStorage" then @session_storage
-        else nil
+        when "fetch"        then FetchFn.new(self)
+        else @globals[key]
         end
       end
 
       def __js_set__(key, value)
-        # `JS.global[:x] = ...` from wasm. No persistence needed for
-        # foundation; future sessions may add localStorage etc.
-        nil
+        # Stash arbitrary keys for later reads (e.g.
+        # `JS.global[:__fetchy_stub__] = map`).
+        @globals[key] = value
       end
+
+      attr_reader :globals, :scheduler
 
       def __js_call__(method, args)
         case method
+        when "fetch"
+          FetchFn.new(self).__js_call__("call", args)
         when "addEventListener"
           add_event_listener(args[0], args[1], args[2])
         when "removeEventListener"

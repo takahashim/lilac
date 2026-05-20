@@ -9,6 +9,7 @@ require_relative "dom/scheduler"
 require_relative "dom/observer"
 require_relative "dom/promise"
 require_relative "dom/storage"
+require_relative "dom/fetch"
 require_relative "dom/world"
 require_relative "dom/document"
 require_relative "dom/element"
@@ -515,6 +516,24 @@ class MrubyWasm
     when :object_ctor
       # Object.keys(obj) — static method on the Object sentinel.
       method == "keys" && args.first.is_a?(Hash) ? store_handle(args.first.keys) : 0
+    when :array_ctor
+      # Array.from(iterable) — used by Fetchy to materialize header
+      # entries into a Ruby array. Accepts existing Array (Headers
+      # `.entries` returns one) or anything #to_a'able.
+      if method == "from"
+        case args.first
+        when Array then store_handle(args.first.dup)
+        when Hash then store_handle(args.first.to_a)
+        else
+          if args.first.respond_to?(:to_a)
+            store_handle(args.first.to_a)
+          else
+            store_handle([])
+          end
+        end
+      else
+        0
+      end
     when Array
       case method
       when "push" then args.each { |a| target.push(a) }; store_handle(target.size)
