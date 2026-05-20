@@ -38,10 +38,13 @@ module Lilac
       # wasm — smaller production bundle (~32% brotli), but requires
       # `mrbc` in the build environment (see DEFAULT_MRBC_CANDIDATES).
       #
-      # Mirrors Vite's dev/prod two-stage philosophy: `lilac dev` can
-      # stay on the fast `:full` target while `lilac build` ships the
-      # optimized `:compiled` target.
-      DEFAULT_BUILD_TARGET = :full
+      # Mirrors Vite's dev/prod two-stage philosophy:
+      # - `lilac dev` defaults to `:full` so the development loop stays
+      #   mrbc-free and gets the runtime parser for fast iteration.
+      # - `lilac build` defaults to `:compiled` so production deploys
+      #   ship the smaller bundle by default — opt out with
+      #   `--target full` when you want the runtime parser in dist.
+      DEFAULT_BUILD_TARGET = :compiled
       DEFAULT_DEV_TARGET   = :full
       TARGET_VALUES = %i[full compiled].freeze
 

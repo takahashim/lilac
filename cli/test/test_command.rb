@@ -33,7 +33,9 @@ class TestCommand < Minitest::Test
       <html><body><lilac-component name="counter"></lilac-component></body></html>
     HTML
 
-    status, out, err = run_cmd("build", "--root", @tmp)
+    # `--target full` keeps the test mrbc-free; `lilac build` defaults
+    # to `:compiled` which would require mrbc in the test environment.
+    status, out, err = run_cmd("build", "--root", @tmp, "--target", "full")
     assert_equal 0, status, "stderr: #{err}"
     assert_match(/Built 1 page\(s\) from 1 component\(s\)/, out)
     assert File.exist?(File.join(@tmp, "dist", "index.html"))
@@ -54,7 +56,8 @@ class TestCommand < Minitest::Test
     File.write(stale, "leftover from a previous build")
 
     # No `--clean` flag — default behavior is to wipe before build.
-    status, _out, err = run_cmd("build", "--root", @tmp)
+    # `--target full` to keep the test mrbc-free.
+    status, _out, err = run_cmd("build", "--root", @tmp, "--target", "full")
     assert_equal 0, status, "stderr: #{err}"
     refute File.exist?(stale), "build must remove stale files in the output dir by default"
     assert File.exist?(File.join(dist, "index.html"))
@@ -74,7 +77,7 @@ class TestCommand < Minitest::Test
     keep = File.join(dist, "external.txt")
     File.write(keep, "managed outside lilac")
 
-    status, _out, err = run_cmd("build", "--root", @tmp, "--no-clean")
+    status, _out, err = run_cmd("build", "--root", @tmp, "--no-clean", "--target", "full")
     assert_equal 0, status, "stderr: #{err}"
     assert File.exist?(keep), "--no-clean must preserve pre-existing files in the output dir"
     assert File.exist?(File.join(dist, "index.html"))
@@ -89,8 +92,8 @@ class TestCommand < Minitest::Test
 
     # `--output @tmp` would make output_dir == project root. The guard
     # runs on every build now (default-clean), so no `--clean` flag is
-    # needed to trigger it.
-    status, _out, err = run_cmd("build", "--root", @tmp, "--output", @tmp)
+    # needed to trigger it. `--target full` keeps the test mrbc-free.
+    status, _out, err = run_cmd("build", "--root", @tmp, "--output", @tmp, "--target", "full")
     refute_equal 0, status, "must refuse to wipe a path that resolves to the project root"
     assert_match(/refused/, err)
   end
@@ -100,7 +103,7 @@ class TestCommand < Minitest::Test
       <html><body><lilac-component name="missing"></lilac-component></body></html>
     HTML
 
-    status, _out, err = run_cmd("build", "--root", @tmp)
+    status, _out, err = run_cmd("build", "--root", @tmp, "--target", "full")
     refute_equal 0, status
     assert_match(/Unknown component: "missing"/, err)
   end

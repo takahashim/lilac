@@ -103,10 +103,12 @@ cd my-app && bundle install
 
 lilac doctor             # check project setup (runtime, component refs, paths)
 
-lilac build              # produce dist/ from components/ + pages/
+lilac build              # produce dist/ (default --target compiled — requires mrbc)
+lilac build --target full # opt out: ship runtime parser in dist (mrbc-free)
 lilac build --output _site
 
 lilac dev                # build + serve + live reload at http://127.0.0.1:5173
+                         # (default --target full so no mrbc needed for iteration)
 lilac dev --port 8000    # bind to a different port
 ```
 

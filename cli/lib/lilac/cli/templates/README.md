@@ -40,19 +40,22 @@ the browser reloads automatically (Server-Sent Events).
 ## Build for production
 
 ```sh
-bundle exec lilac build                  # default --target full
-bundle exec lilac build --target compiled
+bundle exec lilac build                # default --target compiled (smaller bundle, needs mrbc)
+bundle exec lilac build --target full  # opt out: ship runtime parser, no mrbc required
 ```
 
 Output goes to `dist/`, which is self-contained (HTML + everything from
 `public/`). Deploy `dist/` as your static site root.
 
-### `--target compiled`
+### `--target compiled` (default for `lilac build`)
 
 `--target compiled` precompiles Ruby into `.mrb` bytecode (smaller
 bundle, no in-browser parser) and **automatically vendors the
-`lilac-compiled` runtime** into `dist/vendor/lilac-compiled/`. You do
-not need to copy anything into `public/vendor/lilac-compiled/` —
+`lilac-compiled` runtime** into `dist/vendor/lilac-compiled/`. This
+is the default for `lilac build` — `lilac dev` keeps `--target full`
+so the development loop stays mrbc-free.
+
+You do not need to copy anything into `public/vendor/lilac-compiled/` —
 the CLI resolves the wasm + JS bridge from one of:
 
 1. `--lilac-compiled-path` / `--mruby-wasm-js-path` CLI flags

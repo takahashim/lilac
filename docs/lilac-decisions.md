@@ -1280,6 +1280,37 @@ boot helper は npm package の `index.js` を vendor せず、builder template 
   exclusion 3 + inline 5 + auto-vendor 4 + 1 combine), `cli/test/test_compiled_runtime_resolver.rb`
   新規(12)。total 382 runs, 1051 assertions, all green
 
+### 18.5 Refinement: `lilac build` の既定 target を `:compiled` に(2026-05-20)
+
+§18 着地時は `lilac build` の既定 target が `:full` だった(`lilac dev` と
+対称的に同じ default、user が production 用には `--target compiled` を
+明示する設計)。しかし以下の理由で **既定を `:compiled` に変更**:
+
+- `lilac build` の主用途は **production deploy**。production は基本
+  `:compiled` の方が小さい bundle と faster boot を得られる
+- `lilac dev` (既定 `:full`、mrbc 不要) と `lilac build` (既定 `:compiled`、
+  mrbc 必要) で **Vite-style の dev/prod 二段構え** が明示的に成立する
+- decisions §1 「ビルド不要で動くこと」の精神は `lilac dev` で保たれる
+  (mrbc は依然 dev で不要)。`lilac build` だけが prod deploy 時の追加
+  setup を要求するのは妥当
+
+mrbc 不要で `lilac build` を回したい場合は `--target full` を明示する
+escape hatch を残す。これは debug 用途 / mrbc セットアップが間に合わない
+環境で有用。
+
+#### 影響を受ける箇所
+
+- `cli/lib/lilac/cli/config.rb`: `DEFAULT_BUILD_TARGET` を `:full` → `:compiled` に変更
+- `cli/lib/lilac/cli/command.rb#print_next_steps`: `lilac new` の scaffold message に
+  「ship 時は `lilac build`(compiled デフォルト)、mrbc-free が必要なら
+  `--target full`」を追記
+- `cli/lib/lilac/cli/templates/README.md`: scaffold README の build 例を更新
+- `cli/README.md`, `docs/lilac-workflow.md`: build 既定の説明を更新
+- `cli/test/test_command.rb`: 5 件の `lilac build` invocation に `--target full`
+  を明示(mrbc-free のままテストを通すため)
+
+CLI tests 393 all green、CLI 配下以外への影響なし。
+
 ---
 
 ## 19. Codegen positional `lilN`(`data-ref` 注入の廃止)

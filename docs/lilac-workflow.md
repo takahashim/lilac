@@ -17,8 +17,8 @@ lilac new my-app            # プロジェクトを作る
 cd my-app
 lilac dev                   # 開発サーバ起動 → http://127.0.0.1:5173
                             # `.lil` を保存すると SSE でブラウザ自動リロード
-lilac build                 # dist/ に出力(target=full、既定)
-lilac build --target compiled   # prod 向け .mrb + lilac-compiled.wasm
+lilac build                 # dist/ に出力(既定 target=compiled、mrbc 必要)
+lilac build --target full   # mrbc 不要、runtime parser を dist に同梱
 ```
 
 ---
@@ -96,12 +96,17 @@ prod ビルドの動作を手元で完全再現したいときだけ。通常は
 ## `lilac build`(本番ワークフロー)
 
 ```bash
-lilac build                        # 既定: target=full、output=dist
-lilac build --target compiled      # prod 向け
-lilac build --target compiled --mrbc-path /path/to/mrbc   # mrbc を明示
+lilac build                        # 既定: target=compiled、output=dist (mrbc 必要)
+lilac build --target full          # mrbc 不要、runtime parser を dist に同梱
+lilac build --mrbc-path /path/to/mrbc      # mrbc を明示(compiled target で使用)
 lilac build -o public_html         # 出力先を変える
 lilac build --no-clean             # 既存 dist を残して上書き build (incremental)
 ```
+
+> **既定 target が `:compiled`** なのは production deploy が `lilac build`
+> の主用途で、`:compiled` の方が bundle が小さく runtime parser を含まない
+> ため(decisions §18)。`lilac dev` の既定は `:full` のままなので、開発
+> ループは mrbc 不要のままで進められる(Vite-style の dev/prod 二段構え)。
 
 > **注**: `lilac build` は **既定で output_dir を build 前に wipe する**(Vite /
 > Next / Eleventy と同じ慣習)。古い `app.<hash>.mrb` 等の累積を防ぐため。

@@ -180,7 +180,7 @@ module Lilac
         @out.puts "  cd #{name}"
         @out.puts "  bundle install"
         @out.puts
-        @out.puts "  # 1. Install the mruby-wasm runtime (one-time, ~5MB):"
+        @out.puts "  # 1. Install the mruby-wasm runtime for `lilac dev` (one-time, ~5MB):"
         @out.puts "  mkdir -p public/vendor/lilac-full/mruby-wasm-js"
         @out.puts "  cp /path/to/lilac/build/lilac-full.wasm \\"
         @out.puts "     public/vendor/lilac-full/lilac-full.wasm"
@@ -192,6 +192,11 @@ module Lilac
         @out.puts
         @out.puts "  # 3. Start the dev server (live reload at http://localhost:5173):"
         @out.puts "  bundle exec lilac dev"
+        @out.puts
+        @out.puts "  # 4. When ready to ship, `lilac build` produces an optimized"
+        @out.puts "  #    --target compiled dist (smaller bundle; requires mrbc"
+        @out.puts "  #    discoverable via env / monorepo / npm — see README)."
+        @out.puts "  #    For an mrbc-free build, run: lilac build --target full"
       end
 
       def run_dev
