@@ -12,4 +12,10 @@ Lilac::CLI.configure do |c|
 
   # c.dev_host    = "127.0.0.1"   # `lilac dev` bind host
   # c.dev_port    = 5173          # `lilac dev` bind port
+
+  # --target compiled discovery overrides. Both default to nil, in which
+  # case the CLI auto-discovers via env vars, a monorepo ancestor, or
+  # `node_modules/@takahashim/lilac-compiled` + `node_modules/@takahashim/mruby-wasm-js`.
+  # c.lilac_compiled_path = "/abs/path/to/lilac-compiled.wasm"
+  # c.mruby_wasm_js_path  = "/abs/path/to/mruby-wasm-js/"
 end

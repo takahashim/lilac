@@ -40,6 +40,10 @@ module Lilac
         # bytecode + lilac-compiled wasm. mrbc_path overrides the
         # auto-discovery in BytecodeBuilder.
         :build_target, :dev_target, :mrbc_path,
+        # Overrides for the `--target compiled` runtime discovery
+        # (see CompiledRuntimeResolver). Both nil = auto-discover via
+        # env / monorepo ancestor / node_modules.
+        :lilac_compiled_path, :mruby_wasm_js_path,
         keyword_init: true,
       )
 

@@ -18,11 +18,11 @@ Eleventy convention), so requests to `/vendor/...` resolve from there
 both in dev (`lilac dev`) and in production (`lilac build`).
 
 ```sh
-mkdir -p public/vendor/mruby-wasm-js
+mkdir -p public/vendor/lilac-full/mruby-wasm-js
 cp /path/to/lilac/build/lilac-full.wasm \
-   public/vendor/lilac-full.wasm
+   public/vendor/lilac-full/lilac-full.wasm
 cp -r /path/to/mruby-wasm-runtime/mrbgem/mruby-wasm-js/js/* \
-       public/vendor/mruby-wasm-js/
+       public/vendor/lilac-full/mruby-wasm-js/
 ```
 
 Add anything else you want passthrough-served (favicons, images, CSS
@@ -40,11 +40,31 @@ the browser reloads automatically (Server-Sent Events).
 ## Build for production
 
 ```sh
-bundle exec lilac build
+bundle exec lilac build                  # default --target full
+bundle exec lilac build --target compiled
 ```
 
 Output goes to `dist/`, which is self-contained (HTML + everything from
 `public/`). Deploy `dist/` as your static site root.
+
+### `--target compiled`
+
+`--target compiled` precompiles Ruby into `.mrb` bytecode (smaller
+bundle, no in-browser parser) and **automatically vendors the
+`lilac-compiled` runtime** into `dist/vendor/lilac-compiled/`. You do
+not need to copy anything into `public/vendor/lilac-compiled/` —
+the CLI resolves the wasm + JS bridge from one of:
+
+1. `--lilac-compiled-path` / `--mruby-wasm-js-path` CLI flags
+2. `c.lilac_compiled_path` / `c.mruby_wasm_js_path` in `lilac.config.rb`
+3. `LILAC_COMPILED_WASM` / `MRUBY_WASM_JS_PATH` env vars
+4. The Lilac monorepo (if you're working inside this repo)
+5. `node_modules/@takahashim/lilac-compiled` and
+   `node_modules/@takahashim/mruby-wasm-js`
+
+Most projects can simply `npm install @takahashim/lilac-compiled` (which
+pulls in the bridge as a peer dependency) and the build picks it up
+automatically.
 
 ## Configuration
 

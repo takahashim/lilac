@@ -89,6 +89,7 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem core: "mruby-hash-ext"    # Hash#each, dup
   conf.gem core: "mruby-string-ext"  # String#end_with?, tr, gsub, ...
   conf.gem core: "mruby-numeric-ext" # Integer#even?/#odd?/#step — parity with lilac-full
+  conf.gem core: "mruby-compar-ext"  # Comparable#clamp — used by Lilac apps for range bounds (e.g. 7guis Timer)
   conf.gem core: "mruby-enum-ext"    # Enumerable#each_with_object
   conf.gem core: "mruby-enumerator"  # Enumerator class
   conf.gem core: "mruby-kernel-ext"  # Kernel#raise variants, Object#tap

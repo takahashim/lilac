@@ -137,4 +137,75 @@ class TestSFC < Minitest::Test
     assert_includes comp.script, "y = 1"
     refute_includes comp.script, "console.log"
   end
+
+  # ---- extract_inline_ruby_scripts (page HTML helper) ---------------
+
+  def test_extract_inline_ruby_scripts_returns_sources_and_strips
+    html = <<~HTML
+      <html><body>
+      <h1>Title</h1>
+      <script type="text/ruby">
+      class Foo; end
+      </script>
+      <p>done</p>
+      </body></html>
+    HTML
+
+    result = Lilac::CLI::SFC.extract_inline_ruby_scripts(html)
+    assert_equal 1, result[:scripts].length
+    assert_includes result[:scripts].first, "class Foo; end"
+    refute_includes result[:stripped_html], '<script type="text/ruby">'
+    refute_includes result[:stripped_html], "class Foo"
+    assert_includes result[:stripped_html], "<h1>Title</h1>"
+    assert_includes result[:stripped_html], "<p>done</p>"
+  end
+
+  def test_extract_inline_ruby_scripts_multiple_blocks_in_order
+    html = <<~HTML
+      <body>
+      <script type="text/ruby">class A; end</script>
+      <div>middle</div>
+      <script type="text/ruby">class B; end</script>
+      </body>
+    HTML
+
+    result = Lilac::CLI::SFC.extract_inline_ruby_scripts(html)
+    assert_equal 2, result[:scripts].length
+    assert_includes result[:scripts][0], "class A"
+    assert_includes result[:scripts][1], "class B"
+    refute_includes result[:stripped_html], "class A"
+    refute_includes result[:stripped_html], "class B"
+    assert_includes result[:stripped_html], "<div>middle</div>"
+  end
+
+  def test_extract_inline_ruby_scripts_ignores_other_script_types
+    html = <<~HTML
+      <body>
+      <script type="module">import x from "/y.js";</script>
+      <script>console.log("plain");</script>
+      <script type="text/ruby">class Only; end</script>
+      </body>
+    HTML
+
+    result = Lilac::CLI::SFC.extract_inline_ruby_scripts(html)
+    assert_equal 1, result[:scripts].length
+    assert_includes result[:scripts].first, "class Only"
+    # Non-ruby script tags must survive untouched.
+    assert_includes result[:stripped_html], '<script type="module">'
+    assert_includes result[:stripped_html], 'console.log("plain")'
+  end
+
+  def test_extract_inline_ruby_scripts_unterminated_raises
+    html = %(<body><script type="text/ruby">class A; end</body>)
+    assert_raises(Lilac::CLI::SFC::ParseError) do
+      Lilac::CLI::SFC.extract_inline_ruby_scripts(html, path: "fake.html")
+    end
+  end
+
+  def test_extract_inline_ruby_scripts_no_match_returns_html_unchanged
+    html = "<html><body><h1>plain</h1></body></html>"
+    result = Lilac::CLI::SFC.extract_inline_ruby_scripts(html)
+    assert_empty result[:scripts]
+    assert_equal html, result[:stripped_html]
+  end
 end

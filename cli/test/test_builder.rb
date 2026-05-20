@@ -26,7 +26,9 @@ class TestBuilder < Minitest::Test
     File.write(File.join(@pages, "#{name}.html"), source)
   end
 
-  def build!(codegen: :auto, target: :full, mrbc_path: nil)
+  def build!(codegen: :auto, target: :full, mrbc_path: nil,
+             lilac_compiled_path: nil, mruby_wasm_js_path: nil,
+             project_root: Dir.pwd)
     Lilac::CLI::Builder.new(
       components_dir: @components,
       pages_dir: @pages,
@@ -34,6 +36,9 @@ class TestBuilder < Minitest::Test
       codegen: codegen,
       target: target,
       mrbc_path: mrbc_path,
+      lilac_compiled_path: lilac_compiled_path,
+      mruby_wasm_js_path: mruby_wasm_js_path,
+      project_root: project_root,
     ).build
   end
 
@@ -361,6 +366,80 @@ class TestBuilder < Minitest::Test
     assert File.exist?(File.join(@output, "real.css"))
   end
 
+  def test_public_dir_skips_inactive_target_vendor_for_full
+    write_widget "x", <<~GNT
+      <template><div data-component="x"></div></template>
+      <script type="text/ruby">class X < Lilac::Component; end</script>
+    GNT
+    write_page "index", '<html><body><lilac-component name="x"></lilac-component></body></html>'
+
+    public_dir = File.join(@tmp, "public")
+    FileUtils.mkdir_p(File.join(public_dir, "vendor", "lilac-full"))
+    FileUtils.mkdir_p(File.join(public_dir, "vendor", "lilac-compiled"))
+    File.write(File.join(public_dir, "vendor", "lilac-full", "lilac-full.wasm"), "FULL_BYTES")
+    File.write(File.join(public_dir, "vendor", "lilac-compiled", "index.js"), "COMPILED_BOOT")
+
+    Lilac::CLI::Builder.new(
+      components_dir: @components,
+      pages_dir: @pages,
+      output_dir: @output,
+      public_dir: public_dir,
+      target: :full,
+    ).build
+
+    assert File.exist?(File.join(@output, "vendor", "lilac-full", "lilac-full.wasm")),
+           "full target must ship its own vendor subdir"
+    refute File.exist?(File.join(@output, "vendor", "lilac-compiled", "index.js")),
+           "full target must NOT ship the compiled vendor subdir"
+  end
+
+  def test_public_dir_skips_inactive_target_vendor_for_compiled
+    mrbc_or_skip
+    # Page with no <lilac-component> placeholder so the compiled target
+    # doesn't try to invoke mrbc — this test is about public-mirror
+    # exclusion only.
+    write_page "static", "<html><body><h1>plain page</h1></body></html>"
+
+    public_dir = File.join(@tmp, "public")
+    FileUtils.mkdir_p(File.join(public_dir, "vendor", "lilac-full"))
+    FileUtils.mkdir_p(File.join(public_dir, "vendor", "lilac-compiled"))
+    File.write(File.join(public_dir, "vendor", "lilac-full", "lilac-full.wasm"), "FULL_BYTES")
+    File.write(File.join(public_dir, "vendor", "lilac-compiled", "index.js"), "COMPILED_BOOT")
+
+    Lilac::CLI::Builder.new(
+      components_dir: @components,
+      pages_dir: @pages,
+      output_dir: @output,
+      public_dir: public_dir,
+      target: :compiled,
+    ).build
+
+    assert File.exist?(File.join(@output, "vendor", "lilac-compiled", "index.js")),
+           "compiled target must ship its own vendor subdir"
+    refute File.exist?(File.join(@output, "vendor", "lilac-full", "lilac-full.wasm")),
+           "compiled target must NOT ship the full vendor subdir"
+  end
+
+  def test_public_dir_excluded_dir_prefix_does_not_overmatch
+    # `vendor/lilac-full` must not skip `vendor/lilac-full-x` — the
+    # exclusion is path-prefix + boundary, not substring.
+    write_page "static", "<html><body></body></html>"
+
+    public_dir = File.join(@tmp, "public")
+    FileUtils.mkdir_p(File.join(public_dir, "vendor", "lilac-full-x"))
+    File.write(File.join(public_dir, "vendor", "lilac-full-x", "keep.js"), "KEEP")
+
+    Lilac::CLI::Builder.new(
+      components_dir: @components,
+      pages_dir: @pages,
+      output_dir: @output,
+      public_dir: public_dir,
+      target: :compiled,
+    ).build
+
+    assert File.exist?(File.join(@output, "vendor", "lilac-full-x", "keep.js"))
+  end
+
   def test_build_result_reports_public_files_count
     write_widget "x", <<~GNT
       <template><div data-component="x"></div></template>
@@ -454,7 +533,10 @@ class TestBuilder < Minitest::Test
     refute_includes out, '<script type="text/ruby">',
                     "compiled target must not leave inline Ruby in dist HTML"
     assert_includes out, "data-lilac-bootstrap"
-    assert_includes out, 'import { boot } from "./vendor/lilac-compiled/index.js"'
+    # Inline boot module imports the bridge directly (no dependency on
+    # the npm package's boot helper — see render_compiled_boot_module).
+    assert_includes out, 'import { createVM } from "./vendor/lilac-compiled/mruby-wasm-js/index.js"'
+    assert_includes out, 'vm.loadBytecode(bytecode)'
     # The fetch URL must reference a content-hashed .mrb sibling.
     assert_match(/fetch\("\.\/app\.[0-9a-f]{8}\.mrb"\)/, out)
 
@@ -480,7 +562,217 @@ class TestBuilder < Minitest::Test
     refute_includes out, "lilac-compiled"
   end
 
+  # ---- page-inline `<script type="text/ruby">` handling ------------
+
+  def test_target_compiled_includes_page_inline_ruby_in_mrb
+    mrbc = mrbc_or_skip
+    write_page "index", <<~HTML
+      <html><body>
+      <script type="text/ruby">
+      class PageOnlyFoo
+        def hello; end
+      end
+      </script>
+      </body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc)
+    out = read_output("index.html")
+
+    refute_includes out, '<script type="text/ruby">',
+                    "compiled target must strip page-inline Ruby scripts"
+    assert_includes out, "data-lilac-bootstrap"
+
+    mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))
+    assert_equal 1, mrb_files.length
+    # Class names land in the mruby symbol table verbatim — searchable
+    # without parsing the mrb format.
+    assert_includes File.binread(mrb_files.first), "PageOnlyFoo"
+  end
+
+  def test_target_full_preserves_page_inline_ruby
+    write_page "index", <<~HTML
+      <html><body>
+      <script type="text/ruby">
+      class PageOnlyBar; end
+      </script>
+      </body></html>
+    HTML
+
+    build!(target: :full)
+    out = read_output("index.html")
+
+    assert_includes out, '<script type="text/ruby">'
+    assert_includes out, "class PageOnlyBar"
+  end
+
+  def test_target_compiled_dedupes_identical_inline_across_pages
+    mrbc = mrbc_or_skip
+    shared = <<~HTML
+      <html><body>
+      <script type="text/ruby">
+      class SharedKlass; end
+      </script>
+      </body></html>
+    HTML
+    write_page "page_a", shared
+    write_page "page_b", shared
+
+    build!(target: :compiled, mrbc_path: mrbc)
+
+    mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))
+    assert_equal 1, mrb_files.length,
+                 "identical inline source on two pages must dedupe via content-hash"
+  end
+
+  def test_target_compiled_per_page_mrb_when_inline_differs
+    mrbc = mrbc_or_skip
+    write_page "page_a", <<~HTML
+      <html><body><script type="text/ruby">class KlassA; end</script></body></html>
+    HTML
+    write_page "page_b", <<~HTML
+      <html><body><script type="text/ruby">class KlassB; end</script></body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc)
+
+    mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))
+    assert_equal 2, mrb_files.length,
+                 "different inline source per page must produce per-page .mrb"
+  end
+
+  # ---- compiled auto-vendor ---------------------------------------
+
+  def test_target_compiled_auto_vendors_runtime
+    mrbc = mrbc_or_skip
+    fixture = scaffold_compiled_runtime_fixture
+    write_page "index", <<~HTML
+      <html><body><script type="text/ruby">class Vendored; end</script></body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc,
+           lilac_compiled_path: fixture[:wasm],
+           mruby_wasm_js_path: fixture[:bridge])
+
+    # wasm + bridge are vendored. The boot module is rendered inline
+    # into the HTML by render_compiled_boot_module, so no vendored
+    # index.js file is needed.
+    assert File.exist?(File.join(@output, "vendor", "lilac-compiled", "lilac.wasm"))
+    assert File.exist?(File.join(@output, "vendor", "lilac-compiled", "mruby-wasm-js", "index.js"))
+    refute File.exist?(File.join(@output, "vendor", "lilac-compiled", "index.js"))
+  end
+
+  def test_target_compiled_emits_inline_boot_using_bridge_directly
+    mrbc = mrbc_or_skip
+    fixture = scaffold_compiled_runtime_fixture
+    write_page "index", <<~HTML
+      <html><body><script type="text/ruby">class Vendored; end</script></body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc,
+           lilac_compiled_path: fixture[:wasm],
+           mruby_wasm_js_path: fixture[:bridge])
+
+    out = read_output("index.html")
+    # The boot module talks to the bridge directly (no dependency on
+    # the npm package's `index.js` boot helper).
+    assert_includes out, 'import { createVM } from "./vendor/lilac-compiled/mruby-wasm-js/index.js"'
+    assert_includes out, 'vm.loadBytecode(bytecode)'
+    refute_includes out, 'vendor/lilac-compiled/index.js',
+                    "compiled boot must not import the npm helper's index.js"
+    refute_includes out, "loadIrep",
+                    "compiled boot must use the current bridge API name"
+  end
+
+  def test_target_compiled_raises_when_runtime_not_resolved
+    mrbc = mrbc_or_skip
+    # Sandbox project_root + override the gem's monorepo discovery so
+    # nothing resolves: no explicit path, no env var, no node_modules,
+    # no monorepo.
+    sandbox = Dir.mktmpdir("lilac-no-rt-")
+    no_repo = File.join(sandbox, "nope")
+    begin
+      write_page "index", <<~HTML
+        <html><body><script type="text/ruby">class X; end</script></body></html>
+      HTML
+
+      ENV.delete("LILAC_COMPILED_WASM")
+      ENV.delete("MRUBY_WASM_JS_PATH")
+
+      # The Builder constructs the resolver itself; to make the resolver
+      # forget the real monorepo we point it at an empty sandbox via the
+      # build helper's pass-through.
+      err = assert_raises(Lilac::CLI::CompiledRuntimeResolver::Error) do
+        Lilac::CLI::Builder.new(
+          components_dir: @components,
+          pages_dir: @pages,
+          output_dir: @output,
+          target: :compiled,
+          mrbc_path: mrbc,
+          project_root: sandbox,
+        ).tap do |b|
+          # Inject a resolver whose monorepo_root points at /nope so the
+          # discovery genuinely fails — needed because the real monorepo
+          # ancestor of __FILE__ has the runtime artefacts present.
+          stub = Lilac::CLI::CompiledRuntimeResolver.new(
+            project_root: sandbox, monorepo_root: no_repo,
+          )
+          b.instance_variable_set(:@compiled_runtime_resolver, stub)
+        end.build
+      end
+      assert_match(/lilac-compiled\.wasm not found/, err.message)
+    ensure
+      FileUtils.remove_entry(sandbox)
+    end
+  end
+
+  def test_target_full_does_not_auto_vendor
+    write_page "index", "<html><body><h1>hi</h1></body></html>"
+
+    build!(target: :full)
+    refute File.exist?(File.join(@output, "vendor", "lilac-compiled")),
+           "full target must not emit a compiled-runtime vendor tree"
+  end
+
+  def test_target_compiled_combines_component_and_page_inline
+    # Component script + page-inline script both end up in the same .mrb.
+    mrbc = mrbc_or_skip
+    write_widget "x", <<~GNT
+      <template><div data-component="x"></div></template>
+      <script type="text/ruby">class WidgetX < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <html><body>
+      <lilac-component name="x"></lilac-component>
+      <script type="text/ruby">class PageY; end</script>
+      </body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc)
+
+    mrb_files = Dir.glob(File.join(@output, "app.*.mrb"))
+    assert_equal 1, mrb_files.length
+    bytes = File.binread(mrb_files.first)
+    assert_includes bytes, "WidgetX"
+    assert_includes bytes, "PageY"
+  end
+
   private
+
+  # Dummy lilac-compiled runtime sources to exercise the auto-vendor
+  # path without depending on the monorepo's real wasm build.
+  def scaffold_compiled_runtime_fixture
+    fixture_root = File.join(@tmp, "runtime-fixture")
+    pkg = File.join(fixture_root, "lilac-compiled")
+    bridge = File.join(fixture_root, "mruby-wasm-js")
+    FileUtils.mkdir_p(pkg)
+    FileUtils.mkdir_p(bridge)
+    wasm = File.join(pkg, "lilac.wasm")
+    File.binwrite(wasm, "FAKE_WASM_BYTES")
+    File.write(File.join(bridge, "index.js"), "// bridge stub\n")
+    File.write(File.join(bridge, "wasi-preview1.js"), "// wasi stub\n")
+    { wasm: wasm, bridge: bridge }
+  end
 
   def mrbc_or_skip
     return ENV["MRBC"] if ENV["MRBC"] && File.executable?(ENV["MRBC"])

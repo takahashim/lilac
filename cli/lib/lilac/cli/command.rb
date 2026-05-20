@@ -77,6 +77,8 @@ module Lilac
           public_dir: opts[:public],
           build_target: opts[:target],
           mrbc_path: opts[:mrbc_path],
+          lilac_compiled_path: opts[:lilac_compiled_path],
+          mruby_wasm_js_path: opts[:mruby_wasm_js_path],
         )
 
         builder = Builder.new(
@@ -87,6 +89,9 @@ module Lilac
           codegen: config.codegen,
           target: config.build_target,
           mrbc_path: config.mrbc_path,
+          lilac_compiled_path: config.lilac_compiled_path,
+          mruby_wasm_js_path: config.mruby_wasm_js_path,
+          project_root: config.root,
         )
         result = builder.build
         public_suffix = result[:public_files].positive? ? " + #{result[:public_files]} static file(s)" : ""
@@ -167,11 +172,11 @@ module Lilac
         @out.puts "  bundle install"
         @out.puts
         @out.puts "  # 1. Install the mruby-wasm runtime (one-time, ~5MB):"
-        @out.puts "  mkdir -p public/vendor/mruby-wasm-js"
+        @out.puts "  mkdir -p public/vendor/lilac-full/mruby-wasm-js"
         @out.puts "  cp /path/to/lilac/build/lilac-full.wasm \\"
-        @out.puts "     public/vendor/lilac-full.wasm"
+        @out.puts "     public/vendor/lilac-full/lilac-full.wasm"
         @out.puts "  cp -r /path/to/mruby-wasm-runtime/mrbgem/mruby-wasm-js/js/* \\"
-        @out.puts "        public/vendor/mruby-wasm-js/"
+        @out.puts "        public/vendor/lilac-full/mruby-wasm-js/"
         @out.puts
         @out.puts "  # 2. Verify the setup:"
         @out.puts "  bundle exec lilac doctor"
@@ -197,6 +202,8 @@ module Lilac
           dev_port: opts[:port],
           dev_target: opts[:target],
           mrbc_path: opts[:mrbc_path],
+          lilac_compiled_path: opts[:lilac_compiled_path],
+          mruby_wasm_js_path: opts[:mruby_wasm_js_path],
         )
 
         server = DevServer.new(
@@ -256,6 +263,14 @@ module Lilac
         o.on("--mrbc-path PATH",
              "Path to the mrbc binary (default: auto-discover)") do |v|
           opts[:mrbc_path] = v
+        end
+        o.on("--lilac-compiled-path PATH",
+             "Path to lilac-compiled.wasm (default: auto-discover; --target compiled only)") do |v|
+          opts[:lilac_compiled_path] = v
+        end
+        o.on("--mruby-wasm-js-path PATH",
+             "Path to the mruby-wasm-js bridge directory (default: auto-discover; --target compiled only)") do |v|
+          opts[:mruby_wasm_js_path] = v
         end
       end
 

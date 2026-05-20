@@ -76,7 +76,12 @@ module Lilac
       ].freeze
 
       def self.lint(script_text:, directives:, component_name:, file:, refs_map: {}, out: $stderr)
-        analysis = ScriptAnalyzer.analyze(script_text)
+        # Narrow the AST walk to the named class so a multi-class
+        # script (e.g. a page-inline page with sibling components, or a
+        # `.lil` that declares helper classes alongside the component)
+        # doesn't bleed sibling-class declarations into this component's
+        # dead-signal / dead-method checks.
+        analysis = ScriptAnalyzer.analyze(script_text, class_name: component_name)
         warnings = 0
         errors = 0
 

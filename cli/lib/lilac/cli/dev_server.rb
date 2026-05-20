@@ -67,6 +67,9 @@ module Lilac
           # ships in prod.
           target: @config.dev_target,
           mrbc_path: @config.mrbc_path,
+          lilac_compiled_path: @config.lilac_compiled_path,
+          mruby_wasm_js_path: @config.mruby_wasm_js_path,
+          project_root: @config.root,
         ).build
       end
 

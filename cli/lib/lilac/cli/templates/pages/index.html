@@ -20,9 +20,9 @@
   <lilac-component name="counter"></lilac-component>
 
   <script type="module">
-    import { createVM } from "/vendor/mruby-wasm-js/index.js";
+    import { createVM } from "/vendor/lilac-full/mruby-wasm-js/index.js";
     const vm = await createVM({
-      wasm: "/vendor/lilac-full.wasm",
+      wasm: "/vendor/lilac-full/lilac-full.wasm",
     });
     document.querySelectorAll('script[type="text/ruby"]')
       .forEach(s => vm.eval(s.textContent));

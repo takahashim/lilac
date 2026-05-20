@@ -2,6 +2,7 @@
 
 require_relative "cli/version"
 require_relative "cli/sfc"
+require_relative "cli/compiled_runtime_resolver"
 require_relative "cli/builder"
 require_relative "cli/config_loader"
 require_relative "cli/config"

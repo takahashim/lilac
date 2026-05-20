@@ -56,6 +56,20 @@ module Lilac
       # encountered (e.g. `.DS_Store`, `Thumbs.db`).
       EXCLUDED_BASENAMES = %w[.gitkeep].freeze
 
+      # Target-specific public/ subdirectories that should NOT be mirrored
+      # into dist/ for the inactive target. Both runtime variants live
+      # under their own namespace in `public/vendor/` so a project that
+      # ships both (e.g. dev=full, prod=compiled) can keep them side by
+      # side and let the CLI prune the inactive one at build time.
+      #
+      # Paths are relative to `public_dir`, POSIX style. The match is on
+      # path prefix + boundary, so `vendor/lilac-full` matches
+      # `vendor/lilac-full/lilac-full.wasm` but not `vendor/lilac-full-x`.
+      EXCLUDED_DIRS_FOR_TARGET = {
+        full: %w[vendor/lilac-compiled].freeze,
+        compiled: %w[vendor/lilac-full].freeze,
+      }.freeze
+
       LIVE_RELOAD_SCRIPT = <<~HTML.freeze
         <script>
           // lilac dev: live reload via SSE
@@ -65,7 +79,9 @@ module Lilac
 
       def initialize(components_dir:, pages_dir:, output_dir:, public_dir: nil,
                      live_reload: false, codegen: :auto,
-                     target: :full, mrbc_path: nil)
+                     target: :full, mrbc_path: nil,
+                     lilac_compiled_path: nil, mruby_wasm_js_path: nil,
+                     project_root: Dir.pwd)
         @components_dir = components_dir
         @pages_dir = pages_dir
         @output_dir = output_dir
@@ -89,6 +105,13 @@ module Lilac
         # `BytecodeBuilder` for path discovery.
         @target = target
         @mrbc_path = mrbc_path
+        # Discovery hints for the compiled runtime — wasm + boot helper
+        # + JS bridge. Used by `auto_vendor_compiled_runtime!` so the
+        # built dist is fully self-contained and no manual cp into
+        # `public/vendor/lilac-compiled/` is required.
+        @lilac_compiled_path = lilac_compiled_path
+        @mruby_wasm_js_path  = mruby_wasm_js_path
+        @project_root        = project_root
       end
 
       def build
@@ -105,6 +128,14 @@ module Lilac
         pages.each do |page_path|
           build_page(page_path, components)
         end
+
+        # `:compiled` target needs the runtime (wasm + bridge + boot
+        # helper) sitting under `dist/vendor/lilac-compiled/`. We emit
+        # it from the CLI directly so users don't have to vendor the
+        # npm package by hand. Skipped when no `.mrb` was actually
+        # produced — pages without any Ruby script don't reference the
+        # bootstrap module.
+        auto_vendor_compiled_runtime! if @target == :compiled && Dir.glob(File.join(@output_dir, "*.mrb")).any?
 
         { pages: pages.length, components: components.length, public_files: public_files }
       end
@@ -160,6 +191,7 @@ module Lilac
       def mirror_public_files
         return 0 unless @public_dir && File.directory?(@public_dir)
 
+        excluded_dirs = EXCLUDED_DIRS_FOR_TARGET.fetch(@target, [])
         copied = 0
         Dir.glob(File.join(@public_dir, "**", "*"), File::FNM_DOTMATCH).each do |source|
           # File.file? already filters out the `.` / `..` directory
@@ -168,9 +200,11 @@ module Lilac
           next if EXCLUDED_BASENAMES.include?(File.basename(source))
 
           rel = Pathname.new(source).relative_path_from(Pathname.new(@public_dir)).to_s
-          target = File.join(@output_dir, rel)
-          FileUtils.mkdir_p(File.dirname(target))
-          FileUtils.cp(source, target)
+          next if excluded_dirs.any? { |prefix| rel == prefix || rel.start_with?("#{prefix}/") }
+
+          dest = File.join(@output_dir, rel)
+          FileUtils.mkdir_p(File.dirname(dest))
+          FileUtils.cp(source, dest)
           copied += 1
         end
         copied
@@ -184,8 +218,31 @@ module Lilac
 
       def build_page(page_path, components)
         html = File.read(page_path)
-        used = []
 
+        # Inline `<script type="text/ruby">` blocks in the page itself are
+        # surfaced to the injection step so they're not silently dropped on
+        # the compiled target. For target=full the runtime's `evalScript`
+        # already handles them in place, so we leave the HTML untouched;
+        # for :compiled we strip the tags so the inline source moves into
+        # the .mrb bundle and out of the dist HTML.
+        extracted = SFC.extract_inline_ruby_scripts(html, path: page_path)
+        page_inline_scripts = extracted[:scripts]
+        html = extracted[:stripped_html] if @target == :compiled
+
+        # Page-inline `<X data-component="...">` elements are folded into
+        # the same pipeline that handles `.lil` components: we register
+        # an in-memory `SFC::Component` for each (snapshot of the
+        # element's outer HTML), and empty out any `data-each` container
+        # in the dist so the row template only lives in the synthetic
+        # `<template data-template>` block — otherwise the live `<ul>`
+        # would carry a phantom static row alongside the dynamically
+        # rendered ones. Runtime resolves `refs.lilN` positionally, so
+        # nothing else about the page markup needs to change.
+        components, html, used_inline, synthesized_names = synthesize_page_inline_components(
+          html, components: components, page_path: page_path,
+        )
+
+        used = used_inline.dup
         html = html.gsub(COMPONENT_PLACEHOLDER) do
           # Capture 1 = double-quoted name; capture 2 = single-quoted name.
           name = Regexp.last_match(1) || Regexp.last_match(2)
@@ -194,17 +251,126 @@ module Lilac
           default_markup(name, comp)
         end
 
-        injection = build_injection(used.uniq, components)
+        injection = build_injection(used.uniq, components,
+                                    page_inline_scripts: page_inline_scripts,
+                                    synthesized_names: synthesized_names,
+                                    page_path: page_path)
         html = inject_before_body_close(html, injection) unless injection.empty?
 
         File.write(output_path_for(page_path).tap { |p| FileUtils.mkdir_p(File.dirname(p)) }, html)
+      end
+
+      # Lifts page-inline `data-component` elements into the same
+      # codegen pipeline that `.lil` components go through, WITHOUT
+      # rewriting the page HTML to a `<lilac-component>` placeholder —
+      # the element stays where the user wrote it and the runtime mounts
+      # directly via the `data-component` attribute.
+      #
+      # For every element carrying `data-component=` (top-level AND
+      # nested — e.g. a `data-each` row component inside an outer page
+      # component):
+      #
+      #   * Registers an in-memory `SFC::Component` keyed by component
+      #     name. The template body is the element's OUTER HTML so the
+      #     subsequent TemplateAST run sees the full subtree (and the
+      #     outer component's `data-each` extraction picks up the row
+      #     template verbatim). The `script:` slot is left empty — the
+      #     real class definitions live in page-inline `<script
+      #     type="text/ruby">` blocks which `extract_inline_ruby_scripts`
+      #     already pulled out and which `build_injection` will weld
+      #     into the bundle.
+      #   * Records the name in both `used_inline` (so `build_injection`
+      #     runs codegen for it — every synthesized component, nested
+      #     or not, needs its own `Lilac::Bindings::<Class>#bind_template_hook`)
+      #     and `synthesized_names` (so the linter knows to feed those
+      #     components the page-level inline-script text instead of the
+      #     empty per-component `script:` slot).
+      #
+      # Then strips children out of every `data-each` container that
+      # lives under a synthesized component: TemplateAST will turn the
+      # row body into a synthetic `<template data-template>` block for
+      # `bind_list` to clone at runtime, and leaving the static row in
+      # the live container would render a phantom alongside the
+      # dynamically-instantiated ones.
+      #
+      # Pages with no `data-component=` substring skip Nokogiri entirely
+      # so their bytes are preserved verbatim (matters for hand-written
+      # outer HTML with `<html>` / `<head>` / `<body>` boundaries that
+      # the Nokogiri round-trip would normalize).
+      #
+      # Returns `[components_with_synthesized, possibly_rewritten_html,
+      # used_inline, synthesized_names]`.
+      def synthesize_page_inline_components(html, components:, page_path:)
+        # Quick string check — if there's no `data-component=` at all,
+        # skip the round-trip and return the input verbatim.
+        return [components, html, [], Set.new] unless html.match?(/\bdata-component\s*=/)
+
+        require "nokogiri" unless defined?(Nokogiri)
+        require "set" unless defined?(Set)
+        doc = Nokogiri::HTML5.parse(html)
+
+        # Collect data-component elements in document order. Each gets
+        # a synthesized `SFC::Component` whose template body is the
+        # element's OUTER HTML (full body, including any nested
+        # data-component subtrees) — that way the outer component's
+        # `data-each` extraction picks up the nested row template
+        # verbatim, and the nested component's own AST run sees its
+        # full body too.
+        targets = []
+        walk = lambda do |node|
+          node.element_children.each do |child|
+            targets << child if child["data-component"]
+            walk.call(child)
+          end
+        end
+        walk.call(doc)
+
+        return [components, html, [], Set.new] if targets.empty?
+
+        synthesized = components.dup
+        synthesized_names = Set.new
+        used_inline = []
+        targets.each do |elem|
+          name = elem["data-component"]
+          synthesized[name] = SFC::Component.new(
+            path: page_path,
+            templates: [SFC::Template.new(name: nil, body: elem.to_html)],
+            script: "",
+          )
+          synthesized_names << name
+          used_inline << name
+        end
+
+        # Empty out `data-each` containers in the dist DOM. TemplateAST
+        # already moves their bodies into synthetic `<template
+        # data-template>` blocks for `bind_list` to clone at runtime;
+        # leaving the static row in the live container would render it
+        # as a phantom alongside the dynamically-instantiated ones.
+        # Restricted to descendants of synthesized data-component
+        # elements so unrelated `data-each` elsewhere on the page
+        # (none in practice today, but the rule is conservative)
+        # stays untouched.
+        targets.each do |elem|
+          elem.css("[data-each]").each { |each_el| each_el.children.unlink }
+        end
+
+        [synthesized, doc.to_html, used_inline, synthesized_names]
       end
 
       def default_markup(name, component)
         template_ast_for(name, component)[:default_html]
       end
 
-      def build_injection(used_names, components)
+      def build_injection(used_names, components,
+                          page_inline_scripts: [], synthesized_names: nil, page_path: nil)
+        synthesized_names ||= Set.new
+        # The page-level inline Ruby is the canonical class definitions
+        # for every synthesized component. Pass it as the lint context so
+        # the cross-ref linter can resolve `@signal` / `def method` etc.
+        # The user_script slot on each synthesized component stays empty
+        # so the bundle doesn't end up with the inline scripts twice.
+        synth_lint_script = page_inline_scripts.join("\n\n")
+
         named_templates = used_names.flat_map { |name|
           parsed = template_ast_for(name, components[name])
           parsed[:named].map { |nt| render_named_template(nt.name, nt.html) }
@@ -214,13 +380,18 @@ module Lilac
           comp = components[name]
           parsed = template_ast_for(name, comp)
           user_script = comp.script.strip
+          # For synthesized in-memory components the script slot is
+          # empty (the actual class definitions live in the page's
+          # inline `<script type="text/ruby">` blocks). Feed those into
+          # the linter so `@count` / method-name lookups can resolve.
+          lint_script = synthesized_names.include?(name) ? synth_lint_script : user_script
           # Cross-reference lint runs before codegen so any warnings
           # appear ahead of generated source in build output, matching
           # the user's mental order ("first the diagnostics, then the
           # result"). Non-fatal — warnings go to stderr and the build
           # carries on.
           lint_result = CrossRefLinter.lint(
-            script_text: user_script,
+            script_text: lint_script,
             directives: parsed[:default_directives],
             refs_map: parsed[:default_refs_map],
             component_name: ComponentName.new(name).ruby_class,
@@ -261,9 +432,28 @@ module Lilac
           parts.reject(&:empty?).join("\n\n")
         }.reject(&:empty?)
 
-        ruby_source = scripts.join("\n\n")
+        # Page-inline `<script type="text/ruby">` blocks join the bundle
+        # only on the compiled target — they're emitted last so any
+        # `Lilac.start` written there runs after the component class
+        # definitions. On :full they remain in the dist HTML body and the
+        # runtime parser picks them up via `vm.evalScript`, so duplicating
+        # them into the injected block would re-execute them.
+        bundle_scripts =
+          if @target == :compiled
+            # `Lilac.start` must execute as part of the loaded bytecode —
+            # the compiled wasm has no parser, so the page-side bootstrap
+            # cannot `vm.eval("Lilac.start")` post-hoc. Append it once at
+            # the end of the bundle (after every class definition). Pages
+            # with no Ruby at all stay empty so no .mrb is emitted and no
+            # bootstrap is injected.
+            user_scripts = scripts + page_inline_scripts.reject { |s| s.strip.empty? }
+            user_scripts.empty? ? [] : user_scripts + ["Lilac.start"]
+          else
+            scripts
+          end
+        ruby_source = bundle_scripts.join("\n\n")
         script_block =
-          if scripts.empty?
+          if bundle_scripts.empty?
             nil
           elsif @target == :compiled
             # Compile the aggregated Ruby to `.mrb` bytecode and emit a
@@ -271,7 +461,8 @@ module Lilac
             # lilac-compiled wasm. The `data-lilac-bootstrap` attribute
             # marks the tag so a future asset-pipeline pass can rewrite
             # the URLs.
-            mrb_file = bytecode_builder.build(ruby_source, source_label: "page bundle")
+            label = page_path ? "page #{File.basename(page_path)}" : "page bundle"
+            mrb_file = bytecode_builder.build(ruby_source, source_label: label)
             render_compiled_boot_module(mrb_file)
           else
             render_script(ruby_source)
@@ -295,19 +486,59 @@ module Lilac
         )
       end
 
+      # Lazily resolves the lilac-compiled runtime (wasm + bridge + boot
+      # helper). Constructed only when target=:compiled actually emits a
+      # `.mrb`, mirroring `bytecode_builder`'s "no cost on the happy
+      # :full path" pattern.
+      def compiled_runtime_resolver
+        @compiled_runtime_resolver ||= CompiledRuntimeResolver.new(
+          lilac_compiled_path: @lilac_compiled_path,
+          mruby_wasm_js_path: @mruby_wasm_js_path,
+          project_root: @project_root,
+        )
+      end
+
+      # Emits `dist/vendor/lilac-compiled/{lilac.wasm,mruby-wasm-js/...}`
+      # from the resolved runtime sources. The boot module itself is
+      # rendered inline in the page HTML (see render_compiled_boot_module),
+      # so we don't need to vendor `index.js`: the page imports the
+      # bridge directly and calls `loadBytecode` itself.
+      #
+      # Raises `CompiledRuntimeResolver::Error` if a source is missing,
+      # with an actionable message — the caller (the build command) lets
+      # it propagate.
+      def auto_vendor_compiled_runtime!
+        vendor_dir = File.join(@output_dir, "vendor", "lilac-compiled")
+        bridge_out = File.join(vendor_dir, "mruby-wasm-js")
+        FileUtils.mkdir_p(bridge_out)
+
+        wasm_src = compiled_runtime_resolver.resolve_wasm!
+        FileUtils.cp(wasm_src, File.join(vendor_dir, "lilac.wasm"))
+
+        bridge_src = compiled_runtime_resolver.resolve_bridge!
+        Dir.glob(File.join(bridge_src, "*")).each do |entry|
+          next if File.directory?(entry)
+          FileUtils.cp(entry, File.join(bridge_out, File.basename(entry)))
+        end
+      end
+
       # Emits the module script that loads `.mrb` bytecode and boots
-      # the lilac-compiled wasm. Vendor path defaults to
-      # `./vendor/lilac-compiled/` (mirrored from `public/vendor/...`
-      # at build time — same convention as Vite / Eleventy's `public/`
-      # passthrough).
+      # the lilac-compiled wasm. Inlines the boot logic instead of
+      # depending on `@takahashim/lilac-compiled`'s published `index.js`
+      # — the npm boot helper has occasionally drifted from the bridge's
+      # current API (e.g. `loadIrep` rename → `loadBytecode`) and a
+      # self-contained module is one fewer moving part to keep in sync.
+      # The `data-lilac-bootstrap` attribute marks the tag so a future
+      # asset-pipeline pass can rewrite the URLs.
       def render_compiled_boot_module(mrb_filename)
         <<~HTML.strip
           <script type="module" data-lilac-bootstrap>
-            import { boot } from "./vendor/lilac-compiled/index.js";
+            import { createVM } from "./vendor/lilac-compiled/mruby-wasm-js/index.js";
+            const vm = await createVM({ wasm: "./vendor/lilac-compiled/lilac.wasm" });
             const bytecode = new Uint8Array(
               await (await fetch("./#{mrb_filename}")).arrayBuffer()
             );
-            await boot({ bytecode });
+            vm.loadBytecode(bytecode);
           </script>
         HTML
       end

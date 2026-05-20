@@ -88,7 +88,7 @@ module Lilac
         end
       end
 
-      def self.analyze(script_text)
+      def self.analyze(script_text, class_name: nil)
         parse = Prism.parse(script_text.to_s)
         # `failure?` covers hard syntax errors; on those, hand back a
         # fresh empty result so the linter doesn't fire spurious
@@ -96,9 +96,46 @@ module Lilac
         # error.
         return empty_result if parse.failure?
 
+        # When the caller knows which class the directives belong to,
+        # narrow the walk to that class's body. Page-inline scripts
+        # carry sibling classes (e.g. `Crud` + `CrudRow`) and otherwise
+        # the dead-signal pass would attribute every sibling's signal
+        # to the lint target, causing spurious "declared but never
+        # read" warnings.
+        root_node = parse.value
+        if class_name
+          scoped = find_class_body(root_node, class_name.to_s)
+          # If the class isn't found, fall back to whole-script
+          # analysis — it's better to over-include than to silently
+          # report empty results.
+          root_node = scoped if scoped
+        end
+
         visitor = Visitor.new
-        parse.value.accept(visitor)
+        root_node.accept(visitor)
         visitor.to_result
+      end
+
+      # DFS for a `class <name>` declaration. Returns the class node's
+      # body (so the walker only visits its descendants) or nil when
+      # absent. Stops at the first match so nested redefinitions don't
+      # silently expand the scope.
+      def self.find_class_body(node, target_name)
+        return nil unless node.respond_to?(:child_nodes)
+        node.child_nodes.each do |child|
+          next if child.nil?
+          if child.is_a?(Prism::ClassNode) && constant_path_name(child.constant_path) == target_name
+            return child.body
+          end
+          found = find_class_body(child, target_name)
+          return found if found
+        end
+        nil
+      end
+
+def self.constant_path_name(node)
+        return node.name.to_s if node.is_a?(Prism::ConstantReadNode)
+        node.slice if node.respond_to?(:slice)
       end
 
       # Fresh per call — `Struct.new(...).freeze` only freezes the

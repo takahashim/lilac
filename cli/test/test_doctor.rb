@@ -24,15 +24,15 @@ class TestDoctor < Minitest::Test
   def scaffold_minimal_project
     FileUtils.mkdir_p(File.join(@tmp, "pages"))
     FileUtils.mkdir_p(File.join(@tmp, "components"))
-    FileUtils.mkdir_p(File.join(@tmp, "public", "vendor", "mruby-wasm-js"))
+    FileUtils.mkdir_p(File.join(@tmp, "public", "vendor", "lilac-full", "mruby-wasm-js"))
     File.write(File.join(@tmp, "pages", "index.html"),
                '<html><body><lilac-component name="counter"></lilac-component></body></html>')
     File.write(File.join(@tmp, "components", "counter.lil"), <<~GNT)
       <template><div data-component="counter"></div></template>
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
-    File.write(File.join(@tmp, "public", "vendor", "lilac-full.wasm"), "WASM")
-    File.write(File.join(@tmp, "public", "vendor", "mruby-wasm-js", "index.js"), "export {}")
+    File.write(File.join(@tmp, "public", "vendor", "lilac-full", "lilac-full.wasm"), "WASM")
+    File.write(File.join(@tmp, "public", "vendor", "lilac-full", "mruby-wasm-js", "index.js"), "export {}")
   end
 
   def test_passes_on_fully_set_up_project
@@ -52,7 +52,7 @@ class TestDoctor < Minitest::Test
 
   def test_fails_when_runtime_wasm_missing
     scaffold_minimal_project
-    FileUtils.rm(File.join(@tmp, "public", "vendor", "lilac-full.wasm"))
+    FileUtils.rm(File.join(@tmp, "public", "vendor", "lilac-full", "lilac-full.wasm"))
 
     status, out = run_doctor
     refute_equal 0, status
@@ -61,7 +61,7 @@ class TestDoctor < Minitest::Test
 
   def test_fails_when_js_adapter_missing
     scaffold_minimal_project
-    FileUtils.rm(File.join(@tmp, "public", "vendor", "mruby-wasm-js", "index.js"))
+    FileUtils.rm(File.join(@tmp, "public", "vendor", "lilac-full", "mruby-wasm-js", "index.js"))
 
     status, out = run_doctor
     refute_equal 0, status

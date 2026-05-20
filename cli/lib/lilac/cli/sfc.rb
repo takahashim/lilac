@@ -100,6 +100,51 @@ module Lilac
 
         source[body_start...body_end]
       end
+
+      # Walk an arbitrary HTML string for `<script type="text/ruby">…</script>`
+      # blocks (the same shape `.lil` files use). Returns the source strings in
+      # document order plus an HTML copy with each block removed verbatim
+      # (open tag + body + close tag). Other `<script>` types (e.g. `module`,
+      # untyped) are untouched.
+      #
+      # Used by the page-build path so a page may embed inline Ruby without
+      # being silently dropped on the compiled target.
+      def self.extract_inline_ruby_scripts(html, path: nil)
+        scripts = []
+        ranges = []
+        cursor = 0
+
+        while (script_match = html.match(SCRIPT_OPEN, cursor))
+          body_start = script_match.end(0)
+          body_end = html.index(SCRIPT_CLOSE, body_start) or
+            raise ParseError, "Unterminated <script type=\"text/ruby\"> in #{path || '<input>'}"
+
+          scripts << html[body_start...body_end]
+          ranges << (script_match.begin(0)...(body_end + SCRIPT_CLOSE.length))
+          cursor = body_end + SCRIPT_CLOSE.length
+        end
+
+        stripped = remove_ranges(html, ranges)
+        { stripped_html: stripped, scripts: scripts }
+      end
+
+      # Drop the byte ranges (sorted in document order) from `html` and
+      # collapse the now-empty surrounding whitespace minimally — we keep
+      # surrounding HTML formatting untouched and only delete the matched
+      # script tags themselves.
+      def self.remove_ranges(html, ranges)
+        return html if ranges.empty?
+
+        result = +""
+        prev_end = 0
+        ranges.each do |r|
+          result << html[prev_end...r.begin]
+          prev_end = r.end
+        end
+        result << html[prev_end..]
+        result
+      end
+      private_class_method :remove_ranges
     end
   end
 end
