@@ -490,7 +490,7 @@ end
 
 `effect` との違い: `effect` は signal の依存変化で再実行されるが、`each_frame` は signal とは独立にフレーム駆動で連続実行される。**signal の値を変えた結果として** DOM を更新する用途は `effect` / `bind`、**フレームに同期して連続的に signal を更新する** 用途 (物理シム、ゲームループ) は `each_frame`。
 
-実例: `examples/lilac-breakout.html` のゲームループ。
+実例: `examples/runtime-only/lilac-breakout.html` のゲームループ。
 
 ### timeout / every
 
@@ -625,7 +625,7 @@ end
 - **Lilac 側**: state (signal)、HUD (bind)、入力 (`RefElement#on`)、ライフサイクル (cleanup, error_boundary)
 - **Canvas 側**: pixel 描画
 
-実例: `examples/lilac-racer.html` の擬似 3D レーシング。
+実例: `examples/runtime-only/lilac-racer.html` の擬似 3D レーシング。
 
 ### persistent_signal
 
@@ -1535,7 +1535,7 @@ end
 - サブクラスは親クラスの宣言を継承する (super class chain を method dispatch で resolve)
 - インスタンスで `on_error` を呼ぶと後勝ちで上書きされる
 
-子の setup 例外が発火した時点で**自 widget の `mount` はまだ走っていない** (post-order なので) → ハンドラ内では `refs` が `nil`。DOM への直接書き込みではなく、`@error_message` のような signal を更新して `bind` 経由で表示するパターンを使う。`examples/lilac-kanban.html` の `KanbanBoard` がこの形。
+子の setup 例外が発火した時点で**自 widget の `mount` はまだ走っていない** (post-order なので) → ハンドラ内では `refs` が `nil`。DOM への直接書き込みではなく、`@error_message` のような signal を更新して `bind` 経由で表示するパターンを使う。`examples/runtime-only/lilac-kanban.html` の `KanbanBoard` がこの形。
 
 バブリング規則:
 

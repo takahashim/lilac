@@ -1589,7 +1589,7 @@ form(:signup) の `:submit` handler に、`<form data-form="login">` の同
 | **A** | form gem 拡張: `Component#form` の dual-purpose 化、registry、`f.field` の `ref:` / `initial:` 省略、`source:` 引数、`Lilac::FieldComponent` 基底、`Form#reset` の伝播、`f.button` / `invoke_button`、deferred binding、core 統合(全 variant 同梱) | 完了 |
 | **B** | scanner / directive 実装: one-pass DOM walk + 2-phase processing、`data-form` / `data-field` / `data-button` dispatch、auto-register、`<form>` の `:submit` auto-wire、scope validation、dev_mode warning | 完了 |
 | **C** | CLI codegen 対応: `template_ast.rb` の DIRECTIVE_PATTERNS 追加、`codegen.rb` の `emit_form` / `emit_field` / `emit_button`、`directive_compatibility.rb` の collision check、`CrossRefLinter` の undeclared 警告 | 完了 |
-| **D** | 廃止整理 + テスト + sample: `data-value` / `data-checked` の削除、`examples/lilac-form.html` の declarative 化、parity test、関連 docs cross-ref 更新 | 完了 |
+| **D** | 廃止整理 + テスト + sample: `data-value` / `data-checked` の削除、`examples/runtime-only/lilac-form.html` の declarative 化、parity test、関連 docs cross-ref 更新 | 完了 |
 
 ## 18. 実装メモ
 

@@ -4,7 +4,7 @@
 
 中心概念は `Lilac::Router::Context` クラスのインスタンス。アプリ全体で `Lilac::Router.default_context` が単一の Context を返し、以降の操作 (`draw` / `start` / `navigate` / `path` 等) はこの Context インスタンス経由で行う。Component 内では `Lilac::Router::WidgetMixin` (auto-include) が同じ Context を `router` instance method として expose する。
 
-対象読者: 複数 route を持つアプリを Lilac で書きたい人、現状の `effect → location.hash` 単方向 sync (`examples/lilac-receipt.html`) では足りなくなった人、SolidJS Router からの移植を検討する人。
+対象読者: 複数 route を持つアプリを Lilac で書きたい人、現状の `effect → location.hash` 単方向 sync (`examples/runtime-only/lilac-receipt.html`) では足りなくなった人、SolidJS Router からの移植を検討する人。
 
 ## 目的
 
@@ -212,7 +212,7 @@ Lilac::Router.start
 
 ### 既存パターンとの関係
 
-`examples/lilac-receipt.html` は state を URL hash に **片方向 sync** する pattern を持つ:
+`examples/runtime-only/lilac-receipt.html` は state を URL hash に **片方向 sync** する pattern を持つ:
 
 ```ruby
 effect(label: "url-sync") do
