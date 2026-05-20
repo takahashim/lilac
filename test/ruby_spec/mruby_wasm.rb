@@ -3,6 +3,10 @@
 require "wasmtime"
 require "json"
 
+require_relative "dom/dispatch"
+require_relative "dom/world"
+require_relative "dom/document"
+
 # Minimal wasmtime-rb wrapper around lilac-full.wasm for use from
 # Ruby-side test runners. Replaces the Node `runner.mjs` + JS bridge
 # for the subset of specs that don't need DOM / async fibers.
@@ -40,16 +44,21 @@ class MrubyWasm
     @stderr_buf = String.new(encoding: Encoding::BINARY)
     # JS handle table — minimal browser surface:
     #   id 0 = undefined / null sentinel
-    #   id 1 = the global object (window stand-in)
+    #   id 1 = the global object (MrubyWasm::Dom::Window instance —
+    #          dispatches via the `__js_get__` duck-typed protocol,
+    #          gives access to document / console / Object / Array /
+    #          JSON via property reads)
     #   id 2 = console      (sentinel) — log / warn / error → buffers
     #   id 3 = Object       (sentinel) — `new Object`, `Object.keys(o)`
     #   id 4 = Array        (sentinel) — `new Array`, instanceof check
     #   id 5 = JSON         (sentinel) — parse / stringify via Ruby JSON
     # Primitives (Integer / Float / String / true / false / nil),
     # Ruby Hashes / Arrays get stored under user handles ≥ 100.
+    # Dom::Document / Dom::Element instances also live here once
+    # accessed via the bridge.
     @handles = {
       0 => nil,
-      1 => :global,
+      1 => Dom::Window.new(self),
       2 => :console,
       3 => :object_ctor,
       4 => :array_ctor,
@@ -88,6 +97,23 @@ class MrubyWasm
     @handles[id] = value
     @next_handle += 1
     id
+  end
+
+  # Map a `__js_get__` / `__js_call__` return value to a handle id.
+  # Well-known sentinel symbols (`:console` / `:object_ctor` / etc.)
+  # reuse their boot-time handle so wasm-side `JS.global[:console]`
+  # always sees the same id; other values get fresh handles. The
+  # accumulation isn't currently reclaimed — see Session 6's drain
+  # work for the eventual `js_release` impl.
+  def handle_for(value)
+    case value
+    when nil          then 0
+    when :console     then 2
+    when :object_ctor then 3
+    when :array_ctor  then 4
+    when :json_ctor   then 5
+    else store_handle(value)
+    end
   end
 
   # Drain + return captured stdout. Clears the internal buffer.
@@ -169,15 +195,10 @@ class MrubyWasm
     define.call("js_get", [:i32, :i32, :i32], [:i32]) do |caller, h, p, l|
       key = read_mem_str(caller, p, l)
       v = @handles[h]
+      # DOM dispatch first — Window / Document / Element etc.
+      next handle_for(v.__js_get__(key)) if v.respond_to?(:__js_get__)
+
       case v
-      when :global
-        case key
-        when "console" then 2
-        when "Object"  then 3
-        when "Array"   then 4
-        when "JSON"    then 5
-        else 0
-        end
       when Array
         if key == "length"
           store_handle(v.size)
@@ -200,12 +221,16 @@ class MrubyWasm
       key = read_mem_str(caller, p, l)
       target = @handles[h]
       value = @handles[v]
-      case target
-      when Hash
-        target[key] = value
-      when Array
-        idx = Integer(key, exception: false)
-        target[idx] = value if idx
+      if target.respond_to?(:__js_set__)
+        target.__js_set__(key, value)
+      else
+        case target
+        when Hash
+          target[key] = value
+        when Array
+          idx = Integer(key, exception: false)
+          target[idx] = value if idx
+        end
       end
       nil
     end
@@ -222,7 +247,11 @@ class MrubyWasm
       args = read_handle_args(caller, ap, ac)
       target = @handles[h]
       begin
-        dispatch_js_call(target, method, args)
+        if target.respond_to?(:__js_call__)
+          handle_for(target.__js_call__(method, args))
+        else
+          dispatch_js_call(target, method, args)
+        end
       rescue => e
         # JS errors surface to mruby via js_take_error on next bridge
         # hit; the wasm-side throws JS::Error. We can't raise out of a
@@ -274,10 +303,9 @@ class MrubyWasm
     # (float) -> handle
     define.call("js_from_float", [:f64], [:i32]) { |_c, x| store_handle(x) }
     # (handle) -> bool. True if the handle's value is JS null/undefined.
-    define.call("js_is_null", [:i32], [:i32]) do |_c, h|
-      v = @handles[h]
-      v.nil? && h == 0 ? 1 : v.nil? ? 1 : 0
-    end
+    # @handles[0] is nil by construction (the undefined sentinel);
+    # missing keys also resolve to nil.
+    define.call("js_is_null", [:i32], [:i32]) { |_c, h| @handles[h].nil? ? 1 : 0 }
     # (handle, handle) -> bool
     define.call("js_strict_equal", [:i32, :i32], [:i32]) do |_c, a, b|
       @handles[a] == @handles[b] ? 1 : 0

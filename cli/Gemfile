@@ -21,6 +21,11 @@ gem "lilac-wasm-bin", path: File.expand_path("../wasm-bin", __dir__)
 group :development do
   gem "minitest", "~> 5.0"
   gem "rake", "~> 13.0"
+  # Nokogiri::HTML5.fragment is the HTML parser for test/ruby_spec/dom/
+  # — the Ruby-host DOM polyfill that lets wasmtime-rb drive Lilac's
+  # DOM-touching wasm specs. Test-only; ships as a precompiled native
+  # gem so CI cost is minimal.
+  gem "nokogiri", "~> 1.16"
 end
 
 # wasmtime-rb drives `mrbc-host.wasm` from the host Ruby in
