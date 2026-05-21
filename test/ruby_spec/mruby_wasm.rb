@@ -393,7 +393,7 @@ class MrubyWasm
     # JS-callable wrapper object that routes invocations back through
     # the exported `js_invoke_proc(callback_id, args_handle)`.
     define.call("js_make_callback", [:i32], [:i32]) do |_c, callback_id|
-      store_handle(Dom::Callback.new(self, callback_id))
+      store_handle(Dom::Bridge::Callback.new(self, callback_id))
     end
     # () -> count
     define.call("js_handle_count", [], [:i32]) { |_c| @handles.size }
@@ -488,7 +488,7 @@ class MrubyWasm
     when Integer, Float    then "number"
     when String            then "string"
     when true, false       then "boolean"
-    when Dom::Callback, Dom::Constructor, Dom::PromiseConstructor
+    when Dom::Bridge::Callback, Dom::Bridge::Constructor, Dom::Bridge::PromiseConstructor
       "function"
     else                        "object"
     end

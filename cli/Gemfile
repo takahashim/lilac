@@ -21,10 +21,9 @@ gem "lilac-wasm-bin", path: File.expand_path("../wasm-bin", __dir__)
 group :development do
   gem "minitest", "~> 5.0"
   gem "rake", "~> 13.0"
-  # Ruby-host DOM polyfill backing the wasmtime-rb test runner. Lives
-  # in this monorepo as a sibling gem (gems/dommy/); released to
-  # rubygems for CRuby happy-dom-alternative use.
-  gem "dommy", path: File.expand_path("../gems/dommy", __dir__)
+  # Ruby-host DOM polyfill backing the wasmtime-rb test runner.
+  # Maintained as a standalone gem in a sibling clone of this repo.
+  gem "dommy", path: File.expand_path("../../dommy", __dir__)
 end
 
 # wasmtime-rb drives `mrbc-host.wasm` from the host Ruby in
