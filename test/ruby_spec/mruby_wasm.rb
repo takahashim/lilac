@@ -2,17 +2,11 @@
 
 require "wasmtime"
 require "json"
+require "dommy"
 
-require_relative "dom/event"
-require_relative "dom/scheduler"
-require_relative "dom/observer"
-require_relative "dom/promise"
-require_relative "dom/storage"
-require_relative "dom/fetch"
-require_relative "dom/router"
-require_relative "dom/world"
-require_relative "dom/document"
-require_relative "dom/element"
+# Alias so existing call sites keep working while the namespace
+# migrates from `MrubyWasm::Dom::*` to `Dommy::*`.
+Dom = Dommy
 
 # Minimal wasmtime-rb wrapper around lilac-full.wasm for use from
 # Ruby-side test runners. Replaces the Node `runner.mjs` + JS bridge
