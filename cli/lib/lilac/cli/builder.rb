@@ -640,10 +640,6 @@ module Lilac
             component_name: ComponentName.new(name).ruby_class,
             file: parsed[:source_path] ? File.basename(parsed[:source_path]) : '(template)'
           )
-          # Fatal cross-ref violations (e.g. data-button referencing an
-          # undeclared `f.button :X`) abort the build — runtime would
-          # raise on first user interaction, so the build/runtime
-          # severity stays aligned (decisions §6).
           if lint_result.errors?
             raise Error, "build failed: #{lint_result.errors} lint error(s) in template; see warnings above."
           end
