@@ -40,6 +40,7 @@ const { Window } = await import("happy-dom");
 const dom = new Window({ url: "https://test.local/" });
 globalThis.document = dom.document;
 globalThis.localStorage = dom.localStorage;
+globalThis.sessionStorage = dom.sessionStorage;
 globalThis.requestAnimationFrame = dom.requestAnimationFrame.bind(dom);
 globalThis.cancelAnimationFrame = dom.cancelAnimationFrame.bind(dom);
 globalThis.window = dom;

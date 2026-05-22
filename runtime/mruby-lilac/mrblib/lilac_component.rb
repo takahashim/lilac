@@ -351,35 +351,32 @@ module Lilac
       Signal.new(initial)
     end
 
-    # Signal whose value is auto-persisted to localStorage[key] as JSON.
+    # Signal whose value is auto-persisted to `localStorage[key]` as JSON.
     # Initial value: stored entry if present and parseable, otherwise
     # `default:` (kwarg) or the block result.
     #
-    # Parse / read errors fall back to default and emit a Lilac
-    # warning. Write errors (quota etc.) bubble through the effect, so
-    # an error_boundary above the component can react.
+    # Parse / read errors fall back to default and emit a Lilac warning
+    # via `WebStorage`. Write errors (quota etc.) bubble through the
+    # effect, so an error_boundary above the component can react.
     def persistent_signal(key, default: nil, &block_default)
-      k = key.to_s
-      storage = JS.global[:localStorage]
-      initial = nil
-      loaded = false
-      if !storage.js_null?
-        begin
-          raw = storage.call(:getItem, k)
-          unless raw.js_null?
-            initial = Lilac::JSON.parse(raw.to_s)
-            loaded = true
-          end
-        rescue JS::Error => e
-          Lilac.logger.warn("persistent_signal(#{k.inspect}): load failed (#{e.class}: #{e.message}); using default")
-        end
-      end
-      initial = block_default ? block_default.call : default unless loaded
-      s = signal(initial)
-      effect(label: "persist:#{k}") do
-        JS.global[:localStorage].call(:setItem, k, Lilac::JSON.generate(s.value))
-      end
-      s
+      signal_from_storage(
+        WebStorage.new(:localStorage, key),
+        default: default,
+        &block_default
+      )
+    end
+
+    # Signal whose value is auto-persisted to `sessionStorage[key]` as
+    # JSON. Same semantics as `persistent_signal` but the value lives
+    # only for the lifetime of the tab — cleared when the tab closes.
+    # Useful for draft / wizard state that should not survive a refresh
+    # done in a different tab.
+    def session_signal(key, default: nil, &block_default)
+      signal_from_storage(
+        WebStorage.new(:sessionStorage, key),
+        default: default,
+        &block_default
+      )
     end
 
     def computed(equals: nil, on: nil, &block)
@@ -647,6 +644,17 @@ module Lilac
     end
 
     private
+
+    # Shared body of `persistent_signal` / `session_signal`. Reads the
+    # initial value from `store` (falling back to the supplied default
+    # or block), creates a Signal, and binds an `effect` that writes
+    # back to the store on every change.
+    def signal_from_storage(store, default:, &block_default)
+      initial = store.fetch { block_default ? block_default.call : default }
+      s = signal(initial)
+      effect(label: "persist:#{store.key}") { store.write(s.value) }
+      s
+    end
 
     # Return the current resource-owning target — the active Scope when
     # inside a `bind_list` block, else self (the Component). Used by

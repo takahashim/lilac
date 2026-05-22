@@ -80,6 +80,8 @@ class SpecRunner
     # drain_async! が eval 後に full timer drain するよう拡張 (16ms 等の
     # setTimeout も自動進行)
     "runtime/mruby-lilac/wasm_spec/test_persistent_signal.rb",
+    "runtime/mruby-lilac/wasm_spec/test_web_storage.rb",
+    "runtime/mruby-lilac/wasm_spec/test_session_signal.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_abort.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_timer.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_each_frame.rb",
