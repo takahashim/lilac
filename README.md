@@ -152,10 +152,12 @@ See `cli/README.md` for usage details.
 ## Tests
 
 ```bash
-make test         # wasm_spec — exercises runtime/mruby-lilac*/wasm_spec/
-                  # (alias of `make test-wasm`; kept for back-compat)
+make test         # wasm_spec under wasmtime-rb + Dommy (Ruby-only, fast,
+                  # no Node install needed). Default for the inner dev loop.
+make test-node    # Same scenarios under Node + happy-dom (V8 cross-check).
+                  # Used in CI; rarely needed in local development.
 make test-cli     # Ruby CLI gem tests — fast, no wasm rebuild
-make test-all     # both of the above, used pre-commit / pre-release
+make test-all     # CLI + Ruby wasm_spec + Node wasm_spec. Pre-release sweep.
 
 # Equivalent low-level invocation for the CLI tests:
 cd cli && bundle exec rake test

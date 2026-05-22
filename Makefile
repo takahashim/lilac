@@ -71,7 +71,7 @@ BUILD_WASM_MRBC_HOST_RELEASE      := $(BUILD_DIR)/mrbc-host.release.wasm
         mrbc-host mrbc-host-release \
         lilac-all lilac-all-release \
         check-pair-diff \
-        test test-wasm test-wasm-rb test-cli test-all \
+        test test-node test-wasm test-wasm-rb test-cli test-all \
         node-deps clean
 
 all: lilac-full
@@ -219,24 +219,31 @@ node_modules: package.json
 	npm install --no-audit --no-fund --silent
 	@touch node_modules
 
-# Default `make test` is the wasm test suite (legacy invocation kept
-# for back-compat — CI / scripts that say `make test` keep working).
-# Use `make test-all` to also run the CLI gem's RSpec/Minitest suite,
-# or `make test-cli` to run only the Ruby-side tests (fast — no wasm
-# rebuild needed).
-test: test-wasm
+# Default `make test` is the **Ruby-only** wasm spec runner — fast,
+# no Node install required, drives lilac-full-host.wasm through
+# wasmtime-rb + Dommy. Covers the same wasm_spec/ scenarios as the
+# Node-based path; the Node runner remains available as `make
+# test-node` for cross-checking against happy-dom in CI / pre-release.
+test: test-wasm-rb
 
+# Ruby-side wasm spec runner — pure-Ruby host, no Node dependency.
+# Drives lilac-full-host.wasm (new-EH variant) through wasmtime-rb.
+test-wasm-rb: lilac-full-host
+	cd cli && MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
+	  bundle exec ruby -Itest -Ilib ../test/ruby_spec/spec_runner.rb
+
+# Node + happy-dom runner — same scenarios as `test-wasm-rb` but with
+# V8 as the wasm host and happy-dom as DOM. Used in CI to catch the
+# rare classes of bugs that only surface under V8 (FinalizationRegistry
+# timing, real JS callback closures, etc.). Slower than the Ruby
+# runner; not needed for the inner dev loop.
+test-node: test-wasm
+
+# Legacy alias retained so older scripts / muscle memory keep working.
 test-wasm: check-pair-diff lilac-full node_modules
 	MRUBY_WASM_PATH=$(BUILD_WASM_LILAC_FULL) \
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node test/runner.mjs
-
-# Ruby-side wasm spec runner — pure-mruby subset only (no DOM).
-# Drives lilac-full-host.wasm (new-EH variant) through wasmtime-rb.
-# Sibling to `test-wasm` (Node-based, covers DOM + async).
-test-wasm-rb: lilac-full-host
-	cd cli && MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
-	  bundle exec ruby -Itest -Ilib ../test/ruby_spec/spec_runner.rb
 
 # Ruby-side CLI gem tests. The gem owns its own Gemfile / Rakefile
 # under `cli/` (standard Ruby monorepo layout — see README), so the
@@ -245,10 +252,9 @@ test-wasm-rb: lilac-full-host
 test-cli:
 	cd cli && bundle exec rake test
 
-# Everything — wasm runtime + CLI gem. Slow because `test-wasm`
-# triggers a `lilac-full` rebuild if anything changed; use during
-# pre-commit / pre-release sweeps.
-test-all: test-cli test-wasm
+# Everything — CLI gem + Ruby wasm spec + Node wasm spec. Slow
+# because `test-node` rebuilds lilac-full; use pre-release / in CI.
+test-all: test-cli test-wasm-rb test-node
 
 # ── serve (examples in a browser) ──────────────────────────────────────
 # Examples reference `../mrbgem/mruby-wasm-js/js/index.js`, which lives

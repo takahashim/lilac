@@ -69,11 +69,22 @@ jobs:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
         run: make lilac-full
 
-      - name: Run wasm_spec
+      # Fast Ruby-only runner (default `make test`). Drives the same
+      # wasm_spec/ scenarios as the Node runner but uses wasmtime-rb +
+      # Dommy — no V8, no happy-dom.
+      - name: Run wasm_spec (Ruby host)
         working-directory: lilac
         env:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
         run: make test
+
+      # Node + happy-dom runner — cross-check against V8 to catch the
+      # rare classes of bugs that only surface in the JS engine.
+      - name: Run wasm_spec (Node + happy-dom)
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+        run: make test-node
 
       - name: Run cli minitest
         working-directory: lilac/cli

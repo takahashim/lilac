@@ -1912,4 +1912,6 @@ Debug ターゲット (`make lilac-{full,compiled}`) は `.debug_*` セクショ
 - wasi-sdk: 33.0
 - 動作要件: WebAssembly + Exception Handling 対応のホスト (Chrome 95+, Safari 15.2+, Firefox 102+, Node 18+)
 
-テストは各 `mrbgem/*/wasm_spec/` 以下、happy-dom + mruby-wasm-js のランナーで実行 (`make test`)。現在 442 件のテストすべて通過。
+テストは各 `mrbgem/*/wasm_spec/` 以下に置き、2 つのランナーで実行する:
+- `make test` — wasmtime-rb + Dommy (純 Ruby、Node 不要、開発ループ用、現在の規定)
+- `make test-node` — Node + happy-dom (V8 cross-check、CI で実行)
