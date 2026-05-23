@@ -26,14 +26,12 @@ build_config/*.lock
 /cli/Gemfile.lock
 /cli/pkg/
 
-# npm wasm artefacts copied by `make npm-pack` from build/*.release.wasm.
-# JS / package.json / LICENSE / README stay tracked.
-/npm/lilac-full/lilac.wasm
-/npm/lilac-compiled/lilac.wasm
-# Plug-in bytecode produced by `make lilac-plugin-*` from
-# runtime/mruby-lilac-*/mrblib/*.rb.
-/npm/lilac-plugin-extras/extras.mrb
-/npm/lilac-plugin-router/router.mrb
+# npm build artefacts: wasm copied by `make npm-pack` and `.mrb`
+# plug-in bytecode produced by `make lilac-plugin-*`. JS / package.json
+# / LICENSE / README stay tracked. node_modules itself ignores any wasm
+# / mrb inside vendored deps, so these globs only affect tracked paths.
+/npm/**/*.wasm
+/npm/**/*.mrb
 
 # npm
 /npm/lilac-*/node_modules/

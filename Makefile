@@ -68,7 +68,7 @@ BUILD_WASM_MRBC_HOST_RELEASE      := $(BUILD_DIR)/mrbc-host.release.wasm
 .PHONY: all \
         lilac-full lilac-full-release lilac-full-host \
         lilac-compiled lilac-compiled-release \
-        lilac-plugin-extras lilac-plugin-router \
+        lilac-plugin-extras lilac-plugin-router lilac-plugin-async \
         mrbc-host mrbc-host-release \
         lilac-all lilac-all-release \
         check-pair-diff \
@@ -289,12 +289,14 @@ NPM_DIR := $(CURDIR)/npm
 npm-pack: $(NPM_DIR)/lilac-full/lilac.wasm \
           $(NPM_DIR)/lilac-compiled/lilac.wasm \
           $(NPM_DIR)/lilac-plugin-extras/extras.mrb \
-          $(NPM_DIR)/lilac-plugin-router/router.mrb
+          $(NPM_DIR)/lilac-plugin-router/router.mrb \
+          $(NPM_DIR)/lilac-plugin-async/async.mrb
 	@echo "npm packages staged. To publish:"
 	@echo "  cd npm/lilac-full          && npm publish"
 	@echo "  cd npm/lilac-compiled      && npm publish"
 	@echo "  cd npm/lilac-plugin-extras && npm publish"
 	@echo "  cd npm/lilac-plugin-router && npm publish"
+	@echo "  cd npm/lilac-plugin-async  && npm publish"
 
 $(NPM_DIR)/lilac-full/lilac.wasm: $(BUILD_WASM_LILAC_FULL_RELEASE)
 	cp $< $@
@@ -334,12 +336,25 @@ lilac-plugin-router: $(NPM_DIR)/lilac-plugin-router/router.mrb
 $(NPM_DIR)/lilac-plugin-router/router.mrb: $(ROUTER_RB_FILES) | $(BUILD_WASM_MRBC_HOST)
 	cd $(CURDIR)/cli && bundle exec exe/lilac plugin-build $(ROUTER_RB_FILES) -o $@
 
+# Plug-in package: async data primitives (Fetchy / Resource /
+# selector helpers). Same distribution rationale as router.
+ASYNC_MRBLIB := $(CURDIR)/runtime/mruby-lilac-async/mrblib
+ASYNC_RB_FILES := $(ASYNC_MRBLIB)/lilac_async.rb \
+                  $(ASYNC_MRBLIB)/fetchy.rb
+
+.PHONY: lilac-plugin-async
+lilac-plugin-async: $(NPM_DIR)/lilac-plugin-async/async.mrb
+
+$(NPM_DIR)/lilac-plugin-async/async.mrb: $(ASYNC_RB_FILES) | $(BUILD_WASM_MRBC_HOST)
+	cd $(CURDIR)/cli && bundle exec exe/lilac plugin-build $(ASYNC_RB_FILES) -o $@
+
 .PHONY: npm-clean
 npm-clean:
 	rm -f $(NPM_DIR)/lilac-full/lilac.wasm
 	rm -f $(NPM_DIR)/lilac-compiled/lilac.wasm
 	rm -f $(NPM_DIR)/lilac-plugin-extras/extras.mrb
 	rm -f $(NPM_DIR)/lilac-plugin-router/router.mrb
+	rm -f $(NPM_DIR)/lilac-plugin-async/async.mrb
 
 # ── clean ───────────────────────────────────────────────────────────────
 # `clean` removes everything Lilac generates: the wasm build dir, the
