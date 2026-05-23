@@ -7,15 +7,17 @@
 # it) because no mruby-compiler is bundled.
 #
 # What's in:
-#  - Lilac core + Lilac form gem (decisions §2: form is core)
+#  - Lilac core + Lilac directives (Scanner.register_directive surface
+#    for plug-ins) + Lilac form gem (decisions §2: form is core)
 #  - mruby-regexp-compat (Regexp class for user code & form validators)
 #  - tightly-selected mruby core gems Lilac actually touches
 #
 # What's out:
 #  - mruby-compiler / mruby-eval (= no runtime parser)
-#  - Lilac directives scanner (CLI codegen emits explicit
-#    `Lilac::Bindings::*` modules; runtime needs no scanner)
 #  - Lilac async (Fetchy / Resource) / router
+#  - Lilac extras (data-tooltip / data-autofocus) — ships as a separate
+#    npm plug-in package `@takahashim/lilac-plugin-extras`, loaded at
+#    runtime via `boot({ plugins: [extrasMrb] })`. See decisions §24.
 #  - WASI io (mruby-io / mruby-wasi-*)
 #
 # Surfaces as `@takahashim/lilac-compiled` on npm (see npm/lilac-compiled/).
@@ -102,9 +104,11 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem "#{mwr_mrbgem}/mruby-wasm-js"
   conf.gem "#{runtime_dir}/mruby-regexp-compat"  # Regexp class for user code & form validators
   conf.gem "#{runtime_dir}/mruby-lilac"
-  conf.gem "#{runtime_dir}/mruby-lilac-directives" # required as direct dep for plug-in `register_named_directive`
+  conf.gem "#{runtime_dir}/mruby-lilac-directives" # exposes `register_directive` for plug-ins; required as direct dep
   conf.gem "#{runtime_dir}/mruby-lilac-form"   # Phase A: form is core
-  conf.gem "#{runtime_dir}/mruby-lilac-extras" # convention-based plug-in directives (tooltip, autofocus)
+  # mruby-lilac-extras is NOT linked here — it ships as a separate npm
+  # plug-in (`@takahashim/lilac-plugin-extras`) and is loaded at runtime
+  # via `boot({ plugins: [extrasMrb] })`. See decisions §24.
 
   conf.bins = []
 end

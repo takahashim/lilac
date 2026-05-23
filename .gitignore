@@ -30,6 +30,9 @@ build_config/*.lock
 # JS / package.json / LICENSE / README stay tracked.
 /npm/lilac-full/lilac.wasm
 /npm/lilac-compiled/lilac.wasm
+# Plug-in bytecode produced by `make lilac-plugin-extras` from
+# runtime/mruby-lilac-extras/mrblib/*.rb.
+/npm/lilac-plugin-extras/extras.mrb
 
 # npm
 /npm/lilac-*/node_modules/

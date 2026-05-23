@@ -1,0 +1,57 @@
+{
+  "name": "@takahashim/lilac-plugin-extras",
+  "version": "0.1.0",
+  "description": "Lilac plug-in: extras directives (data-tooltip, data-autofocus). Ships pre-compiled mruby bytecode loaded via `boot({ plugins: [extrasMrb] })`.",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./bytecode": "./extras.mrb",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "extras.mrb",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "lilac",
+    "lilac-plugin",
+    "tooltip",
+    "autofocus",
+    "directive",
+    "mruby",
+    "bytecode"
+  ],
+  "author": "takahashim <takahashimm@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/takahashim/lilac#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/takahashim/lilac.git",
+    "directory": "npm/lilac-plugin-extras"
+  },
+  "bugs": {
+    "url": "https://github.com/takahashim/lilac/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@takahashim/lilac-compiled": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@takahashim/lilac-compiled": {
+      "optional": true
+    }
+  }
+}
