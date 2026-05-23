@@ -1,0 +1,31 @@
+<template>
+  <div data-component="tooltip-demo" class="demo">
+    <p>Hover over the button to see the tooltip:</p>
+    <button data-ref="btn" data-tooltip="@hint">Hover me</button>
+    <p>
+      <button data-ref="toggle">Toggle hint</button>
+    </p>
+    <p>
+      <input data-ref="focused" data-autofocus placeholder="autofocused on mount" />
+    </p>
+    <p class="status">Current hint: <output data-text="@hint"></output></p>
+  </div>
+</template>
+<script type="text/ruby">
+class TooltipDemo < Lilac::Component
+  def setup
+    @hint = signal("first hint")
+    refs.toggle.on(:click) do
+      @hint.update { |t| t == "first hint" ? "second hint" : "first hint" }
+    end
+  end
+end
+Lilac.register "TooltipDemo", TooltipDemo
+Lilac.start
+</script>
+<style>
+.demo { font-family: system-ui, sans-serif; padding: 1rem; }
+.demo button { padding: 0.4em 0.9em; cursor: pointer; }
+.demo input { padding: 0.4em 0.6em; }
+.demo .status { color: #555; font-size: 0.95em; }
+</style>

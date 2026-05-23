@@ -68,7 +68,6 @@ BUILD_WASM_MRBC_HOST_RELEASE      := $(BUILD_DIR)/mrbc-host.release.wasm
 .PHONY: all \
         lilac-full lilac-full-release lilac-full-host \
         lilac-compiled lilac-compiled-release \
-        lilac-plugin-extras lilac-plugin-router lilac-plugin-async \
         mrbc-host mrbc-host-release \
         lilac-all lilac-all-release \
         check-pair-diff \
@@ -286,75 +285,16 @@ serve: lilac-full mrbgem
 NPM_DIR := $(CURDIR)/npm
 
 .PHONY: npm-pack
-npm-pack: $(NPM_DIR)/lilac-full/lilac.wasm \
-          $(NPM_DIR)/lilac-compiled/lilac.wasm \
-          $(NPM_DIR)/lilac-plugin-extras/extras.mrb \
-          $(NPM_DIR)/lilac-plugin-router/router.mrb \
-          $(NPM_DIR)/lilac-plugin-async/async.mrb
-	@echo "npm packages staged. To publish:"
-	@echo "  cd npm/lilac-full          && npm publish"
-	@echo "  cd npm/lilac-compiled      && npm publish"
-	@echo "  cd npm/lilac-plugin-extras && npm publish"
-	@echo "  cd npm/lilac-plugin-router && npm publish"
-	@echo "  cd npm/lilac-plugin-async  && npm publish"
+npm-pack: $(NPM_DIR)/lilac-full/lilac.wasm
+	@echo "npm package staged. To publish:"
+	@echo "  cd npm/lilac-full && npm publish"
 
 $(NPM_DIR)/lilac-full/lilac.wasm: $(BUILD_WASM_LILAC_FULL_RELEASE)
 	cp $< $@
 
-$(NPM_DIR)/lilac-compiled/lilac.wasm: $(BUILD_WASM_LILAC_COMPILED_RELEASE)
-	cp $< $@
-
-# Plug-in package: pre-compiled mruby bytecode for data-tooltip /
-# data-autofocus directives. Driven by `lilac plugin-build`, which
-# resolves an mrbc backend via the same chain `lilac build` uses
-# (env override → monorepo mrbc → lilac-wasm-bin's mrbc-host.wasm
-# → $PATH). The dev mrbc-host.wasm is listed as an order-only dep so
-# the wasm fallback is available without forcing a rebuild on every
-# plug-in touch — if you have a native mrbc in $PATH / via env, that
-# path takes priority and the order-only dep is harmless.
-EXTRAS_MRBLIB := $(CURDIR)/runtime/mruby-lilac-extras/mrblib
-EXTRAS_RB_FILES := $(EXTRAS_MRBLIB)/lilac_extras.rb \
-                   $(EXTRAS_MRBLIB)/lilac_extras_focus.rb \
-                   $(EXTRAS_MRBLIB)/lilac_extras_tooltip.rb
-
-.PHONY: lilac-plugin-extras
-lilac-plugin-extras: $(NPM_DIR)/lilac-plugin-extras/extras.mrb
-
-$(NPM_DIR)/lilac-plugin-extras/extras.mrb: $(EXTRAS_RB_FILES) | $(BUILD_WASM_MRBC_HOST)
-	cd $(CURDIR)/cli && bundle exec exe/lilac plugin-build $(EXTRAS_RB_FILES) -o $@
-
-# Plug-in package: `Lilac::Router` (signal-based URL routing). Not
-# included in lilac-compiled (decisions §24) — apps that need routing
-# load this .mrb via `boot({ plugins })`. lilac-full keeps the gem
-# linked, so this plug-in is redundant there.
-ROUTER_MRBLIB := $(CURDIR)/runtime/mruby-lilac-router/mrblib
-ROUTER_RB_FILES := $(ROUTER_MRBLIB)/lilac_router.rb
-
-.PHONY: lilac-plugin-router
-lilac-plugin-router: $(NPM_DIR)/lilac-plugin-router/router.mrb
-
-$(NPM_DIR)/lilac-plugin-router/router.mrb: $(ROUTER_RB_FILES) | $(BUILD_WASM_MRBC_HOST)
-	cd $(CURDIR)/cli && bundle exec exe/lilac plugin-build $(ROUTER_RB_FILES) -o $@
-
-# Plug-in package: async data primitives (Fetchy / Resource /
-# selector helpers). Same distribution rationale as router.
-ASYNC_MRBLIB := $(CURDIR)/runtime/mruby-lilac-async/mrblib
-ASYNC_RB_FILES := $(ASYNC_MRBLIB)/lilac_async.rb \
-                  $(ASYNC_MRBLIB)/fetchy.rb
-
-.PHONY: lilac-plugin-async
-lilac-plugin-async: $(NPM_DIR)/lilac-plugin-async/async.mrb
-
-$(NPM_DIR)/lilac-plugin-async/async.mrb: $(ASYNC_RB_FILES) | $(BUILD_WASM_MRBC_HOST)
-	cd $(CURDIR)/cli && bundle exec exe/lilac plugin-build $(ASYNC_RB_FILES) -o $@
-
 .PHONY: npm-clean
 npm-clean:
 	rm -f $(NPM_DIR)/lilac-full/lilac.wasm
-	rm -f $(NPM_DIR)/lilac-compiled/lilac.wasm
-	rm -f $(NPM_DIR)/lilac-plugin-extras/extras.mrb
-	rm -f $(NPM_DIR)/lilac-plugin-router/router.mrb
-	rm -f $(NPM_DIR)/lilac-plugin-async/async.mrb
 
 # ── clean ───────────────────────────────────────────────────────────────
 # `clean` removes everything Lilac generates: the wasm build dir, the

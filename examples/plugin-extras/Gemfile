@@ -1,0 +1,20 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# Same monorepo-relative dep pattern as the 7guis example: pick the
+# CLI straight out of `cli/` so changes are picked up without a gem
+# release. Outside the monorepo, replace with:
+#   gem "lilac-cli", "~> 0.1"
+gem "lilac-cli", path: "../../cli"
+
+# Lilac plug-in gems are auto-discovered by `lilac build` via Bundler
+# (decisions §25). Listing `lilac-plugin-extras` here is enough — at
+# build time the CLI walks `Bundler.load.specs`, picks up gems whose
+# gemspec sets `metadata["lilac_plugin"] = "true"`, compiles each
+# gem's `mrblib/*.rb` to bytecode, and stages it under
+# `dist/plugins/`. No `c.plugins = [...]` config needed.
+#
+# Outside the monorepo, replace `path: "../../runtime/..."` with the
+# released gem version: `gem "lilac-plugin-extras", "~> 0.1"`.
+gem "lilac-plugin-extras", path: "../../runtime/mruby-lilac-extras"

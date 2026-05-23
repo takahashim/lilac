@@ -3,6 +3,7 @@
 require_relative "test_helper"
 require "tmpdir"
 require "fileutils"
+require "json"
 
 class TestBuilder < Minitest::Test
   def setup
@@ -28,6 +29,7 @@ class TestBuilder < Minitest::Test
 
   def build!(codegen: :auto, target: :full, mrbc_path: nil,
              lilac_compiled_path: nil, mruby_wasm_js_path: nil,
+             plugins: [],
              project_root: Dir.pwd)
     Lilac::CLI::Builder.new(
       components_dir: @components,
@@ -38,6 +40,7 @@ class TestBuilder < Minitest::Test
       mrbc_path: mrbc_path,
       lilac_compiled_path: lilac_compiled_path,
       mruby_wasm_js_path: mruby_wasm_js_path,
+      plugins: plugins,
       project_root: project_root,
     ).build
   end
@@ -551,6 +554,145 @@ class TestBuilder < Minitest::Test
                  "expected exactly one .mrb under output_dir, found #{mrb_files.inspect}"
     bytes = File.binread(mrb_files.first)
     assert_equal "RITE", bytes[0, 4]
+  end
+
+  def test_target_compiled_with_plugins_loads_them_before_user_bytecode
+    mrbc = mrbc_or_skip
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <html><body><lilac-component name="counter"></lilac-component></body></html>
+    HTML
+
+    # Sandbox a fake plug-in bytecode file. The bytes are arbitrary —
+    # the builder doesn't validate them; runtime would, but for the
+    # build-time injection we just need a path that exists.
+    plugin_src = File.join(Dir.mktmpdir("lilac-plugin-fixture"), "extras.mrb")
+    File.binwrite(plugin_src, "RITE0400\x00" * 8)
+
+    build!(target: :compiled, mrbc_path: mrbc, plugins: [plugin_src])
+
+    # The plug-in .mrb was copied into dist/plugins/.
+    staged = File.join(@output, "plugins", "extras.mrb")
+    assert File.file?(staged), "expected plug-in staged at #{staged}"
+
+    # The boot script fetches the plug-in BEFORE the user bytecode. The
+    # plugin loadBytecode line must appear earlier than the user `app.*.mrb`
+    # line so register_directive calls take effect before component mount.
+    out = read_output("index.html")
+    plugin_pos = out.index('fetch("./plugins/extras.mrb")')
+    user_pos   = out =~ /fetch\("\.\/app\.[0-9a-f]{8}\.mrb"\)/
+    refute_nil plugin_pos, "boot script must reference the staged plug-in"
+    refute_nil user_pos,   "boot script must still load the user bytecode"
+    assert plugin_pos < user_pos,
+           "plug-in must be fetched before the user bytecode"
+  end
+
+  def test_target_compiled_compiles_and_stages_discovered_plugin_gems
+    mrbc = mrbc_or_skip
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <html><body><lilac-component name="counter"></lilac-component></body></html>
+    HTML
+
+    # Fake a gem-discovered plug-in by stubbing `PluginDiscovery.run`.
+    # The mrblib content is real Ruby (so mrbc accepts it). The Builder
+    # auto-stages it under the gem name + injects loadBytecode before
+    # the user bytecode.
+    plugin_dir = Dir.mktmpdir("lilac-discovered-plugin-")
+    File.write(File.join(plugin_dir, "fake.rb"), "X = 1")
+    discovered = Lilac::CLI::PluginDiscovery::Discovered.new(
+      name: "lilac-plugin-fake",
+      version: "0.0.1",
+      mrblib_files: [File.join(plugin_dir, "fake.rb")],
+    )
+
+    stub_discovery([discovered]) do
+      build!(target: :compiled, mrbc_path: mrbc)
+    end
+
+    staged = File.join(@output, "plugins", "lilac-plugin-fake.mrb")
+    assert File.file?(staged), "expected gem plug-in staged at #{staged}"
+    assert_equal "RITE", File.binread(staged)[0, 4], "compiled bytecode has RITE magic"
+
+    out = read_output("index.html")
+    plugin_pos = out.index('fetch("./plugins/lilac-plugin-fake.mrb")')
+    user_pos   = out =~ /fetch\("\.\/app\.[0-9a-f]{8}\.mrb"\)/
+    refute_nil plugin_pos, "boot script must reference the staged gem plug-in"
+    refute_nil user_pos
+    assert plugin_pos < user_pos
+  end
+
+  def stub_discovery(list)
+    saved = Lilac::CLI::PluginDiscovery.method(:run)
+    Lilac::CLI::PluginDiscovery.define_singleton_method(:run) { list }
+    yield
+  ensure
+    Lilac::CLI::PluginDiscovery.define_singleton_method(:run, &saved)
+  end
+
+  def test_target_compiled_raises_when_plugin_path_missing
+    mrbc = mrbc_or_skip
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <html><body><lilac-component name="counter"></lilac-component></body></html>
+    HTML
+
+    bogus = File.join(Dir.mktmpdir("lilac-plugin-missing"), "nope.mrb")
+    err = assert_raises(Lilac::CLI::Builder::Error) do
+      build!(target: :compiled, mrbc_path: mrbc, plugins: [bogus])
+    end
+    assert_includes err.message, "Plug-in `.mrb` not found"
+  end
+
+  def test_target_full_stages_plugins_and_writes_manifest
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <html><body><lilac-component name="counter"></lilac-component></body></html>
+    HTML
+
+    plugin_src = File.join(Dir.mktmpdir("lilac-plugin-fixture-full"), "extras.mrb")
+    File.binwrite(plugin_src, "RITE0400\x00" * 8)
+
+    # `:full` builds don't generate their own boot module — the user
+    # owns the `<script type="module">` in their page template. lilac-cli
+    # surfaces plug-ins to that script via a `lilac.plugins.json`
+    # manifest the boot can `fetch`. (decisions §25)
+    build!(target: :full, plugins: [plugin_src])
+
+    staged = File.join(@output, "plugins", "extras.mrb")
+    assert File.file?(staged), "expected plug-in staged at #{staged}"
+
+    manifest_path = File.join(@output, "lilac.plugins.json")
+    assert File.file?(manifest_path), "expected lilac.plugins.json manifest"
+    manifest = JSON.parse(File.read(manifest_path))
+    assert_equal ["./plugins/extras.mrb"], manifest["plugins"]
+  end
+
+  def test_target_full_omits_plugins_manifest_when_none_present
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <html><body><lilac-component name="counter"></lilac-component></body></html>
+    HTML
+
+    build!(target: :full)
+
+    refute File.exist?(File.join(@output, "lilac.plugins.json")),
+           "manifest must not be written when there are no plug-ins (boot script falls back gracefully on 404)"
   end
 
   def test_target_compiled_omits_mrb_when_no_components_used

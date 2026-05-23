@@ -27,11 +27,13 @@ const FIXTURES_DIR  = `${REPO}/test/parity-fixtures`;
 const LILAC_BIN     = `${REPO}/cli/exe/lilac`;
 const CLI_GEMFILE   = `${REPO}/cli/Gemfile`;
 // Plug-in bytecode bundles available to fixtures. The compiled wasm
-// no longer links these gems directly (decisions §24) — the parity
-// runner reproduces the production `boot({ plugins })` flow by
-// pre-loading the .mrb before the user app's own bytecode. Built by
-// `make lilac-plugin-extras`.
-const EXTRAS_MRB = `${REPO}/npm/lilac-plugin-extras/extras.mrb`;
+// no longer links these gems directly (decisions §24/§25). With the
+// pivot to gem-based distribution (§25), npm no longer publishes the
+// `.mrb`; the parity-runner instead builds it on the fly via
+// `lilac plugin-build` so the test stays self-contained. The resulting
+// path is wired into `SCENARIOS.extras.plugins` via `buildExtrasMrb()`
+// during `main()`.
+let EXTRAS_MRB = null;
 
 // Per-fixture scenario. Each entry returns:
 //   { steps: Array<Step>,          // sequence of actions to perform
@@ -104,7 +106,8 @@ const SCENARIOS = {
     // The compiled wasm has no extras gem linked — runtime plug-in load
     // is the only path. Full wasm still ships extras, so loading the
     // .mrb only on compiled keeps both paths exercised symmetrically.
-    plugins: [EXTRAS_MRB],
+    // `plugins:` is populated at runtime by `buildExtrasMrb()`.
+    plugins: [],
     steps: [
       { label: "initial mount (first hint)" },
       { label: "click toggle (second hint)", run: (doc) => doc.querySelector('[data-ref="toggle"]').click() },
@@ -143,6 +146,29 @@ function setupFetch() {
     const path = fileURLToPath(new URL(url, import.meta.url));
     return new Response(await readFile(path), { headers: { "Content-Type": "application/wasm" } });
   };
+}
+
+// Build a fresh extras `.mrb` via `lilac plugin-build` so the parity
+// test exercises the same code path users hit at build time (concat
+// mrblib → mrbc backend). Returns the absolute path to the produced
+// bytecode file under a per-run tmpdir.
+async function buildExtrasMrb() {
+  const dest = await mkdtemp(join(tmpdir(), "lilac-parity-extras-mrb-"));
+  const out = join(dest, "extras.mrb");
+  const mrblib = `${REPO}/runtime/mruby-lilac-extras/mrblib`;
+  const sources = [
+    `${mrblib}/lilac_extras.rb`,
+    `${mrblib}/lilac_extras_focus.rb`,
+    `${mrblib}/lilac_extras_tooltip.rb`,
+  ];
+  const r = spawnSync(LILAC_BIN, ["plugin-build", ...sources, "-o", out], {
+    env: { ...process.env, MRUBY_WASM_RUNTIME_PATH: MWR, BUNDLE_GEMFILE: CLI_GEMFILE },
+    encoding: "utf-8",
+  });
+  if (r.status !== 0) {
+    throw new Error(`lilac plugin-build failed: ${r.stderr || r.stdout}`);
+  }
+  return out;
 }
 
 async function lilacBuild(fixtureSrc, target) {
@@ -287,6 +313,12 @@ async function runFixture(fixtureName, createVM) {
 async function main() {
   setupFetch();
   const createVM = await importMwrBridge();
+
+  // Build plug-in `.mrb` on the fly so the extras scenario has
+  // something for its `loadBytecode` step. Skipped silently if the
+  // scenario doesn't reference plug-ins.
+  EXTRAS_MRB = await buildExtrasMrb();
+  SCENARIOS.extras.plugins = [EXTRAS_MRB];
 
   let totalFail = 0;
   for (const name of Object.keys(SCENARIOS)) {

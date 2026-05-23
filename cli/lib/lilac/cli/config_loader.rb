@@ -44,6 +44,15 @@ module Lilac
         # (see CompiledRuntimeResolver). Both nil = auto-discover via
         # env / monorepo ancestor / node_modules.
         :lilac_compiled_path, :mruby_wasm_js_path,
+        # `plugins` — Array<String> of paths (absolute or
+        # project-root-relative) pointing at pre-compiled plug-in
+        # `.mrb` files (e.g. `node_modules/@takahashim/lilac-plugin-extras/extras.mrb`).
+        # At build time the CLI copies each to `dist/plugins/` and the
+        # generated boot script `loadBytecode`s them before user code.
+        # `:compiled` target only — the `:full` boot does the same
+        # ordering via `boot({ plugins })` if the user wires it.
+        # See decisions §24 + `docs/lilac-plugin-spec.md`.
+        :plugins,
         keyword_init: true,
       )
 

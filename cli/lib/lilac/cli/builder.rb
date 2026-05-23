@@ -166,6 +166,7 @@ module Lilac
                      live_reload: false, codegen: :auto,
                      target: :full, mrbc_path: nil,
                      lilac_compiled_path: nil, mruby_wasm_js_path: nil,
+                     plugins: [],
                      project_root: Dir.pwd,
                      disable_gem_discovery: false)
         @components_dir = components_dir
@@ -197,6 +198,11 @@ module Lilac
         # `public/vendor/lilac-compiled/` is required.
         @lilac_compiled_path = lilac_compiled_path
         @mruby_wasm_js_path  = mruby_wasm_js_path
+        # Pre-compiled plug-in `.mrb` paths (absolute). For `:compiled`
+        # builds, each gets copied into `dist/plugins/` and pre-loaded by
+        # the generated boot script before user bytecode. Ignored for
+        # `:full` builds (no boot script to inject into). See §24.
+        @plugins             = Array(plugins).map { |p| File.expand_path(p) }
         @project_root        = project_root
         # Mirrors `CompiledRuntimeResolver` / `BytecodeBuilder`'s
         # `disable_gem_discovery:` — tests pass `true` so the gem-bundled
@@ -211,6 +217,17 @@ module Lilac
         raise Error, "No pages found under #{@pages_dir.inspect}" if pages.empty?
 
         public_files = mirror_public_files
+
+        # Resolve and stage plug-in `.mrb` files once for the build —
+        # the URLs are stable across pages so each page's boot module
+        # can reference the same set.
+        @plugin_dist_urls = copy_plugins!
+        # `:full` target doesn't generate its own boot module (user's
+        # scaffold-provided `<script type="module">` owns boot), so we
+        # surface the plug-in list as a `lilac.plugins.json` manifest the
+        # user-side boot can fetch. `:compiled` doesn't need this — the
+        # generated `data-lilac-bootstrap` module inlines the URLs.
+        write_plugins_manifest!(@plugin_dist_urls) if @target == :full
 
         # Caches per component name to avoid re-parsing template bodies
         # when the same component appears on multiple pages.
@@ -710,7 +727,7 @@ module Lilac
             # the URLs.
             label = page_path ? "page #{File.basename(page_path)}" : 'page bundle'
             mrb_file = bytecode_builder.build(ruby_source, source_label: label)
-            render_compiled_boot_module(mrb_file)
+            render_compiled_boot_module(mrb_file, @plugin_dist_urls || [])
           else
             render_script(ruby_source)
           end
@@ -786,17 +803,106 @@ module Lilac
       # eval of arbitrary Ruby source is unsupported. Instead the
       # builder appends `Lilac.start` to the bundle in `bundle_scripts`
       # so it runs as part of `loadBytecode` (decisions §20.6 caveat).
-      def render_compiled_boot_module(mrb_filename)
+      def render_compiled_boot_module(mrb_filename, plugin_urls = [])
+        # Plug-in `.mrb` bundles load BEFORE the user bytecode so any
+        # `register_directive` calls take effect by the time component
+        # mount runs `scan_extensions`. Mirrors the production
+        # `boot({ plugins })` ordering in `npm/lilac-compiled/index.js`.
+        # The heredoc below uses 2-space indent (squiggly heredoc strips
+        # the common leading whitespace). Plug-in load lines slot in
+        # before `const bytecode = ...` at the same depth.
+        plugin_loads = plugin_urls.map do |url|
+          "vm.loadBytecode(new Uint8Array(await (await fetch(#{url.inspect})).arrayBuffer()));"
+        end.join("\n  ")
+        plugin_block = plugin_loads.empty? ? '' : "#{plugin_loads}\n  "
         <<~HTML.strip
           <script type="module" data-lilac-bootstrap>
             import { createVM } from "./vendor/lilac-compiled/mruby-wasm-js/index.js";
             const vm = await createVM({ wasm: "./vendor/lilac-compiled/lilac.wasm" });
-            const bytecode = new Uint8Array(
+            #{plugin_block}const bytecode = new Uint8Array(
               await (await fetch("./#{mrb_filename}")).arrayBuffer()
             );
             vm.loadBytecode(bytecode);
           </script>
         HTML
+      end
+
+      # Stage plug-in `.mrb` files under `dist/plugins/` and return the
+      # page-relative URLs the boot script should `fetch`. Two input
+      # channels merge here (decisions §25):
+      #
+      #   1. **Bundler auto-discovery** — `PluginDiscovery.run` finds gems
+      #      whose gemspec declares `metadata["lilac_plugin"] = "true"`.
+      #      Each gem's `mrblib/*.rb` is compiled locally to `.mrb` so the
+      #      mruby version matches the vendored core wasm.
+      #   2. **Explicit `c.plugins = [...paths]`** — pre-compiled `.mrb`
+      #      files. Useful for advanced overrides (custom plug-in not in
+      #      a gem, vendored fork, etc.).
+      #
+      # Both `:full` and `:compiled` targets benefit from plug-ins —
+      # `:compiled` injects loadBytecode into the generated boot module
+      # directly, `:full` writes a `lilac.plugins.json` manifest that the
+      # user's hand-rolled (scaffold) boot script reads to loadBytecode
+      # plug-ins ahead of `evalScript`. See decisions §25.
+      def copy_plugins!
+        return [] if @plugins.empty? && discovered_plugins.empty?
+
+        dest_dir = File.join(@output_dir, 'plugins')
+        FileUtils.mkdir_p(dest_dir)
+
+        urls = []
+        # Auto-discovered gem-based plug-ins first. Compile each gem's
+        # mrblib source set to a single `.mrb` named after the gem so the
+        # filename collisions with explicit override paths are easy to
+        # spot.
+        discovered_plugins.each do |discovered|
+          bytes = compile_plugin_source(discovered.mrblib_files, source_label: discovered.name)
+          filename = "#{discovered.name}.mrb"
+          File.binwrite(File.join(dest_dir, filename), bytes)
+          urls << "./plugins/#{filename}"
+        end
+        # Explicit override paths next — already-compiled `.mrb` files
+        # the user pointed at directly via `c.plugins`.
+        @plugins.each do |src|
+          raise Error, "Plug-in `.mrb` not found: #{src}" unless File.file?(src)
+
+          basename = File.basename(src)
+          FileUtils.cp(src, File.join(dest_dir, basename))
+          urls << "./plugins/#{basename}"
+        end
+        urls.uniq
+      end
+
+      # Cached `PluginDiscovery` result so multi-page builds discover
+      # once. Empty list outside a Bundler context.
+      def discovered_plugins
+        @discovered_plugins ||= PluginDiscovery.run
+      end
+
+      # Compile concatenated mrblib source to bytecode via the existing
+      # `BytecodeBuilder` backend chain (binary mrbc → wasm-driven mrbc
+      # → $PATH). Mirrors `lilac plugin-build`'s aggregation rule:
+      # alphabetical concat separated by newlines.
+      def compile_plugin_source(mrblib_files, source_label:)
+        source = mrblib_files.map { |f| File.read(f) }.join("\n")
+        bytecode_builder.compile_to_bytes(source, source_label: "plug-in #{source_label}")
+      end
+
+      # Write `dist/lilac.plugins.json` so a scaffold-style boot script
+      # can fetch the manifest and `loadBytecode` each entry before
+      # evaluating `<script type="text/ruby">` blocks. Format:
+      #
+      #   { "plugins": ["./plugins/lilac-plugin-extras.mrb", ...] }
+      #
+      # The manifest is only written when at least one plug-in was
+      # staged, so absence of the file means "no plug-ins" — boot
+      # scripts can fetch with a graceful 404 fallback.
+      def write_plugins_manifest!(plugin_urls)
+        return if plugin_urls.empty?
+
+        require 'json'
+        manifest_path = File.join(@output_dir, 'lilac.plugins.json')
+        File.write(manifest_path, JSON.pretty_generate(plugins: plugin_urls) + "\n")
       end
 
       def render_named_template(template_name, body_html)

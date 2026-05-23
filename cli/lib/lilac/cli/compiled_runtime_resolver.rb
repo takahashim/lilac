@@ -17,16 +17,16 @@ module Lilac
     # keep rewriting it.
     #
     # Discovery mirrors `BytecodeBuilder`'s mrbc discovery: explicit
-    # CLI/config wins, then env, then a monorepo sibling layout (so this
-    # repo's own `examples/7guis/` Just Works at dev time), then a
-    # `node_modules/` lookup (so projects that `npm install
-    # @takahashim/lilac-compiled` get the same behaviour).
+    # CLI/config wins, then env, then the `lilac-wasm-bin` gem (the
+    # canonical install path — decisions §25), then a monorepo sibling
+    # layout for in-repo development. The previous `node_modules/
+    # @takahashim/lilac-compiled` fallback was removed when plug-in
+    # distribution pivoted to rubygems and the npm-side lilac-compiled
+    # package was retired (§25).
     class CompiledRuntimeResolver
       class Error < StandardError; end
 
-      WASM_BASENAME       = "lilac.wasm"
-      NPM_PACKAGE_NAME    = "@takahashim/lilac-compiled"
-      BRIDGE_PACKAGE_NAME = "@takahashim/mruby-wasm-js"
+      WASM_BASENAME = "lilac.wasm"
 
       def initialize(lilac_compiled_path: nil, mruby_wasm_js_path: nil,
                      project_root: Dir.pwd, monorepo_root: nil,
@@ -75,9 +75,7 @@ module Lilac
         if (gem_wasm = gem_provided_wasm) && File.file?(gem_wasm)
           return gem_wasm
         end
-        monorepo_wasm_candidates.each { |c| return c if File.file?(c) }
-        node_modules = node_modules_wasm_candidate
-        return node_modules if node_modules && File.file?(node_modules)
+        monorepo_wasm_candidate.then { |c| return c if File.file?(c) }
 
         nil
       end
@@ -90,12 +88,8 @@ module Lilac
           return env
         end
         candidates = [
-          gem_provided_bridge,        # `lilac-wasm-bin` gem (same priority as wasm)
+          gem_provided_bridge,        # `lilac-wasm-bin` gem (canonical install path)
           monorepo_bridge_candidate,
-          node_modules_bridge_candidate,
-          # Fallback: lilac-compiled npm package depends on the bridge
-          # and may carry it inside its own nested node_modules.
-          nested_bridge_under_compiled_candidate,
         ].compact
         candidates.find { |c| bridge_dir?(c) }
       end
@@ -123,24 +117,12 @@ module Lilac
         nil
       end
 
-      # Two monorepo candidates, checked in order:
-      #
-      #   1. `<root>/build/lilac-compiled.wasm` — freshly produced by
-      #      `make lilac-compiled`. Matches the bridge in `mrbgem/mruby-wasm-js/`
-      #      and the current `build_config/lilac-compiled.rb` (no -flto, so no
-      #      stray `env.setjmp` import).
-      #   2. `<root>/npm/lilac-compiled/lilac.wasm` — last npm-pack artefact.
-      #      Only used as fallback; older publishes may carry the LTO-era
-      #      `env.setjmp` import and fail at instantiation.
-      def monorepo_wasm_candidates
-        [
-          File.join(monorepo_root, "build", "lilac-compiled.wasm"),
-          File.join(monorepo_npm_root, "lilac-compiled", WASM_BASENAME),
-        ]
-      end
-
-      def node_modules_wasm_candidate
-        File.join(@project_root, "node_modules", NPM_PACKAGE_NAME, WASM_BASENAME)
+      # The monorepo's `build/lilac-compiled.wasm` — freshly produced by
+      # `make lilac-compiled`. Matches the bridge in `mrbgem/mruby-wasm-js/`
+      # and the current `build_config/lilac-compiled.rb` (no -flto, so no
+      # stray `env.setjmp` import).
+      def monorepo_wasm_candidate
+        File.join(monorepo_root, "build", "lilac-compiled.wasm")
       end
 
       def monorepo_bridge_candidate
@@ -149,15 +131,6 @@ module Lilac
         # `mrbgem/mruby-wasm-js/` for the `make serve` flow).
         candidate = File.join(monorepo_root, "mrbgem", "mruby-wasm-js", "js")
         candidate if File.directory?(candidate)
-      end
-
-      def node_modules_bridge_candidate
-        File.join(@project_root, "node_modules", BRIDGE_PACKAGE_NAME)
-      end
-
-      def nested_bridge_under_compiled_candidate
-        File.join(@project_root, "node_modules", NPM_PACKAGE_NAME,
-                  "node_modules", BRIDGE_PACKAGE_NAME)
       end
 
       def bridge_dir?(path)
@@ -174,19 +147,13 @@ module Lilac
         @monorepo_root ||= @monorepo_root_override || File.expand_path("../../../..", __dir__)
       end
 
-      def monorepo_npm_root
-        File.join(monorepo_root, "npm")
-      end
-
       def wasm_not_found_message
-        monorepo_lines = monorepo_wasm_candidates.map { |c| "    • monorepo: #{c}" }.join("\n")
         <<~MSG.strip
           lilac-compiled.wasm not found. Tried:
             • configured `c.lilac_compiled_path` (#{@configured_compiled_path.inspect})
             • ENV["LILAC_COMPILED_WASM"] (#{ENV["LILAC_COMPILED_WASM"].inspect})
             • lilac-wasm-bin gem (not on load path)
-          #{monorepo_lines}
-            • node_modules: #{node_modules_wasm_candidate}
+            • monorepo: #{monorepo_wasm_candidate}
 
           To fix, either:
             • Add `gem "lilac-wasm-bin"` to your Gemfile (recommended — the scaffolded Gemfile from `lilac new` already includes it)
@@ -194,7 +161,6 @@ module Lilac
             • Add `c.lilac_compiled_path = "/abs/path"` to lilac.config.rb
             • Set ENV["LILAC_COMPILED_WASM"]
             • In the monorepo: run `make lilac-compiled` to produce build/lilac-compiled.wasm
-            • Otherwise: run `npm install @takahashim/lilac-compiled` in the project root
         MSG
       end
 
@@ -205,15 +171,12 @@ module Lilac
             • ENV["MRUBY_WASM_JS_PATH"] (#{ENV["MRUBY_WASM_JS_PATH"].inspect})
             • lilac-wasm-bin gem (not on load path)
             • monorepo: #{monorepo_bridge_candidate || '(no mrbgem/mruby-wasm-js/js dir)'}
-            • node_modules: #{node_modules_bridge_candidate}
-            • nested under lilac-compiled: #{nested_bridge_under_compiled_candidate}
 
           To fix, either:
             • Add `gem "lilac-wasm-bin"` to your Gemfile (recommended)
             • Pass `--mruby-wasm-js-path /abs/path/to/mruby-wasm-js/` on the command line
             • Add `c.mruby_wasm_js_path = "/abs/path"` to lilac.config.rb
             • Set ENV["MRUBY_WASM_JS_PATH"]
-            • Run `npm install @takahashim/mruby-wasm-js` in the project root
         MSG
       end
     end
