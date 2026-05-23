@@ -186,7 +186,7 @@ module Lilac
         # `:full` — dist HTML loads inline Ruby via lilac-full wasm
         # (vm.evalScript). `:compiled` — Ruby is pre-compiled to
         # `.mrb` bytecode via `mrbc` and loaded by lilac-compiled wasm
-        # (vm.loadIrep). The compiled target shaves ~32% off the brotli
+        # (vm.loadBytecode). The compiled target shaves ~32% off the brotli
         # bundle but requires `mrbc` available at build time. See
         # `BytecodeBuilder` for path discovery.
         @target = target

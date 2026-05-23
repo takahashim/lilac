@@ -63,7 +63,7 @@ export async function boot(opts = {}) {
       opts.bytecode instanceof Uint8Array
         ? opts.bytecode
         : new Uint8Array(opts.bytecode);
-    vm.loadIrep(bytes);
+    vm.loadBytecode(bytes);
   } else if (opts.source !== undefined) {
     if (typeof opts.source !== "string") {
       throw new TypeError("boot: `source` must be a string");

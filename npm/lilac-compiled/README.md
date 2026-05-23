@@ -18,7 +18,7 @@ intended for apps pre-compiled with [`lilac-cli`](https://rubygems.org/gems/lila
 Apps shipped against this build **must be pre-compiled to mruby
 bytecode** with `lilac-cli`. `vm.eval(source)` raises
 `NotImplementedError` (the compiler isn't bundled). Use
-`vm.loadIrep(bytes)` with the `.mrb` produced by `lilac build`.
+`vm.loadBytecode(bytes)` with the `.mrb` produced by `lilac build`.
 
 Runtime declarative directives (`data-text="@x"` etc.) are **not
 scanned at runtime** in this variant. The CLI codegen path generates

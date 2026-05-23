@@ -16,7 +16,7 @@
 // is unsupported). `lilac build --target compiled` appends it to the
 // bundle automatically; callers that supply hand-rolled bytecode must
 // either pre-compile a top-level `Lilac.start` call into the bundle
-// or use a `loadIrep` of a small pre-compiled boot stub themselves.
+// or use a `loadBytecode` of a small pre-compiled boot stub themselves.
 
 export { createVM } from "@takahashim/mruby-wasm-js";
 import { createVM } from "@takahashim/mruby-wasm-js";
@@ -35,7 +35,7 @@ const DEFAULT_WASM_URL = new URL("./lilac.wasm", import.meta.url);
  *   this variant has no runtime parser, so `source` / `script` paths
  *   are rejected.
  * @param {(vm: any) => void | Promise<void>} [opts.onReady]
- *   Callback fired after `loadIrep` returns (boot is embedded in the
+ *   Callback fired after `loadBytecode` returns (boot is embedded in the
  *   bytecode for this variant — see file-level doc). Receives the VM.
  * @returns {Promise<any>} resolved with the VM.
  */
@@ -67,7 +67,7 @@ export async function boot(opts = {}) {
     opts.bytecode instanceof Uint8Array
       ? opts.bytecode
       : new Uint8Array(opts.bytecode);
-  vm.loadIrep(bytes);
+  vm.loadBytecode(bytes);
 
   // No `vm.eval("Lilac.start")` here: the compiled wasm has no
   // parser, so `Lilac.start` must be present at the tail of the
