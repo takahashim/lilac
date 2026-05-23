@@ -11,6 +11,12 @@ export interface BootOptions {
   wasm?: string | URL;
   /** Pre-compiled mruby bytecode. Mutually exclusive with `source` / `script`. */
   bytecode?: Uint8Array | ArrayBuffer;
+  /**
+   * Pre-compiled plug-in bytecode (e.g. produced by `lilac plugin-build`).
+   * Loaded in order, before the main source/bytecode, so
+   * `register_directive` calls take effect before user code runs.
+   */
+  plugins?: ReadonlyArray<Uint8Array | ArrayBuffer>;
   /** Ruby source string to evaluate. Mutually exclusive with `bytecode` / `script`. */
   source?: string;
   /**

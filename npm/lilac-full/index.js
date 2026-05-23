@@ -31,6 +31,11 @@ const DEFAULT_SCRIPT_SELECTOR = "script[type='text/ruby']";
  * @param {Uint8Array | ArrayBuffer} [opts.bytecode]
  *   Pre-compiled mruby bytecode (`.mrb`). Mutually exclusive with
  *   `source` / `script`.
+ * @param {Array<Uint8Array | ArrayBuffer>} [opts.plugins]
+ *   Pre-compiled plug-in bytecode (e.g. produced by `lilac plugin-build`).
+ *   Loaded **in order, before** the main source/bytecode so
+ *   `register_directive` calls take effect before user code runs.
+ *   See decisions §24.
  * @param {string} [opts.source]
  *   Ruby source string to evaluate. Mutually exclusive with
  *   `bytecode` / `script`.
@@ -57,6 +62,18 @@ export async function boot(opts = {}) {
   }
 
   const vm = await createVM({ wasm: opts.wasm || DEFAULT_WASM_URL });
+
+  // Plug-ins first: their `register_directive` calls must run before
+  // user code so `scan_extensions` (and the full scanner's tag/collect
+  // hooks) see them at mount time.
+  if (opts.plugins !== undefined) {
+    if (!Array.isArray(opts.plugins)) {
+      throw new TypeError("boot: `plugins` must be an array of bytecode buffers");
+    }
+    for (const p of opts.plugins) {
+      vm.loadBytecode(p instanceof Uint8Array ? p : new Uint8Array(p));
+    }
+  }
 
   if (opts.bytecode !== undefined) {
     const bytes =

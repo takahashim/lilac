@@ -34,6 +34,11 @@ const DEFAULT_WASM_URL = new URL("./lilac.wasm", import.meta.url);
  *   Pre-compiled mruby bytecode produced by `lilac build`. Required —
  *   this variant has no runtime parser, so `source` / `script` paths
  *   are rejected.
+ * @param {Array<Uint8Array | ArrayBuffer>} [opts.plugins]
+ *   Pre-compiled plug-in bytecode (e.g. produced by `lilac plugin-build`).
+ *   Loaded **in order, before** `bytecode` so `register_directive` calls
+ *   take effect before user component code mounts. See decisions §24
+ *   for the plug-in distribution model.
  * @param {(vm: any) => void | Promise<void>} [opts.onReady]
  *   Callback fired after `loadBytecode` returns (boot is embedded in the
  *   bytecode for this variant — see file-level doc). Receives the VM.
@@ -62,6 +67,17 @@ export async function boot(opts = {}) {
   }
 
   const vm = await createVM({ wasm: opts.wasm || DEFAULT_WASM_URL });
+
+  // Plug-ins first: their `register_directive` calls must run before
+  // user component code so `scan_extensions` sees them at mount time.
+  if (opts.plugins !== undefined) {
+    if (!Array.isArray(opts.plugins)) {
+      throw new TypeError("boot: `plugins` must be an array of bytecode buffers");
+    }
+    for (const p of opts.plugins) {
+      vm.loadBytecode(p instanceof Uint8Array ? p : new Uint8Array(p));
+    }
+  }
 
   const bytes =
     opts.bytecode instanceof Uint8Array
