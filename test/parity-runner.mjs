@@ -19,11 +19,19 @@ import { join } from "node:path";
 
 const REPO   = "/Users/maki/git/lilac";
 const MWR    = process.env.MRUBY_WASM_RUNTIME_PATH || "/Users/maki/git/mruby-wasm-runtime";
-const FULL_WASM     = `${REPO}/build/lilac-full.release.wasm`;
-const COMPILED_WASM = `${REPO}/build/lilac-compiled.release.wasm`;
+// Default to release wasms (matches CI), but allow env override so
+// contributors can iterate without paying the release rebuild cost.
+const FULL_WASM     = process.env.LILAC_FULL_WASM     || `${REPO}/build/lilac-full.release.wasm`;
+const COMPILED_WASM = process.env.LILAC_COMPILED_WASM || `${REPO}/build/lilac-compiled.release.wasm`;
 const FIXTURES_DIR  = `${REPO}/test/parity-fixtures`;
 const LILAC_BIN     = `${REPO}/cli/exe/lilac`;
 const CLI_GEMFILE   = `${REPO}/cli/Gemfile`;
+// Plug-in bytecode bundles available to fixtures. The compiled wasm
+// no longer links these gems directly (decisions §24) — the parity
+// runner reproduces the production `boot({ plugins })` flow by
+// pre-loading the .mrb before the user app's own bytecode. Built by
+// `make lilac-plugin-extras`.
+const EXTRAS_MRB = `${REPO}/npm/lilac-plugin-extras/extras.mrb`;
 
 // Per-fixture scenario. Each entry returns:
 //   { steps: Array<Step>,          // sequence of actions to perform
@@ -91,6 +99,20 @@ const SCENARIOS = {
     snapshot: (doc) => doc.querySelector('[data-component="login-form"]').outerHTML,
   },
 
+  extras: {
+    component_selector: '[data-component="tooltip-widget"]',
+    // The compiled wasm has no extras gem linked — runtime plug-in load
+    // is the only path. Full wasm still ships extras, so loading the
+    // .mrb only on compiled keeps both paths exercised symmetrically.
+    plugins: [EXTRAS_MRB],
+    steps: [
+      { label: "initial mount (first hint)" },
+      { label: "click toggle (second hint)", run: (doc) => doc.querySelector('[data-ref="toggle"]').click() },
+      { label: "click toggle (first hint)",  run: (doc) => doc.querySelector('[data-ref="toggle"]').click() },
+    ],
+    snapshot: (doc) => doc.querySelector('[data-component="tooltip-widget"]').outerHTML,
+  },
+
   list: {
     component_selector: '[data-component="tag-list"]',
     steps: [
@@ -156,12 +178,19 @@ async function loadFull(createVM, dist) {
   return vm;
 }
 
-async function loadCompiled(createVM, distDir) {
+async function loadCompiled(createVM, distDir, pluginMrbPaths = []) {
   const files = await readdir(join(distDir, "dist"));
   const mrbFile = files.find((f) => f.endsWith(".mrb"));
   if (!mrbFile) throw new Error(`no .mrb in ${distDir}/dist`);
   const bytecode = new Uint8Array(await readFile(join(distDir, "dist", mrbFile)));
   const vm = await createVM({ wasm: `file://${COMPILED_WASM}` });
+  // Pre-load plug-in bytecode before user code so `register_directive`
+  // calls take effect before component mount. Mirrors the production
+  // `boot({ plugins })` path in `npm/lilac-compiled/index.js`.
+  for (const pluginPath of pluginMrbPaths) {
+    const pluginBytes = new Uint8Array(await readFile(pluginPath));
+    vm.loadBytecode(pluginBytes);
+  }
   vm.loadBytecode(bytecode);
   return vm;
 }
@@ -221,7 +250,7 @@ async function runFixture(fixtureName, createVM) {
   await sleep(50);
 
   const compiledDoc = await freshDom(mountHtml);
-  const compiledVm  = await loadCompiled(createVM, compiledDir);
+  const compiledVm  = await loadCompiled(createVM, compiledDir, scenario.plugins || []);
   await sleep(50);
 
   for (const step of scenario.steps) {

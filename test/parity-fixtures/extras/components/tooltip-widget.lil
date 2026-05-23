@@ -1,0 +1,18 @@
+<template>
+  <div data-component="tooltip-widget">
+    <button data-ref="btn" data-tooltip="@hint">Hover me</button>
+    <button data-ref="toggle">Toggle hint</button>
+  </div>
+</template>
+<script type="text/ruby">
+class TooltipWidget < Lilac::Component
+  def setup
+    @hint = signal("first hint")
+    refs.toggle.on(:click) do
+      @hint.update { |t| t == "first hint" ? "second hint" : "first hint" }
+    end
+  end
+end
+Lilac.register "TooltipWidget", TooltipWidget
+Lilac.start
+</script>
