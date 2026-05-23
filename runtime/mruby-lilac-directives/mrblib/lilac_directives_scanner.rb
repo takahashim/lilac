@@ -33,6 +33,15 @@ module Lilac
       # `:default` is everything else.
       PHASES = %i[pre default].freeze
 
+      # Built-in directive kinds that cannot be overridden by extensions.
+      # Includes both the always-on built-ins and the form gem's
+      # currently-registered kinds (form/field/button) so plug-ins can't
+      # silently take them over.
+      RESERVED_NAMES = %w[
+        text unsafe-html bind show hide each key class component
+        on attr css form field button
+      ].freeze
+
       class << self
         def register_directive(pattern:, kind:, captures_name: false, phase: :default, &dispatch)
           raise ArgumentError, "block required" unless dispatch
@@ -40,6 +49,69 @@ module Lilac
           EXTENSIONS[:directives][kind] = {
             pattern: pattern, captures_name: captures_name,
             phase: phase, dispatch: dispatch
+          }
+        end
+
+        # Convention-based registration: takes a kebab-case `name` and
+        # an explicit `handler:` module. Dispatch routes to
+        # `handler.hook_<snake_name>(scanner, raw_value, el, item)` and
+        # validation metadata (value:/allowed_tags:/conflicts_with:/
+        # iteration:) is enforced before the handler runs. See
+        # `lilac-proposals.md` "Directive plug-in 機構".
+        def register_named_directive(name, handler:,
+                                     value: :reactive,
+                                     allowed_tags: nil,
+                                     conflicts_with: [],
+                                     iteration: :both)
+          raise ArgumentError, "handler: required" unless handler
+          if (err = Validation.check_name_format(name))
+            raise ArgumentError, err
+          end
+          kind = name.to_sym
+          if RESERVED_NAMES.include?(name.to_s)
+            raise Lilac::Error,
+                  "directive name #{name.inspect} is reserved (built-in directive)"
+          end
+          if EXTENSIONS[:directives].key?(kind)
+            raise Lilac::Error,
+                  "directive #{name.inspect} is already registered"
+          end
+          unless Validation::VALUE_MODES.include?(value)
+            raise ArgumentError, "unknown value: mode #{value.inspect}"
+          end
+          unless Validation::ITERATION_MODES.include?(iteration)
+            raise ArgumentError, "unknown iteration: mode #{iteration.inspect}"
+          end
+
+          method_sym = "hook_#{name.to_s.tr("-", "_")}".to_sym
+          pattern = /\Adata-#{Regexp.escape(name.to_s)}\z/
+          label = "data-#{name}"
+
+          dispatch = lambda do |scanner, _name_arg, raw_value, el, item, descriptor|
+            if (err = Validation.check_value(raw_value, value))
+              raise Lilac::Error, "#{label}: #{err}"
+            end
+            if (err = Validation.check_iteration(!item.nil?, iteration))
+              raise Lilac::Error, "#{label}: #{err}"
+            end
+            tag = el[:tagName].to_s.downcase
+            if (err = Validation.check_allowed_tags(tag, allowed_tags))
+              raise Lilac::Error, "#{label}: #{err}"
+            end
+            if value == :custom && handler.respond_to?("validate_#{name.to_s.tr("-", "_")}")
+              handler.public_send("validate_#{name.to_s.tr("-", "_")}".to_sym, raw_value)
+            end
+            handler.public_send(method_sym, scanner, raw_value, el, item)
+          end
+
+          EXTENSIONS[:directives][kind] = {
+            pattern: pattern, captures_name: false,
+            phase: :default, dispatch: dispatch,
+            metadata: {
+              name: name.to_s, handler: handler, method: method_sym,
+              value: value, allowed_tags: allowed_tags,
+              conflicts_with: conflicts_with, iteration: iteration,
+            }
           }
         end
 

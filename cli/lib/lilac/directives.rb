@@ -16,3 +16,4 @@ require_relative "directives/grammar_extra" # build-time-only predicates (class_
 require_relative "directives/class_parser"
 require_relative "directives/compat_rules" # COLLISION_PAIRS SSOT, consumed by compat.rb
 require_relative "directives/compat"
+require_relative "directives/validation" # diff-0 pair: predicates for register_named_directive metadata

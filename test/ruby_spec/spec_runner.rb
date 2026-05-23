@@ -111,6 +111,7 @@ class SpecRunner
     "runtime/mruby-lilac-directives/wasm_spec/test_directive_text_runtime.rb",
     "runtime/mruby-lilac-directives/wasm_spec/test_scanner_walk_runtime.rb",
     "runtime/mruby-lilac-directives/wasm_spec/test_smoke_runtime.rb",
+    "runtime/mruby-lilac-directives/wasm_spec/test_register_named_directive.rb",
     # Session 16-17 unlock — fetch polyfill (FetchFn/Response/Headers) +
     # encodeURIComponent + Array.from + 多名前 stub map + setTimeout
     # 経由の external abort pattern recognition

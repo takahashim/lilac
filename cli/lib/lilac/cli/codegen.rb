@@ -40,6 +40,11 @@ module Lilac
       # `emit_directive`; extensions handle any kind not matched there.
       EMITTERS = {}
 
+      # Kinds registered via the convention API (`register_named_directive`)
+      # are tracked separately so scope bodies that include them can emit
+      # the `__scanner` prologue (a single Scanner allocation per scope).
+      NAMED_DIRECTIVE_KINDS = []
+
       class << self
         def register_emitter(kind, &emitter)
           raise ArgumentError, "block required" unless emitter
@@ -48,6 +53,20 @@ module Lilac
 
         def emitter_for(kind)
           EMITTERS[kind]
+        end
+
+        # Register a named-directive emitter from a `PluginDirectiveSpec`.
+        # Wraps validation (via `Lilac::Directives::Validation`) plus a
+        # `Foo.hook_name(__scanner, raw_value, ref.to_js, item)` emit.
+        def register_named_directive_emitter(spec)
+          NAMED_DIRECTIVE_KINDS << spec.kind unless NAMED_DIRECTIVE_KINDS.include?(spec.kind)
+          register_emitter(spec.kind) do |codegen, directive, context|
+            codegen.send(:emit_named_directive, spec, directive, context)
+          end
+        end
+
+        def named_directive?(kind)
+          NAMED_DIRECTIVE_KINDS.include?(kind)
         end
       end
 
@@ -170,7 +189,14 @@ module Lilac
       private
 
       def build_scope_body(directives_in_scope, context)
-        directives_in_scope.flat_map { |d| emit_directive(d, context) }.compact
+        body = directives_in_scope.flat_map { |d| emit_directive(d, context) }.compact
+        # If any directive in this scope is a named (plug-in) directive,
+        # emit a one-line scanner allocation at the top so all hook
+        # calls share the same scanner instance.
+        if directives_in_scope.any? { |d| Codegen.named_directive?(d.kind) }
+          body.unshift("__scanner = Lilac::Directives::Scanner.new(self)")
+        end
+        body
       end
 
       def emit_directive(directive, context)
@@ -217,6 +243,56 @@ module Lilac
       # `nil` lets `flat_map.compact` drop it cleanly.
       def emit_component(_directive)
         nil
+      end
+
+      # Emit code for a directive registered via the convention API
+      # (`Scanner.register_named_directive`). Runs build-time validation
+      # (mirroring runtime checks via `Lilac::Directives::Validation`)
+      # and emits a direct call to `<handler>.hook_<name>` so both
+      # paths converge on the same method.
+      def emit_named_directive(spec, directive, context)
+        label = "data-#{spec.name}"
+        raw = directive.value.to_s
+
+        check_named_value!(label, raw, spec, directive)
+        check_named_iteration!(label, spec, directive)
+        check_named_allowed_tags!(label, spec, directive)
+
+        ref_expr = "#{context.refs_expr}.#{directive.ref_id}.to_js"
+        item_expr = context.in_iteration ? "it" : "nil"
+        [
+          "# #{@file}:#{directive.line} — data-#{spec.name}=#{raw.inspect}",
+          "#{spec.handler_constant}.#{spec.method_name}(__scanner, #{raw.inspect}, #{ref_expr}, #{item_expr})",
+        ]
+      end
+
+      def check_named_value!(label, raw, spec, directive)
+        return if spec.value_mode == :custom # deferred to runtime
+        err = Lilac::Directives::Validation.check_value(raw, spec.value_mode)
+        return unless err
+        raise Error.new(
+          "#{label}: #{err}",
+          at: directive.source_location(@file),
+        )
+      end
+
+      def check_named_iteration!(label, spec, directive)
+        in_iteration = !directive.scope_id.nil?
+        err = Lilac::Directives::Validation.check_iteration(in_iteration, spec.iteration)
+        return unless err
+        raise Error.new(
+          "#{label}: #{err}",
+          at: directive.source_location(@file),
+        )
+      end
+
+      def check_named_allowed_tags!(label, spec, directive)
+        err = Lilac::Directives::Validation.check_allowed_tags(directive.element_tag, spec.allowed_tags)
+        return unless err
+        raise Error.new(
+          "#{label}: #{err}",
+          at: directive.source_location(@file),
+        )
       end
 
       # data-text="@s" → `bind refs.lilN, text: @s`. Value must be
