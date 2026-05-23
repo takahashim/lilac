@@ -33,75 +33,19 @@ module Lilac
       # `:default` is everything else.
       PHASES = %i[pre default].freeze
 
-      # Built-in directive kinds that cannot be overridden by extensions.
-      # These are dispatched via the `dispatch` case statement (not via
-      # the EXTENSIONS table), so they wouldn't trigger the duplicate-
-      # registration check on their own. The form gem's directives
-      # (form/field/button) are NOT here — form registers them via the
-      # same plug-in API as third-party plug-ins, so duplicate-registration
-      # protection comes from the EXTENSIONS check.
-      RESERVED_NAMES = %w[
-        text unsafe-html bind show hide each key class component
-        on attr css
-      ].freeze
-
       class << self
-        # Convention-based registration: takes a kebab-case `name` and
-        # an explicit `handler:` module. Dispatch routes to
-        # `handler.hook_<snake_name>(scanner, raw_value, el, item)`.
-        # Value validation is left to the hook body (errors raised
-        # there route through `Lilac.logger.error` at mount time —
-        # mirroring how built-in directive value errors surface).
+        # Register a plug-in directive. `pattern:` is the attribute-name
+        # regex (e.g. `/\Adata-tooltip\z/`), `kind:` is the Symbol used
+        # internally to dispatch. `phase: :pre` runs the directive before
+        # `:default` directives on the same element. The dispatch block
+        # signature is `(scanner, name, raw_value, el, item, descriptor)`.
         # See decisions §23.
-        #
-        # `phase:` controls when the directive dispatches relative to
-        # other directives on the same element:
-        #   - `:default` (default) — runs in DOM order alongside built-in
-        #     directives like data-text / data-on-X
-        #   - `:pre` — runs before `:default` directives on the same
-        #     element. Used by directives that other directives depend
-        #     on (e.g., form's :field declares state that data-text
-        #     references later).
-        NAME_PATTERN = /\A[a-z][a-z0-9]*(-[a-z0-9]+)*\z/
-
-        def register_named_directive(name, handler:, phase: :default)
-          raise ArgumentError, "handler: required" unless handler
-          unless PHASES.include?(phase)
-            raise ArgumentError,
-                  "unknown phase #{phase.inspect} (expected one of #{PHASES.inspect})"
-          end
-          name_str = name.to_s
-          if name_str.start_with?("data-")
-            raise ArgumentError,
-                  "directive name must omit the `data-` prefix " \
-                  "(register #{name_str.sub(/\Adata-/, "").inspect} not #{name_str.inspect})"
-          end
-          unless NAME_PATTERN.match?(name_str)
-            raise ArgumentError,
-                  "directive name must be kebab-case lowercase " \
-                  "([a-z][a-z0-9-]*) — got #{name.inspect}"
-          end
-          kind = name.to_sym
-          if RESERVED_NAMES.include?(name_str)
-            raise Lilac::Error,
-                  "directive name #{name.inspect} is reserved (built-in directive)"
-          end
-          if EXTENSIONS[:directives].key?(kind)
-            raise Lilac::Error,
-                  "directive #{name.inspect} is already registered"
-          end
-
-          method_sym = "hook_#{name_str.tr("-", "_")}".to_sym
-          pattern = /\Adata-#{Regexp.escape(name_str)}\z/
-
-          dispatch = lambda do |scanner, _name_arg, raw_value, el, item, _descriptor|
-            handler.public_send(method_sym, scanner, raw_value, el, item)
-          end
-
+        def register_directive(pattern:, kind:, captures_name: false, phase: :default, &dispatch)
+          raise ArgumentError, "block required" unless dispatch
+          raise ArgumentError, "unknown phase #{phase.inspect}" unless PHASES.include?(phase)
           EXTENSIONS[:directives][kind] = {
-            pattern: pattern, captures_name: false,
-            phase: phase, dispatch: dispatch,
-            metadata: { name: name_str, handler: handler, method: method_sym },
+            pattern: pattern, captures_name: captures_name,
+            phase: phase, dispatch: dispatch
           }
         end
 
@@ -194,13 +138,50 @@ module Lilac
         end
       end
 
+      # Walk subtree dispatching ONLY extension directives (kinds
+      # registered via `register_directive`). Built-in kinds in
+      # DIRECTIVE_PATTERNS are skipped — the assumption is that CLI
+      # codegen has already emitted bindings for them. `except:` kinds
+      # are also skipped (used by codegen to filter out extensions it
+      # already hand-tuned, e.g. form's :field / :button / :form).
+      #
+      # Used by codegen-emitted `bind_template_hook` as the runtime
+      # fallthrough for plug-in directives the CLI doesn't know about
+      # (see decisions §23). NOTE: does NOT fire `tag_hooks` or
+      # `collect_hooks` — those are only meaningful in `lilac-full`
+      # mode via the full `scan_subtree` path. Hand-tuned CLI emitters
+      # (e.g. form_extension.rb) handle their tag/collect-equivalent
+      # logic via direct codegen.
+      def scan_extensions(node_js, item: nil, except: [])
+        return if EXTENSIONS[:directives].empty?
+        records = []
+        collect_subtree(node_js, item: item, records: records,
+                        extensions_only: true, except: except)
+        PHASES.each do |phase|
+          records.each { |rec| dispatch_extensions_only(rec, phase: phase) }
+        end
+      end
+
+      # Like `dispatch_record` but skips tag_hooks (those belong to the
+      # full `scan_subtree` path used in lilac-full mode).
+      def dispatch_extensions_only(rec, phase:)
+        return unless rec
+        rec[:directives].each do |kind, name, raw_value|
+          next if rec[:skip].include?(kind)
+          next unless phase_matches?(phase, kind)
+          dispatch(kind, name, raw_value, rec[:el], rec[:item], rec[:descriptor])
+        end
+      rescue Lilac::Error => e
+        Lilac.logger.error("directive", e, source: @host)
+      end
+
       # Build records bottom-up via DFS. Stops descent at:
       #   - data-each elements (their body lives in a snapshot template,
       #     not the live DOM; dispatch_each in phase B handles per-row scan)
       #   - nested `data-component` subtrees (other components run their
       #     own Scanner pass)
-      def collect_subtree(node_js, item:, records:)
-        rec = build_record(node_js, item)
+      def collect_subtree(node_js, item:, records:, extensions_only: false, except: [])
+        rec = build_record(node_js, item, extensions_only: extensions_only, except: except)
         records << rec if rec
         return if rec && rec[:directives].any? { |k, _, _| k == :each }
         if node_js != @host.root.to_js && node_js.call(:hasAttribute, "data-component").js_bool
@@ -208,13 +189,14 @@ module Lilac
           # element before it mounts. The child component's Props.build will
           # then see static literal attribute values that already incorporate
           # the parent's `it` / `@ivar` context.
-          resolve_props(node_js, item)
+          resolve_props(node_js, item) unless extensions_only
           return
         end
-        collect_children(node_js, item: item, records: records)
+        collect_children(node_js, item: item, records: records,
+                         extensions_only: extensions_only, except: except)
       end
 
-      def collect_children(node_js, item:, records:)
+      def collect_children(node_js, item:, records:, extensions_only: false, except: [])
         stack = [[node_js, item]]
         until stack.empty?
           current, current_item = stack.pop
@@ -225,11 +207,11 @@ module Lilac
             child = children[i]
             if child.call(:hasAttribute, "data-component").js_bool
               # Same pre-resolution rationale as collect_subtree's guard.
-              resolve_props(child, current_item)
+              resolve_props(child, current_item) unless extensions_only
               next
             end
 
-            rec = build_record(child, current_item)
+            rec = build_record(child, current_item, extensions_only: extensions_only, except: except)
             records << rec if rec
 
             # data-each owns descent into its body (template, not live DOM).
@@ -287,24 +269,42 @@ module Lilac
       # Returns nil if the element has no directives AND no tag hook
       # exists for it. Tag hooks let extensions (e.g. form's submit
       # wire) attach to bare elements without a directive marker.
-      def build_record(el, item)
+      def build_record(el, item, extensions_only: false, except: [])
         tag = el[:tagName].to_s.downcase
         attrs = attribute_snapshot(el)
         descriptor = element_descriptor(el, tag)
 
-        Scanner.collect_hooks.each { |h| h.call(self, tag, attrs, descriptor) }
+        # collect_hooks belong to the lilac-full scan path. In
+        # extensions_only mode (= codegen runtime fallthrough), the
+        # CLI handled them via hand-tuned emit (form_extension.rb).
+        unless extensions_only
+          Scanner.collect_hooks.each { |h| h.call(self, tag, attrs, descriptor) }
+        end
 
-        directives = extract_directives(el)
-        has_tag_hook = !Scanner.tag_hooks_for(tag, phase: :pre).empty? ||
-                       !Scanner.tag_hooks_for(tag, phase: :default).empty?
+        directives = extract_directives(el, extensions_only: extensions_only)
+        directives = directives.reject { |k, _, _| except.include?(k) } unless except.empty?
+        has_tag_hook = if extensions_only
+                         false
+                       else
+                         !Scanner.tag_hooks_for(tag, phase: :pre).empty? ||
+                           !Scanner.tag_hooks_for(tag, phase: :default).empty?
+                       end
         return nil if directives.empty? && !has_tag_hook
 
-        skip = directives.empty? ? [] : Compat.check!(
-          directives,
-          tag_name: tag,
-          attrs: attrs,
-          element_descriptor: descriptor,
-        )
+        # Compat collisions cover built-in pairs; in extensions_only mode
+        # the built-in directives aren't in the records, so collisions
+        # between built-ins and extensions are already handled by codegen
+        # at build time. Skip the runtime collision check.
+        skip = if extensions_only || directives.empty?
+                 []
+               else
+                 Compat.check!(
+                   directives,
+                   tag_name: tag,
+                   attrs: attrs,
+                   element_descriptor: descriptor,
+                 )
+               end
 
         {
           el: el, item: item, tag: tag, attrs: attrs,
@@ -345,14 +345,14 @@ module Lilac
         hooks.each { |h| h[:block].call(self, rec[:el], rec[:attrs], rec[:descriptor]) }
       end
 
-      def extract_directives(el)
+      def extract_directives(el, extensions_only: false)
         names_js = el.call(:getAttributeNames)
         n = names_js[:length].to_i
         out = []
         i = 0
         while i < n
           attr_name = names_js[i].to_s
-          matched = DIRECTIVE_PATTERNS.find { |pattern, _, _| pattern.match(attr_name) }
+          matched = extensions_only ? nil : DIRECTIVE_PATTERNS.find { |pattern, _, _| pattern.match(attr_name) }
           if matched
             pattern, kind, captures_name = matched
             m = pattern.match(attr_name)
@@ -782,16 +782,5 @@ module Lilac
         Lilac::RefElement.new(el_js, @host)
       end
     end
-  end
-end
-
-# Component-side lazy Scanner accessor — used by CLI codegen's hook
-# call sites (`Lilac::Foo.hook_X(scanner, ...)`) and available to
-# user code in `setup` for ad-hoc directive operations. Memoised per
-# component instance so plug-in directives across multiple scopes share
-# one Scanner (one Evaluator allocation, one extension_state hash).
-class Lilac::Component
-  def scanner
-    @_directive_scanner ||= Lilac::Directives::Scanner.new(self)
   end
 end

@@ -38,6 +38,9 @@ module Lilac
       # `(codegen, directive, context) -> Array<String> | nil`. Built-in
       # `emit_*` methods are tried first via the `case` in
       # `emit_directive`; extensions handle any kind not matched there.
+      # Only used by hand-tuned CLI emitters (currently: form's
+      # `form_extension.rb`). Third-party plug-ins are handled at mount
+      # time via `Scanner#scan_extensions` (see decisions §23).
       EMITTERS = {}
 
       class << self
@@ -48,17 +51,6 @@ module Lilac
 
         def emitter_for(kind)
           EMITTERS[kind]
-        end
-
-        # Register a named-directive emitter from a `PluginDirectiveSpec`.
-        # Generated code shape:
-        #   `Foo.hook_name(scanner, raw_value, ref.to_js, item)`
-        # where `scanner` is the lazy `Lilac::Component#scanner` accessor
-        # (one Scanner per component-mount, shared across hook calls).
-        def register_named_directive_emitter(spec)
-          register_emitter(spec.kind) do |codegen, directive, context|
-            codegen.send(:emit_named_directive, spec, directive, context)
-          end
         end
       end
 
@@ -181,7 +173,26 @@ module Lilac
       private
 
       def build_scope_body(directives_in_scope, context)
-        directives_in_scope.flat_map { |d| emit_directive(d, context) }.compact
+        body = directives_in_scope.flat_map { |d| emit_directive(d, context) }.compact
+        body.concat(scan_extensions_trailer(context))
+      end
+
+      # Emit a trailing call to `Scanner#scan_extensions` so any
+      # plug-in directive (registered at runtime via
+      # `Lilac::Directives::Scanner.register_directive`) is dispatched
+      # at mount time. The `except:` list filters out kinds the codegen
+      # already hand-tuned (form's :form / :field / :button via
+      # `form_extension.rb`); third-party plug-ins like
+      # `mruby-lilac-extras`' :tooltip / :autofocus go through the
+      # scan path. See decisions §23.
+      def scan_extensions_trailer(context)
+        except = Codegen::EMITTERS.keys
+        root_expr = context.in_iteration ? "t.root.to_js" : "root.to_js"
+        item_expr = context.in_iteration ? ", item: it" : ""
+        except_expr = except.empty? ? "" : ", except: #{except.inspect}"
+        [
+          "Lilac::Directives::Scanner.new(self).scan_extensions(#{root_expr}#{item_expr}#{except_expr})",
+        ]
       end
 
       def emit_directive(directive, context)
@@ -230,21 +241,6 @@ module Lilac
         nil
       end
 
-      # Emit code for a directive registered via the convention API
-      # (`Scanner.register_named_directive`). Emits a direct call to
-      # `<handler>.hook_<name>` so both paths converge on the same
-      # method. Value validation lives in the hook body — any
-      # `raise Lilac::Error` there surfaces at mount time via
-      # `Lilac.logger.error` (mirroring built-in directive behaviour).
-      def emit_named_directive(spec, directive, context)
-        raw = directive.value.to_s
-        ref_expr = "#{context.refs_expr}.#{directive.ref_id}.to_js"
-        item_expr = context.in_iteration ? "it" : "nil"
-        [
-          "# #{@file}:#{directive.line} — data-#{spec.name}=#{raw.inspect}",
-          "#{spec.handler_constant}.#{spec.method_name}(scanner, #{raw.inspect}, #{ref_expr}, #{item_expr})",
-        ]
-      end
 
       # data-text="@s" → `bind refs.lilN, text: @s`. Value must be
       # ivar or bare ident (read-only); arbitrary expressions are rejected

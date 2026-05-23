@@ -173,10 +173,13 @@ class TestDirectiveCodegen < Minitest::Test
 
   # ---- data-component ---------------------------------------------
 
-  def test_data_component_emits_nothing
-    # Only a component marker should leave the build output untouched.
+  def test_data_component_emits_extension_trailer_only
+    # `data-component` alone produces no built-in binds, but the
+    # generated `bind_template_hook` trails with `scan_extensions` so
+    # plug-in directives on child elements get dispatched (see §23).
     out = gen([component])
-    assert_equal "", out
+    assert_includes out, "scan_extensions(root.to_js"
+    refute_includes out, "bind refs."
   end
 
   def test_data_component_mixed_with_text_emits_only_text

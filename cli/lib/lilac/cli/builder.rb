@@ -9,35 +9,6 @@ require_relative 'component_name'
 require_relative 'cross_ref_linter'
 require_relative 'bytecode_builder'
 require_relative 'form_extension'
-require_relative 'plugin_scanner'
-
-# Auto-wire convention-based plug-in directives from runtime mrblib.
-# Scans `runtime/mruby-lilac-*/mrblib/**/*.rb` for
-# `register_named_directive(...)` calls (see proposals.md "Directive
-# plug-in 機構") and registers TemplateAST patterns + Codegen emitters
-# automatically. Build_config defaults to `lilac-full.rb` since that's
-# the variant the CLI builder normally produces against; the resulting
-# emitter set is variant-independent because hook-method-call codegen
-# is the same regardless of compile/full target.
-default_build_config = File.expand_path(
-  "../../../../build_config/lilac-full.rb", __dir__
-)
-if File.exist?(default_build_config)
-  Lilac::CLI::PluginScanner.scan(default_build_config).each do |spec|
-    Lilac::CLI::TemplateAST.register_directive(
-      pattern: /\Adata-#{Regexp.escape(spec.name)}\z/,
-      kind: spec.kind,
-    )
-    # Skip when a hand-tuned CLI emitter has already been registered for
-    # this kind (e.g. form_extension.rb's emit_form/field/button). The
-    # plug-in's runtime hook is still callable through the runtime
-    # Scanner — only the CLI codegen path uses the existing emitter as
-    # an optimization (mirrors how built-in directives like data-text
-    # bypass the hook abstraction at codegen time).
-    next if Lilac::CLI::Codegen.emitter_for(spec.kind)
-    Lilac::CLI::Codegen.register_named_directive_emitter(spec)
-  end
-end
 
 module Lilac
   module CLI

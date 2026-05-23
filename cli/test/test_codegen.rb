@@ -28,10 +28,11 @@ class TestCodegen < Minitest::Test
     assert_equal "", gen("counter", [])
   end
 
-  def test_all_no_op_directives_yield_empty_output
-    # `data-component` alone has no codegen target — only the runtime
-    # autoregister consumes it. The emitter should suppress the module
-    # entirely instead of emitting an empty `bind_template_hook`.
+  def test_all_no_op_directives_still_emit_extension_trailer
+    # `data-component` alone has no codegen target, but the generated
+    # `bind_template_hook` still trails with a `scan_extensions` call
+    # so plug-in directives (e.g. `data-tooltip` on a child) get
+    # dispatched at mount time. See decisions §23.
     component_directive = Lilac::CLI::Directive.new(
       kind: :component,
       name: nil,
@@ -40,7 +41,9 @@ class TestCodegen < Minitest::Test
       line: 1,
       element_tag: "div",
     )
-    assert_equal "", gen("counter", [component_directive])
+    out = gen("counter", [component_directive])
+    assert_includes out, "module Lilac; module Bindings; module Counter"
+    assert_includes out, "scan_extensions(root.to_js"
   end
 
   def test_emits_namespaced_module_and_include

@@ -49,29 +49,11 @@ module Lilac
         end
 
         # `data-form` on a non-<form> element is a hard scope violation.
-        def validate_data_form_target!(el)
+        def validate_data_form_target!(el, descriptor)
           tag = el[:tagName].to_s.downcase
           return if tag == "form"
           raise Lilac::Error,
-                "data-form is only allowed on <form> elements (got <#{tag}>)"
-        end
-
-        # ---- named-directive hook methods ------------------------------
-        # Called from the dispatch wrapper that `register_named_directive`
-        # builds. The hook signature is (scanner, raw_value, el, item)
-        # — descriptor isn't forwarded by the named API, so the form
-        # validation messages reconstruct minimal context from `el`.
-
-        def hook_form(_scanner, _raw_value, el, _item)
-          validate_data_form_target!(el)
-        end
-
-        def hook_field(scanner, raw_value, el, _item)
-          dispatch_field(scanner, raw_value, el)
-        end
-
-        def hook_button(scanner, raw_value, el, _item)
-          dispatch_button(scanner, raw_value, el)
+                "data-form is only allowed on <form> elements (got <#{tag}>, #{descriptor})"
         end
 
         # ---- <form>: submit auto-wire -----------------------------------
@@ -249,9 +231,13 @@ end
 
 # ---- Scanner extension registrations ---------------------------------
 #
-# Placed at module-level *after* `Lilac::Form::Wiring` is fully defined
-# so the `handler:` kwarg resolves at register time without depending on
-# mrblib alphabetical load order.
+# Placed at module-level *after* `Lilac::Form::Wiring` is fully defined.
+# Form uses block-based `register_directive` directly — CLI codegen
+# hand-tunes form's emit via `cli/lib/lilac/cli/form_extension.rb`, so
+# the runtime-side block here is the path used by `lilac-full` (eval
+# of `<script type="text/ruby">`). For `lilac-compiled`, the codegen
+# output already handles form directives and `scan_extensions` skips
+# `:form` / `:field` / `:button` via the `except:` kwarg.
 
 Lilac::Directives::Scanner.register_collect_hook do |scanner, tag, attrs, descriptor|
   Lilac::Form::Wiring.validate_form_element!(scanner, tag, attrs, descriptor)
@@ -262,12 +248,20 @@ Lilac::Directives::Scanner.register_tag_hook("form", phase: :pre) do |scanner, e
   Lilac::Form::Wiring.wire_form_submit(scanner, el, attrs)
 end
 
-Lilac::Directives::Scanner.register_named_directive(
-  "form", handler: Lilac::Form::Wiring, phase: :pre
-)
-Lilac::Directives::Scanner.register_named_directive(
-  "field", handler: Lilac::Form::Wiring, phase: :pre
-)
-Lilac::Directives::Scanner.register_named_directive(
-  "button", handler: Lilac::Form::Wiring, phase: :pre
-)
+Lilac::Directives::Scanner.register_directive(
+  pattern: /\Adata-form\z/, kind: :form, phase: :pre
+) do |_scanner, _name, _raw_value, el, _item, descriptor|
+  Lilac::Form::Wiring.validate_data_form_target!(el, descriptor)
+end
+
+Lilac::Directives::Scanner.register_directive(
+  pattern: /\Adata-field\z/, kind: :field, phase: :pre
+) do |scanner, _name, raw_value, el, _item, _descriptor|
+  Lilac::Form::Wiring.dispatch_field(scanner, raw_value, el)
+end
+
+Lilac::Directives::Scanner.register_directive(
+  pattern: /\Adata-button\z/, kind: :button, phase: :pre
+) do |scanner, _name, raw_value, el, _item, _descriptor|
+  Lilac::Form::Wiring.dispatch_button(scanner, raw_value, el)
+end
