@@ -187,7 +187,7 @@ module Lilac
       # scan path. See decisions §23.
       def scan_extensions_trailer(context)
         except = Codegen::EMITTERS.keys
-        root_expr = context.in_iteration ? "t.root.to_js" : "root.to_js"
+        root_expr = context.in_iteration ? "t.to_js" : "root.to_js"
         item_expr = context.in_iteration ? ", item: it" : ""
         except_expr = except.empty? ? "" : ", except: #{except.inspect}"
         [
