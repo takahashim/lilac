@@ -48,6 +48,35 @@ module Lilac
       #
       # `class_` trailing underscore avoids shadowing Ruby's reserved
       # `class` keyword in pattern-match contexts; symbol-side only.
+      # Plug-in extension registry. Entries shaped like DIRECTIVE_PATTERNS
+      # rows but registered at runtime by feature gems (form, future).
+      # Built-in DIRECTIVE_PATTERNS is consulted first so extensions
+      # cannot shadow core directives.
+      EXTENSIONS = []
+
+      # Per-element side-effect callbacks fired during walk. Used by
+      # form to track `<form>` ancestor scopes (so data-field /
+      # data-button know which form they belong to). Each entry is
+      # { tag:, on_enter:, on_exit: } — both callbacks are optional and
+      # receive (element, scope_hash) where scope_hash is a mutable
+      # per-walk Hash extensions can stash state in.
+      ELEMENT_HOOKS = []
+
+      class << self
+        def register_directive(pattern:, kind:, captures_name: false)
+          EXTENSIONS << [pattern, kind, captures_name]
+        end
+
+        def register_element_hook(tag:, on_enter: nil, on_exit: nil)
+          ELEMENT_HOOKS << { tag: tag.to_s.downcase, on_enter: on_enter, on_exit: on_exit }
+        end
+
+        def element_hooks_for(tag)
+          tag_lower = tag.to_s.downcase
+          ELEMENT_HOOKS.select { |h| h[:tag] == tag_lower }
+        end
+      end
+
       DIRECTIVE_PATTERNS = [
         [/\Adata-text\z/,        :text,        false],
         [/\Adata-unsafe-html\z/, :unsafe_html, false],
@@ -74,7 +103,6 @@ module Lilac
         # runtime resolves scope via ancestor walk). data-field /
         # data-button get full codegen via emit_field / emit_button.
         [/\Adata-form\z/,        :form,        false],
-        [/\Adata-field\z/,       :field,       false],
         [/\Adata-button\z/,      :button,      false],
         [/\Adata-on-(.+)\z/,     :on,          true],
         [/\Adata-attr-(.+)\z/,   :attr,        true],
@@ -340,18 +368,20 @@ module Lilac
       end
 
       # Returns Array<[kind, name, value]> for every directive on `elem`.
-      # `name` is nil for non-X-family directives.
+      # `name` is nil for non-X-family directives. Built-in patterns are
+      # checked first, then extension-registered ones — extensions never
+      # shadow core directives.
       def extract_directives(elem)
         result = []
         elem.attributes.each do |attr_name, attr|
-          DIRECTIVE_PATTERNS.each do |pattern, kind, captures_name|
-            match = pattern.match(attr_name)
-            next unless match
+          match_row = DIRECTIVE_PATTERNS.find { |pattern, _, _| pattern.match(attr_name) } ||
+                      EXTENSIONS.find { |pattern, _, _| pattern.match(attr_name) }
+          next unless match_row
 
-            name = captures_name ? match[1] : nil
-            result << [kind, name, attr.value]
-            break
-          end
+          pattern, kind, captures_name = match_row
+          match = pattern.match(attr_name)
+          name = captures_name ? match[1] : nil
+          result << [kind, name, attr.value]
         end
         result
       end

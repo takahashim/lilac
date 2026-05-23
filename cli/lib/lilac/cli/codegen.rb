@@ -34,6 +34,23 @@ module Lilac
     class Codegen
       class Error < BuildError; end
 
+      # Plug-in emitter registry. Each entry: kind (Symbol) → callable
+      # `(codegen, directive, context) -> Array<String> | nil`. Built-in
+      # `emit_*` methods are tried first via the `case` in
+      # `emit_directive`; extensions handle any kind not matched there.
+      EMITTERS = {}
+
+      class << self
+        def register_emitter(kind, &emitter)
+          raise ArgumentError, "block required" unless emitter
+          EMITTERS[kind] = emitter
+        end
+
+        def emitter_for(kind)
+          EMITTERS[kind]
+        end
+      end
+
       # `refs_expr` is the Ruby expression that resolves to the Refs
       # proxy in the current emit context. `in_iteration` toggles the
       # `(it, ev)` vs `(ev)` event handler arity.
@@ -72,6 +89,11 @@ module Lilac
           emit_include: emit_include,
         ).run
       end
+
+      # Public for extension emitters that need to format source-location
+      # comments / errors in the same `<file>:<line>` shape as built-in
+      # emitters do.
+      attr_reader :file
 
       def initialize(component_name:, directives:, source_path:, emit_include: true)
         @component_name = ComponentName.new(component_name)
@@ -137,6 +159,9 @@ module Lilac
       end
 
       def emit_directive(directive, context)
+        if (ext = Codegen.emitter_for(directive.kind))
+          return Array(ext.call(self, directive, context))
+        end
         case directive.kind
         when :component
           emit_component(directive)
@@ -164,12 +189,6 @@ module Lilac
           # Paired with :each at the same ref_id and consumed by
           # emit_each via @key_map; nothing to emit here.
           nil
-        when :form
-          emit_form(directive, context)
-        when :field
-          emit_field(directive, context)
-        when :button
-          emit_button(directive, context)
         else
           # Fallback for directives not yet implemented in later
           # phases (data-arg-X). Emits a placeholder comment so the
@@ -403,78 +422,6 @@ module Lilac
           "# #{@file}:#{directive.line} — data-class=#{directive.value.inspect}",
           "bind #{context.refs_expr}.#{directive.ref_id}, class: { #{body} }",
         ]
-      end
-
-      # data-form on a <form> element → wire submit event to invoke_button(:submit).
-      # Triggered for both `<form data-form="X">` (named scope) and bare
-      # `<form>` (TemplateAST injects a synthetic :form directive with empty
-      # value to ensure we emit the wire). preventDefault + has_button?
-      # guard mirror the runtime scanner's `wire_form_submit`.
-      def emit_form(directive, context)
-        sym_literal = form_scope_literal(directive.form_scope)
-        [
-          "# #{@file}:#{directive.line} — <form> submit wire for form(#{sym_literal})",
-          "#{context.refs_expr}.#{directive.ref_id}.on(:submit) do |__ev|",
-          "  __ev.call(:preventDefault)",
-          "  __f = form(#{sym_literal})",
-          "  __f.invoke_button(:submit, __ev) if __f.has_button?(:submit)",
-          "end",
-        ]
-      end
-
-      # data-field="NAME" → resolve enclosing form, ensure field is
-      # registered (auto-register if Ruby didn't declare), bind_to the
-      # discovered form control. Mirrors runtime `Scanner#dispatch_field`
-      # minus the container-class / error-slot wiring (those land in a
-      # follow-up Phase C extension; runtime scanner remains the canonical
-      # source of those bindings).
-      def emit_field(directive, context)
-        sym = parse_form_ident!(directive, "data-field")
-        scope = form_scope_literal(directive.form_scope)
-        input_ref = directive.field_input_ref
-        unless input_ref
-          raise Error.new(
-            "data-field=#{directive.value.inspect}: no <input>, <textarea>, or " \
-            "<select> found inside the element.",
-            at: directive.source_location(@file),
-          )
-        end
-        [
-          "# #{@file}:#{directive.line} — data-field=#{directive.value.inspect} in form(#{scope})",
-          "form(#{scope}).field(#{sym.inspect}) unless form(#{scope}).has_field?(#{sym.inspect})",
-          "form(#{scope})[#{sym.inspect}].bind_to(#{context.refs_expr}.#{input_ref})",
-        ]
-      end
-
-      # data-button="NAME" → wire click event to invoke_button(:NAME).
-      # The handler raises at runtime if NAME isn't declared; CrossRefLinter
-      # also flags this at build time when the script is analyzable.
-      def emit_button(directive, context)
-        sym = parse_form_ident!(directive, "data-button")
-        scope = form_scope_literal(directive.form_scope)
-        [
-          "# #{@file}:#{directive.line} — data-button=#{directive.value.inspect} in form(#{scope})",
-          "#{context.refs_expr}.#{directive.ref_id}.on(:click) { |__ev| form(#{scope}).invoke_button(#{sym.inspect}, __ev) }",
-        ]
-      end
-
-      # Symbol literal for the emitted form name. `:default` for the
-      # implicit scope, `:NAME` otherwise.
-      def form_scope_literal(form_scope)
-        (form_scope || :default).inspect
-      end
-
-      # Validate + symbolize a bare identifier directive value for
-      # data-field / data-button.
-      def parse_form_ident!(directive, label)
-        name = directive.value.to_s.strip
-        unless Lilac::Directives::Grammar.method_ident?(name)
-          raise Error.new(
-            "#{label}=#{directive.value.inspect}: expected a bare identifier",
-            at: directive.source_location(@file),
-          )
-        end
-        name.to_sym
       end
 
       # data-each="@col" + (optional) data-key="id" →

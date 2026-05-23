@@ -17,10 +17,65 @@ module Lilac
     # `RefElement` per binding. This sidesteps the codegen's need for
     # a stable name to write into emitted Ruby.
     class Scanner
-      # FormWiring owns dispatch_field / dispatch_button / wire_form_submit
-      # and helpers. Included (not delegated) so methods share @host /
-      # @default_form_seen / @input_form_attr_warned / wrap_ref.
-      include FormWiring
+      # Extension registry for plug-in gems (form / future) to add their
+      # own directives + per-element hooks without modifying core.
+      #   :directives    — kind → { pattern, captures_name, phase, dispatch }
+      #   :tag_hooks     — tag-name → [{ phase, block }, ...] fired during
+      #                    dispatch_record on matching elements
+      #   :collect_hooks — [block, ...] fired during build_record for
+      #                    every element (e.g. <form> validation, scope
+      #                    tracking)
+      EXTENSIONS = { directives: {}, tag_hooks: {}, collect_hooks: [] }
+
+      # Phases run in this order during scan_subtree. `:pre` is for
+      # registrations that other directives can reference (e.g. form
+      # field declarations consumed by data-text `@field.error` later),
+      # `:default` is everything else.
+      PHASES = %i[pre default].freeze
+
+      class << self
+        def register_directive(pattern:, kind:, captures_name: false, phase: :default, &dispatch)
+          raise ArgumentError, "block required" unless dispatch
+          raise ArgumentError, "unknown phase #{phase.inspect}" unless PHASES.include?(phase)
+          EXTENSIONS[:directives][kind] = {
+            pattern: pattern, captures_name: captures_name,
+            phase: phase, dispatch: dispatch
+          }
+        end
+
+        def register_tag_hook(tag_name, phase: :pre, &block)
+          raise ArgumentError, "block required" unless block
+          raise ArgumentError, "unknown phase #{phase.inspect}" unless PHASES.include?(phase)
+          list = (EXTENSIONS[:tag_hooks][tag_name.to_s.downcase] ||= [])
+          list << { phase: phase, block: block }
+        end
+
+        def register_collect_hook(&block)
+          raise ArgumentError, "block required" unless block
+          EXTENSIONS[:collect_hooks] << block
+        end
+
+        def extension_for_kind(kind)
+          EXTENSIONS[:directives][kind]
+        end
+
+        def tag_hooks_for(tag_name, phase:)
+          (EXTENSIONS[:tag_hooks][tag_name.to_s.downcase] || []).select { |h| h[:phase] == phase }
+        end
+
+        def collect_hooks
+          EXTENSIONS[:collect_hooks]
+        end
+      end
+
+      attr_reader :host
+
+      # Mutable per-scan scratch space for extensions. Keyed by extension
+      # name (Symbol). Lazily initialized so plug-ins that don't need
+      # state pay nothing.
+      def extension_state
+        @extension_state ||= {}
+      end
 
       DIRECTIVE_PATTERNS = [
         [/\Adata-text\z/,        :text,        false],
@@ -38,9 +93,6 @@ module Lilac
         [/\Adata-key\z/,         :key,         false],
         [/\Adata-class\z/,       :class_,      false],
         [/\Adata-component\z/,   :component,   false],
-        [/\Adata-form\z/,        :form,        false],
-        [/\Adata-field\z/,       :field,       false],
-        [/\Adata-button\z/,      :button,      false],
         [/\Adata-on-(.+)\z/,     :on,          true],
         [/\Adata-attr-(.+)\z/,   :attr,        true],
         [/\Adata-css-(.+)\z/,    :css,         true],
@@ -49,13 +101,6 @@ module Lilac
       def initialize(host)
         @host = host
         @evaluator = Evaluator.new(host)
-        # Tracks observed plain `<form>` (no data-form) elements within this
-        # component subtree. Used by `validate_form_element!` to raise on the
-        # second occurrence (`:default` scope collision, form-spec §10.2.1).
-        @default_form_seen = false
-        # Suppresses repeated <input form="..."> warns within a single scan
-        # (warn-once policy per spec §10.2.2).
-        @input_form_attr_warned = false
       end
 
       def scan_and_bind
@@ -77,8 +122,9 @@ module Lilac
       def scan_subtree(node_js, item:)
         records = []
         collect_subtree(node_js, item: item, records: records)
-        records.each { |rec| dispatch_record(rec, phase: :a) }
-        records.each { |rec| dispatch_record(rec, phase: :b) }
+        PHASES.each do |phase|
+          records.each { |rec| dispatch_record(rec, phase: phase) }
+        end
       end
 
       # Build records bottom-up via DFS. Stops descent at:
@@ -171,23 +217,20 @@ module Lilac
 
       # Per-element record built during collection. Captures everything
       # dispatch needs so phase A / B don't have to re-extract attributes.
-      # Returns nil if the element has no directives AND isn't a `<form>`
-      # (form elements still need wire_form_submit in phase A even without
-      # any data-* directive).
+      # Returns nil if the element has no directives AND no tag hook
+      # exists for it. Tag hooks let extensions (e.g. form's submit
+      # wire) attach to bare elements without a directive marker.
       def build_record(el, item)
         tag = el[:tagName].to_s.downcase
         attrs = attribute_snapshot(el)
         descriptor = element_descriptor(el, tag)
 
-        # Immediate side-effect checks (raise / warn-once) — must happen
-        # during collection so we surface the error at the original DOM
-        # position rather than later out of context.
-        validate_form_element!(tag, attrs, descriptor) if tag == "form"
-        warn_on_form_attr(tag, attrs) if attrs.key?("form")
+        Scanner.collect_hooks.each { |h| h.call(self, tag, attrs, descriptor) }
 
         directives = extract_directives(el)
-        is_form = (tag == "form")
-        return nil if directives.empty? && !is_form
+        has_tag_hook = !Scanner.tag_hooks_for(tag, phase: :pre).empty? ||
+                       !Scanner.tag_hooks_for(tag, phase: :default).empty?
+        return nil if directives.empty? && !has_tag_hook
 
         skip = directives.empty? ? [] : Compat.check!(
           directives,
@@ -196,24 +239,20 @@ module Lilac
           element_descriptor: descriptor,
         )
 
-        # data-form on non-<form> is a hard scope violation.
-        if directives.any? { |k, _, _| k == :form } && !is_form
-          raise Lilac::Error,
-                "data-form is only allowed on <form> elements (got <#{tag}>, #{descriptor})"
-        end
-
         {
           el: el, item: item, tag: tag, attrs: attrs,
           descriptor: descriptor, directives: directives,
-          skip: skip, is_form: is_form,
+          skip: skip, has_tag_hook: has_tag_hook,
         }
       rescue Lilac::Error => e
         Lilac.logger.error("directive", e, source: @host)
         nil
       end
 
-      # Phase A: :field, :button, plus wire_form_submit on <form> elements.
-      # Phase B: every other directive in DOM order.
+      # Phase :pre runs registrations that other directives can reference
+      # (e.g. extension-owned :field / :button declarations consumed by
+      # later text/show bindings). Phase :default runs everything else
+      # in DOM order. Tag hooks fire per-phase after directive dispatch.
       def dispatch_record(rec, phase:)
         return unless rec
         rec[:directives].each do |kind, name, raw_value|
@@ -221,17 +260,22 @@ module Lilac
           next unless phase_matches?(phase, kind)
           dispatch(kind, name, raw_value, rec[:el], rec[:item], rec[:descriptor])
         end
-        wire_form_submit(rec[:el], rec[:attrs]) if phase == :a && rec[:is_form]
+        run_tag_hooks(rec, phase)
       rescue Lilac::Error => e
         Lilac.logger.error("directive", e, source: @host)
       end
 
       def phase_matches?(phase, kind)
-        if phase == :a
-          kind == :field || kind == :button
-        else
-          kind != :field && kind != :button
+        if (ext = Scanner.extension_for_kind(kind))
+          return ext[:phase] == phase
         end
+        phase == :default
+      end
+
+      def run_tag_hooks(rec, phase)
+        hooks = Scanner.tag_hooks_for(rec[:tag], phase: phase)
+        return if hooks.empty?
+        hooks.each { |h| h[:block].call(self, rec[:el], rec[:attrs], rec[:descriptor]) }
       end
 
       def extract_directives(el)
@@ -241,17 +285,35 @@ module Lilac
         i = 0
         while i < n
           attr_name = names_js[i].to_s
-          DIRECTIVE_PATTERNS.each do |pattern, kind, captures_name|
+          matched = DIRECTIVE_PATTERNS.find { |pattern, _, _| pattern.match(attr_name) }
+          if matched
+            pattern, kind, captures_name = matched
             m = pattern.match(attr_name)
-            next unless m
             name = captures_name ? m[1] : nil
             value = el.call(:getAttribute, attr_name).to_s
             out << [kind, name, value]
-            break
+          else
+            ext_kind, ext_name, ext_value = match_extension_directive(el, attr_name)
+            out << [ext_kind, ext_name, ext_value] if ext_kind
           end
           i += 1
         end
         out
+      end
+
+      # Look up an attribute name against extension-registered directive
+      # patterns. Returns the [kind, captured_name, attribute_value]
+      # triple on match, or nil triple on miss. Extensions never shadow
+      # built-in directives (the DIRECTIVE_PATTERNS check runs first).
+      def match_extension_directive(el, attr_name)
+        EXTENSIONS[:directives].each do |kind, spec|
+          m = spec[:pattern].match(attr_name)
+          next unless m
+          name = spec[:captures_name] ? m[1] : nil
+          value = el.call(:getAttribute, attr_name).to_s
+          return [kind, name, value]
+        end
+        [nil, nil, nil]
       end
 
       def attribute_snapshot(el)
@@ -281,13 +343,14 @@ module Lilac
       # ---- per-directive dispatch ---------------------------------
 
       def dispatch(kind, name, raw_value, el, item, descriptor)
+        if (ext = Scanner.extension_for_kind(kind))
+          ext[:dispatch].call(self, name, raw_value, el, item, descriptor)
+          return
+        end
         case kind
-        when :component, :key, :form
+        when :component, :key
           # data-component: handled by Registry.
           # data-key:       orphan check filtered by Compat.
-          # data-form:      scope marker; consumed during dispatch_field/button
-          #                 ancestor walks. The <form> element's submit wire
-          #                 happens in wire_form_submit (post-dispatch).
           nil
         when :text
           dispatch_value_bind(raw_value, el, item, "data-text", :text)
@@ -309,10 +372,6 @@ module Lilac
           dispatch_each(raw_value, el, item)
         when :class_
           dispatch_class(raw_value, el, item)
-        when :field
-          dispatch_field(raw_value, el)
-        when :button
-          dispatch_button(raw_value, el)
         else
           # New directive added to DIRECTIVE_PATTERNS but no dispatcher —
           # signal loudly so the omission is caught in tests.
