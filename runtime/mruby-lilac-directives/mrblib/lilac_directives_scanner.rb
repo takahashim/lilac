@@ -68,7 +68,12 @@ module Lilac
         end
       end
 
-      attr_reader :host
+      # Public for directive extensions:
+      #   - `host`      : the Component the scanner is bound to
+      #   - `evaluator` : Evaluator for resolving Value::Ivar / Value::BareIdent
+      #                   against the host + iteration item (see
+      #                   `lilac_directives_evaluator.rb`)
+      attr_reader :host, :evaluator
 
       # Mutable per-scan scratch space for extensions. Keyed by extension
       # name (Symbol). Lazily initialized so plug-ins that don't need

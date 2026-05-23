@@ -183,6 +183,7 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem "#{runtime_dir}/mruby-lilac-async"
   conf.gem "#{runtime_dir}/mruby-lilac-router"
   conf.gem "#{runtime_dir}/mruby-lilac-form"
+  conf.gem "#{runtime_dir}/mruby-lilac-extras"
 
   # Exposes `compile_source` / `mrbc_alloc` / `mrbc_free` for the
   # lilac-cli wasm-driven build path (`WasmMrbcDriver`). Compiled

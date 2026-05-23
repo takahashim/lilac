@@ -120,6 +120,8 @@ class SpecRunner
     # Session 18 unlock — Location / History / URL polyfill +
     # anchor.href resolution against location.href (browser IDL semantics)
     "runtime/mruby-lilac-router/wasm_spec/test_router.rb",
+    "runtime/mruby-lilac-extras/wasm_spec/test_directive_tooltip.rb",
+    "runtime/mruby-lilac-extras/wasm_spec/test_directive_autofocus.rb",
   ].freeze
 
   Result = Struct.new(:spec_path, :rc, :stdout, :stderr, :pass, :fail) do

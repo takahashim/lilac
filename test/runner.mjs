@@ -71,6 +71,7 @@ const specDirs = [
   ["mruby-lilac-async",      resolve(lilacRoot, "runtime/mruby-lilac-async/wasm_spec")],
   ["mruby-lilac-router",     resolve(lilacRoot, "runtime/mruby-lilac-router/wasm_spec")],
   ["mruby-lilac-form",       resolve(lilacRoot, "runtime/mruby-lilac-form/wasm_spec")],
+  ["mruby-lilac-extras",     resolve(lilacRoot, "runtime/mruby-lilac-extras/wasm_spec")],
 ];
 
 async function runDir(label, dir) {

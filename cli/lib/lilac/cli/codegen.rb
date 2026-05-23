@@ -95,6 +95,21 @@ module Lilac
       # emitters do.
       attr_reader :file
 
+      # Public helper for extension emitters: parse a directive's value
+      # as a Lilac::Directives::Value (Ivar or BareIdent) or raise with a
+      # source-location-tagged error. Same shape as the internal helper
+      # used by built-in emitters.
+      def read_value_or_raise(directive, attr_name)
+        value = Lilac::Directives::Value.parse(directive.value)
+        return value if value
+
+        raise Error.new(
+          "Invalid value for #{attr_name}: #{directive.value.inspect} " \
+          "(expected `@ivar` or bare identifier)",
+          at: directive.source_location(@file),
+        )
+      end
+
       def initialize(component_name:, directives:, source_path:, emit_include: true)
         @component_name = ComponentName.new(component_name)
         @directives = directives
@@ -315,17 +330,6 @@ module Lilac
       # or BareIdent), raising a build error on invalid input. Caller
       # uses the returned object's polymorphic `reactive_read` /
       # `bind_source` / `to_s` rather than re-classifying the string.
-      def read_value_or_raise(directive, attr_name)
-        value = Lilac::Directives::Value.parse(directive.value)
-        return value if value
-
-        raise Error.new(
-          "Invalid value for #{attr_name}: #{directive.value.inspect} " \
-          "(expected `@ivar` or bare identifier)",
-          at: directive.source_location(@file),
-        )
-      end
-
       # data-on-X="m" → `refs.lilN.on(:X) { |ev| m(ev) }` at the top
       # level, or `t.refs.lilN.on(:X) { |ev| m(it, ev) }` inside a
       # data-each body — iteration handlers receive `(item, event)` so

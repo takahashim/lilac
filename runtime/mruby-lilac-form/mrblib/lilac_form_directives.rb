@@ -2,13 +2,10 @@
 # data-field / data-button directive dispatch, the <form> element's
 # submit auto-wire, and collection-phase validations (second plain
 # <form>, <input form="...">). All implementations live in
-# `Lilac::Form::Wiring` (see `lilac_form_wiring.rb`).
-
-module Lilac
-  class Form
-    Wiring # ensure constant load (no-op if already defined)
-  end
-end
+# `Lilac::Form::Wiring` (see `lilac_form_wiring.rb`). The Wiring
+# module is referenced only inside the blocks below, so it's resolved
+# lazily at dispatch time and the alphabetical load order of mrblib
+# (`lilac_form_directives.rb` before `lilac_form_wiring.rb`) is fine.
 
 Lilac::Directives::Scanner.register_collect_hook do |scanner, tag, attrs, descriptor|
   Lilac::Form::Wiring.validate_form_element!(scanner, tag, attrs, descriptor)
