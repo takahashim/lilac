@@ -44,7 +44,7 @@ module Lilac
       # busting, short enough to keep filenames readable.
       HASH_LENGTH = 8
 
-      def initialize(output_dir:, mrbc_path: nil, basename: 'app',
+      def initialize(output_dir: nil, mrbc_path: nil, basename: 'app',
                      disable_gem_discovery: false)
         @configured_mrbc_path = mrbc_path
         @output_dir = output_dir
@@ -61,18 +61,25 @@ module Lilac
       # `output_dir`. Returns the basename of the produced file (e.g.
       # `"app.a3f29b21.mrb"`) so the caller can wire it into a fetch URL.
       def build(ruby_source, source_label: '(aggregated)')
+        raise Error, '`build` requires `output_dir:` at construction time' unless @output_dir
         FileUtils.mkdir_p(@output_dir)
-        backend = resolve_backend!
-
-        bytecode = case backend.first
-                   when :binary then compile_via_binary(backend.last, ruby_source, source_label)
-                   when :wasm   then compile_via_wasm(backend.last, ruby_source, source_label)
-                   end
-
+        bytecode = compile_to_bytes(ruby_source, source_label: source_label)
         filename = "#{@basename}.#{content_hash(bytecode)}.mrb"
         dest = File.join(@output_dir, filename)
         File.binwrite(dest, bytecode)
         filename
+      end
+
+      # Compile a Ruby source string into raw mruby bytecode (no write,
+      # no hashing). Used by `lilac plugin-build` which wants explicit
+      # control over output path / filename — it has no need for the
+      # content-hash cache-busting that `build` does for `.lil` apps.
+      def compile_to_bytes(ruby_source, source_label: '(aggregated)')
+        backend = resolve_backend!
+        case backend.first
+        when :binary then compile_via_binary(backend.last, ruby_source, source_label)
+        when :wasm   then compile_via_wasm(backend.last, ruby_source, source_label)
+        end
       end
 
       # Diagnostic accessor: returns `[:binary, "/path"]` or

@@ -8,6 +8,7 @@ require_relative "dev_server"
 require_relative "preview_server"
 require_relative "scaffold"
 require_relative "doctor"
+require_relative "plugin_build"
 
 module Lilac
   module CLI
@@ -16,7 +17,7 @@ module Lilac
     # splitting them into their own files when this class crosses
     # ~250 lines or grows past 5 subcommands.
     class Command
-      SUBCOMMANDS = %w[build dev new doctor help].freeze
+      SUBCOMMANDS = %w[build dev new doctor plugin-build help].freeze
 
       def initialize(argv, out: $stdout, err: $stderr)
         @argv = argv.dup
@@ -33,6 +34,7 @@ module Lilac
         when "preview" then run_preview
         when "new" then run_new
         when "doctor" then run_doctor
+        when "plugin-build" then run_plugin_build
         when "help", "-h", "--help" then run_help
         when "--version" then print_version; 0
         else
@@ -42,7 +44,8 @@ module Lilac
           1
         end
       rescue Builder::Error, SFC::ParseError, Scaffold::Error,
-             ConfigLoader::LoadError, PreviewServer::Error => e
+             ConfigLoader::LoadError, PreviewServer::Error,
+             PluginBuild::Error => e
         @err.puts "lilac: #{e.message}"
         1
       end
@@ -61,6 +64,7 @@ module Lilac
         when "preview" then @out.puts preview_opts_parser; 0
         when "new"     then @out.puts new_opts_parser; 0
         when "doctor"  then @out.puts doctor_opts_parser; 0
+        when "plugin-build" then @out.puts plugin_build_opts_parser; 0
         else
           @err.puts "lilac help: unknown command #{topic.inspect}"
           @err.puts
@@ -136,6 +140,50 @@ module Lilac
         OptionParser.new do |o|
           o.banner = "Usage: lilac doctor [options]"
           add_path_options(o, opts)
+          o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
+        end
+      end
+
+      def run_plugin_build
+        opts = parse_plugin_build_opts
+
+        if opts[:output].nil?
+          @err.puts "Usage: lilac plugin-build <input.rb>... -o <output.mrb>"
+          return 1
+        end
+        if @argv.empty?
+          @err.puts "lilac plugin-build: at least one input file required"
+          @err.puts "Usage: lilac plugin-build <input.rb>... -o <output.mrb>"
+          return 1
+        end
+
+        plugin = PluginBuild.new(
+          inputs: @argv.dup,
+          output: opts[:output],
+          mrbc_path: opts[:mrbc_path],
+        )
+        out_path = plugin.run
+        @out.puts "Built plug-in bytecode: #{relative(out_path)} (#{File.size(out_path)} bytes)"
+        0
+      end
+
+      def parse_plugin_build_opts
+        opts = {}
+        # `parse!` (not `order!`) so `-o` can appear before or after the
+        # positional input files. After parsing, `@argv` holds only the
+        # positional inputs.
+        plugin_build_opts_parser(opts).parse!(@argv)
+        opts
+      end
+
+      def plugin_build_opts_parser(opts = {})
+        OptionParser.new do |o|
+          o.banner = "Usage: lilac plugin-build <input.rb>... -o <output.mrb>"
+          o.on("-o", "--output PATH", "Output `.mrb` file (required)") { |v| opts[:output] = v }
+          o.on("--mrbc-path PATH",
+               "Path to the mrbc binary (default: auto-discover via lilac-wasm-bin)") do |v|
+            opts[:mrbc_path] = v
+          end
           o.on("-h", "--help", "Show help") { @out.puts o; exit 0 }
         end
       end
@@ -384,6 +432,7 @@ module Lilac
             dev         Build, serve, watch — live reload on changes
             preview     Serve the built dist/ as a static site (no watch / reload)
             doctor      Verify project setup (runtime, references, paths)
+            plugin-build  Compile pure-Ruby plug-in source(s) to `.mrb` bytecode
             help        Show this help
             --version   Print version
 
