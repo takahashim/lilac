@@ -36,28 +36,28 @@ class TestConfig < Minitest::Test
     assert_equal "/tmp/out", config.output_dir
   end
 
-  def test_default_plugins_is_empty_array
+  def test_default_packages_is_empty_array
     config = Lilac::CLI::Config.new
-    assert_equal [], config.plugins
+    assert_equal [], config.packages
   end
 
-  def test_plugins_paths_are_expanded_against_root
+  def test_packages_paths_are_expanded_against_root
     config = Lilac::CLI::Config.new(
       root: "/tmp/proj",
-      plugins: ["node_modules/@takahashim/lilac-plugin-extras/extras.mrb"],
+      packages: ["vendor/local-fork/foo.mrb"],
     )
     assert_equal(
-      ["/tmp/proj/node_modules/@takahashim/lilac-plugin-extras/extras.mrb"],
-      config.plugins,
+      ["/tmp/proj/vendor/local-fork/foo.mrb"],
+      config.packages,
     )
   end
 
-  def test_plugins_absolute_paths_pass_through
+  def test_packages_absolute_paths_pass_through
     config = Lilac::CLI::Config.new(
       root: "/tmp/proj",
-      plugins: ["/abs/plug.mrb"],
+      packages: ["/abs/pkg.mrb"],
     )
-    assert_equal ["/abs/plug.mrb"], config.plugins
+    assert_equal ["/abs/pkg.mrb"], config.packages
   end
 
   def test_default_dev_host_and_port

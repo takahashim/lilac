@@ -11,7 +11,7 @@ require_relative "template_ast"
 # This file is the CLI counterpart to runtime/mruby-lilac-form's
 # `lilac_form_directives.rb` + `lilac_form_wiring.rb`. Belongs
 # conceptually to the form gem; lives under `cli/lib/` until the
-# gemspec / discovery story for packaging plug-in CLI extensions
+# gemspec / discovery story for packaging package CLI extensions
 # is finalized.
 
 module Lilac

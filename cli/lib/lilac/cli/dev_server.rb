@@ -69,7 +69,7 @@ module Lilac
           mrbc_path: @config.mrbc_path,
           lilac_compiled_path: @config.lilac_compiled_path,
           mruby_wasm_js_path: @config.mruby_wasm_js_path,
-          plugins: @config.plugins,
+          packages: @config.packages,
           project_root: @config.root,
         ).build
       end

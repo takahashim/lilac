@@ -4,9 +4,9 @@ require_relative 'test_helper'
 require 'tmpdir'
 require 'fileutils'
 
-class TestPluginBuild < Minitest::Test
+class TestPackageBuild < Minitest::Test
   def setup
-    @tmp = Dir.mktmpdir('lilac-plugin-build-test')
+    @tmp = Dir.mktmpdir('lilac-package-build-test')
   end
 
   def teardown
@@ -15,13 +15,13 @@ class TestPluginBuild < Minitest::Test
 
   def test_compiles_single_input_to_mrb
     real_mrbc_or_skip
-    input = File.join(@tmp, 'plugin.rb')
-    output = File.join(@tmp, 'plugin.mrb')
+    input = File.join(@tmp, 'package.rb')
+    output = File.join(@tmp, 'package.mrb')
     File.write(input, 'A = 1')
 
-    Lilac::CLI::PluginBuild.new(inputs: [input], output: output).run
+    Lilac::CLI::PackageBuild.new(inputs: [input], output: output).run
 
-    assert File.file?(output), 'plugin .mrb should be written'
+    assert File.file?(output), 'package .mrb should be written'
     bytes = File.binread(output)
     assert_equal 'RITE', bytes[0, 4], 'output should have RITE magic header'
   end
@@ -34,7 +34,7 @@ class TestPluginBuild < Minitest::Test
     File.write(a, 'A = 1')
     File.write(b, 'B = 2')
 
-    Lilac::CLI::PluginBuild.new(inputs: [a, b], output: output).run
+    Lilac::CLI::PackageBuild.new(inputs: [a, b], output: output).run
 
     bytes = File.binread(output)
     assert_equal 'RITE', bytes[0, 4]
@@ -46,18 +46,18 @@ class TestPluginBuild < Minitest::Test
 
   def test_writes_to_nested_output_directory
     real_mrbc_or_skip
-    input = File.join(@tmp, 'plugin.rb')
-    output = File.join(@tmp, 'nested', 'dir', 'plugin.mrb')
+    input = File.join(@tmp, 'package.rb')
+    output = File.join(@tmp, 'nested', 'dir', 'package.mrb')
     File.write(input, 'X = 1')
 
-    Lilac::CLI::PluginBuild.new(inputs: [input], output: output).run
+    Lilac::CLI::PackageBuild.new(inputs: [input], output: output).run
 
     assert File.file?(output), 'nested output dir should be auto-created'
   end
 
   def test_raises_when_input_missing
-    err = assert_raises(Lilac::CLI::PluginBuild::Error) do
-      Lilac::CLI::PluginBuild.new(
+    err = assert_raises(Lilac::CLI::PackageBuild::Error) do
+      Lilac::CLI::PackageBuild.new(
         inputs: [File.join(@tmp, 'nope.rb')],
         output: File.join(@tmp, 'out.mrb')
       ).run
@@ -66,8 +66,8 @@ class TestPluginBuild < Minitest::Test
   end
 
   def test_raises_when_inputs_empty
-    err = assert_raises(Lilac::CLI::PluginBuild::Error) do
-      Lilac::CLI::PluginBuild.new(inputs: [], output: File.join(@tmp, 'out.mrb'))
+    err = assert_raises(Lilac::CLI::PackageBuild::Error) do
+      Lilac::CLI::PackageBuild.new(inputs: [], output: File.join(@tmp, 'out.mrb'))
     end
     assert_includes err.message, 'at least one input file required'
   end
@@ -76,8 +76,8 @@ class TestPluginBuild < Minitest::Test
     real_mrbc_or_skip
     input = File.join(@tmp, 'bad.rb')
     File.write(input, 'def 1bad; end') # syntax error
-    err = assert_raises(Lilac::CLI::PluginBuild::Error) do
-      Lilac::CLI::PluginBuild.new(
+    err = assert_raises(Lilac::CLI::PackageBuild::Error) do
+      Lilac::CLI::PackageBuild.new(
         inputs: [input],
         output: File.join(@tmp, 'out.mrb')
       ).run

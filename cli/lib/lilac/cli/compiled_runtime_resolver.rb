@@ -20,7 +20,7 @@ module Lilac
     # CLI/config wins, then env, then the `lilac-wasm-bin` gem (the
     # canonical install path — decisions §25), then a monorepo sibling
     # layout for in-repo development. The previous `node_modules/
-    # @takahashim/lilac-compiled` fallback was removed when plug-in
+    # @takahashim/lilac-compiled` fallback was removed when package
     # distribution pivoted to rubygems and the npm-side lilac-compiled
     # package was retired (§25).
     class CompiledRuntimeResolver

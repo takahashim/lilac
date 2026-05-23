@@ -34,12 +34,12 @@ module Lilac
     class Codegen
       class Error < BuildError; end
 
-      # Plug-in emitter registry. Each entry: kind (Symbol) → callable
+      # Package emitter registry. Each entry: kind (Symbol) → callable
       # `(codegen, directive, context) -> Array<String> | nil`. Built-in
       # `emit_*` methods are tried first via the `case` in
       # `emit_directive`; extensions handle any kind not matched there.
       # Only used by hand-tuned CLI emitters (currently: form's
-      # `form_extension.rb`). Third-party plug-ins are handled at mount
+      # `form_extension.rb`). Third-party packages are handled at mount
       # time via `Scanner#scan_extensions` (see decisions §23).
       EMITTERS = {}
 
@@ -178,11 +178,11 @@ module Lilac
       end
 
       # Emit a trailing call to `Scanner#scan_extensions` so any
-      # plug-in directive (registered at runtime via
+      # package directive (registered at runtime via
       # `Lilac::Directives::Scanner.register_directive`) is dispatched
       # at mount time. The `except:` list filters out kinds the codegen
       # already hand-tuned (form's :form / :field / :button via
-      # `form_extension.rb`); third-party plug-ins like
+      # `form_extension.rb`); third-party packages like
       # `mruby-lilac-extras`' :tooltip / :autofocus go through the
       # scan path. See decisions §23.
       def scan_extensions_trailer(context)

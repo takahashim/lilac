@@ -8,7 +8,7 @@ require_relative "dev_server"
 require_relative "preview_server"
 require_relative "scaffold"
 require_relative "doctor"
-require_relative "plugin_build"
+require_relative "package_build"
 
 module Lilac
   module CLI
@@ -17,7 +17,7 @@ module Lilac
     # splitting them into their own files when this class crosses
     # ~250 lines or grows past 5 subcommands.
     class Command
-      SUBCOMMANDS = %w[build dev new doctor plugin-build help].freeze
+      SUBCOMMANDS = %w[build dev new doctor package-build help].freeze
 
       def initialize(argv, out: $stdout, err: $stderr)
         @argv = argv.dup
@@ -34,7 +34,7 @@ module Lilac
         when "preview" then run_preview
         when "new" then run_new
         when "doctor" then run_doctor
-        when "plugin-build" then run_plugin_build
+        when "package-build" then run_package_build
         when "help", "-h", "--help" then run_help
         when "--version" then print_version; 0
         else
@@ -45,7 +45,7 @@ module Lilac
         end
       rescue Builder::Error, SFC::ParseError, Scaffold::Error,
              ConfigLoader::LoadError, PreviewServer::Error,
-             PluginBuild::Error => e
+             PackageBuild::Error => e
         @err.puts "lilac: #{e.message}"
         1
       end
@@ -64,7 +64,7 @@ module Lilac
         when "preview" then @out.puts preview_opts_parser; 0
         when "new"     then @out.puts new_opts_parser; 0
         when "doctor"  then @out.puts doctor_opts_parser; 0
-        when "plugin-build" then @out.puts plugin_build_opts_parser; 0
+        when "package-build" then @out.puts package_build_opts_parser; 0
         else
           @err.puts "lilac help: unknown command #{topic.inspect}"
           @err.puts
@@ -108,7 +108,7 @@ module Lilac
           mrbc_path: config.mrbc_path,
           lilac_compiled_path: config.lilac_compiled_path,
           mruby_wasm_js_path: config.mruby_wasm_js_path,
-          plugins: config.plugins,
+          packages: config.packages,
           project_root: config.root,
         )
         result = builder.build
@@ -145,41 +145,41 @@ module Lilac
         end
       end
 
-      def run_plugin_build
-        opts = parse_plugin_build_opts
+      def run_package_build
+        opts = parse_package_build_opts
 
         if opts[:output].nil?
-          @err.puts "Usage: lilac plugin-build <input.rb>... -o <output.mrb>"
+          @err.puts "Usage: lilac package-build <input.rb>... -o <output.mrb>"
           return 1
         end
         if @argv.empty?
-          @err.puts "lilac plugin-build: at least one input file required"
-          @err.puts "Usage: lilac plugin-build <input.rb>... -o <output.mrb>"
+          @err.puts "lilac package-build: at least one input file required"
+          @err.puts "Usage: lilac package-build <input.rb>... -o <output.mrb>"
           return 1
         end
 
-        plugin = PluginBuild.new(
+        package = PackageBuild.new(
           inputs: @argv.dup,
           output: opts[:output],
           mrbc_path: opts[:mrbc_path],
         )
-        out_path = plugin.run
-        @out.puts "Built plug-in bytecode: #{relative(out_path)} (#{File.size(out_path)} bytes)"
+        out_path = package.run
+        @out.puts "Built package bytecode: #{relative(out_path)} (#{File.size(out_path)} bytes)"
         0
       end
 
-      def parse_plugin_build_opts
+      def parse_package_build_opts
         opts = {}
         # `parse!` (not `order!`) so `-o` can appear before or after the
         # positional input files. After parsing, `@argv` holds only the
         # positional inputs.
-        plugin_build_opts_parser(opts).parse!(@argv)
+        package_build_opts_parser(opts).parse!(@argv)
         opts
       end
 
-      def plugin_build_opts_parser(opts = {})
+      def package_build_opts_parser(opts = {})
         OptionParser.new do |o|
-          o.banner = "Usage: lilac plugin-build <input.rb>... -o <output.mrb>"
+          o.banner = "Usage: lilac package-build <input.rb>... -o <output.mrb>"
           o.on("-o", "--output PATH", "Output `.mrb` file (required)") { |v| opts[:output] = v }
           o.on("--mrbc-path PATH",
                "Path to the mrbc binary (default: auto-discover via lilac-wasm-bin)") do |v|
@@ -433,7 +433,7 @@ module Lilac
             dev         Build, serve, watch — live reload on changes
             preview     Serve the built dist/ as a static site (no watch / reload)
             doctor      Verify project setup (runtime, references, paths)
-            plugin-build  Compile pure-Ruby plug-in source(s) to `.mrb` bytecode
+            package-build  Compile pure-Ruby package source(s) to `.mrb` bytecode
             help        Show this help
             --version   Print version
 

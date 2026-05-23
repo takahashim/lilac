@@ -42,17 +42,17 @@ class TestConfigLoader < Minitest::Test
     assert_equal 3000, s.dev_port
   end
 
-  def test_plugins_setting_reaches_settings_struct
+  def test_packages_setting_reaches_settings_struct
     write_config <<~RB
       Lilac::CLI.configure do |c|
-        c.plugins = ["node_modules/@takahashim/lilac-plugin-extras/extras.mrb"]
+        c.packages = ["vendor/local-fork/foo.mrb"]
       end
     RB
 
     s = Lilac::CLI::ConfigLoader.load(@tmp)
     assert_equal(
-      ["node_modules/@takahashim/lilac-plugin-extras/extras.mrb"],
-      s.plugins,
+      ["vendor/local-fork/foo.mrb"],
+      s.packages,
     )
   end
 

@@ -52,7 +52,7 @@ module Lilac
                   :dev_host, :dev_port, :codegen,
                   :build_target, :dev_target, :mrbc_path,
                   :lilac_compiled_path, :mruby_wasm_js_path,
-                  :plugins
+                  :packages
 
       # Three-way merge: CLI opts > lilac.config.rb > built-in defaults.
       # `opts` keys mirror the keyword args of `initialize`; nil values
@@ -61,7 +61,7 @@ module Lilac
                     public_dir: nil, dev_host: nil, dev_port: nil, codegen: nil,
                     build_target: nil, dev_target: nil, mrbc_path: nil,
                     lilac_compiled_path: nil, mruby_wasm_js_path: nil,
-                    plugins: nil)
+                    packages: nil)
         resolved_root = File.expand_path(root || Dir.pwd)
         settings = ConfigLoader.load(resolved_root) || ConfigLoader::Settings.new
 
@@ -79,7 +79,7 @@ module Lilac
           mrbc_path:    mrbc_path    || settings.mrbc_path,
           lilac_compiled_path: lilac_compiled_path || settings.lilac_compiled_path,
           mruby_wasm_js_path:  mruby_wasm_js_path  || settings.mruby_wasm_js_path,
-          plugins:     plugins     || settings.plugins,
+          packages:    packages    || settings.packages,
         )
       end
 
@@ -87,7 +87,7 @@ module Lilac
                      public_dir: nil, dev_host: nil, dev_port: nil, codegen: nil,
                      build_target: nil, dev_target: nil, mrbc_path: nil,
                      lilac_compiled_path: nil, mruby_wasm_js_path: nil,
-                     plugins: nil)
+                     packages: nil)
         # Use `|| Dir.pwd` rather than a default keyword so callers can
         # pass `root: opts[:root]` (often nil from un-set CLI flags)
         # without overriding the default to nil.
@@ -107,11 +107,12 @@ module Lilac
         # ancestor / node_modules).
         @lilac_compiled_path = lilac_compiled_path
         @mruby_wasm_js_path  = mruby_wasm_js_path
-        # Plug-in `.mrb` paths to ship in the generated `:compiled` dist
-        # (decisions §24). Each entry is resolved against `@root` so users
-        # can write `node_modules/.../extras.mrb` and have it just work.
-        # Nil from Config.load is normalized to an empty array.
-        @plugins = (plugins || []).map { |p| expand(p) }
+        # Pre-compiled Lilac package `.mrb` paths (advanced override
+        # path — most users get packages via Bundler auto-discovery,
+        # see decisions §25/§26). Each entry is resolved against `@root`
+        # so relative paths Just Work. Nil from Config.load is
+        # normalized to an empty array.
+        @packages = (packages || []).map { |p| expand(p) }
       end
 
       private

@@ -26,13 +26,13 @@ const COMPILED_WASM = process.env.LILAC_COMPILED_WASM || `${REPO}/build/lilac-co
 const FIXTURES_DIR  = `${REPO}/test/parity-fixtures`;
 const LILAC_BIN     = `${REPO}/cli/exe/lilac`;
 const CLI_GEMFILE   = `${REPO}/cli/Gemfile`;
-// Plug-in bytecode bundles available to fixtures. The compiled wasm
+// Package bytecode bundles available to fixtures. The compiled wasm
 // no longer links these gems directly (decisions §24/§25). With the
-// pivot to gem-based distribution (§25), npm no longer publishes the
-// `.mrb`; the parity-runner instead builds it on the fly via
-// `lilac plugin-build` so the test stays self-contained. The resulting
-// path is wired into `SCENARIOS.extras.plugins` via `buildExtrasMrb()`
-// during `main()`.
+// pivot to gem-based distribution (§25) + the "package" naming
+// (§26), npm no longer publishes the `.mrb`; the parity-runner instead
+// builds it on the fly via `lilac package-build` so the test stays
+// self-contained. The resulting path is wired into
+// `SCENARIOS.extras.packages` via `buildExtrasMrb()` during `main()`.
 let EXTRAS_MRB = null;
 
 // Per-fixture scenario. Each entry returns:
@@ -103,11 +103,11 @@ const SCENARIOS = {
 
   extras: {
     component_selector: '[data-component="tooltip-widget"]',
-    // The compiled wasm has no extras gem linked — runtime plug-in load
+    // The compiled wasm has no extras gem linked — runtime package load
     // is the only path. Full wasm still ships extras, so loading the
     // .mrb only on compiled keeps both paths exercised symmetrically.
-    // `plugins:` is populated at runtime by `buildExtrasMrb()`.
-    plugins: [],
+    // `packages:` is populated at runtime by `buildExtrasMrb()`.
+    packages: [],
     steps: [
       { label: "initial mount (first hint)" },
       { label: "click toggle (second hint)", run: (doc) => doc.querySelector('[data-ref="toggle"]').click() },
@@ -148,7 +148,7 @@ function setupFetch() {
   };
 }
 
-// Build a fresh extras `.mrb` via `lilac plugin-build` so the parity
+// Build a fresh extras `.mrb` via `lilac package-build` so the parity
 // test exercises the same code path users hit at build time (concat
 // mrblib → mrbc backend). Returns the absolute path to the produced
 // bytecode file under a per-run tmpdir.
@@ -161,12 +161,12 @@ async function buildExtrasMrb() {
     `${mrblib}/lilac_extras_focus.rb`,
     `${mrblib}/lilac_extras_tooltip.rb`,
   ];
-  const r = spawnSync(LILAC_BIN, ["plugin-build", ...sources, "-o", out], {
+  const r = spawnSync(LILAC_BIN, ["package-build", ...sources, "-o", out], {
     env: { ...process.env, MRUBY_WASM_RUNTIME_PATH: MWR, BUNDLE_GEMFILE: CLI_GEMFILE },
     encoding: "utf-8",
   });
   if (r.status !== 0) {
-    throw new Error(`lilac plugin-build failed: ${r.stderr || r.stdout}`);
+    throw new Error(`lilac package-build failed: ${r.stderr || r.stdout}`);
   }
   return out;
 }
@@ -204,18 +204,18 @@ async function loadFull(createVM, dist) {
   return vm;
 }
 
-async function loadCompiled(createVM, distDir, pluginMrbPaths = []) {
+async function loadCompiled(createVM, distDir, packageMrbPaths = []) {
   const files = await readdir(join(distDir, "dist"));
   const mrbFile = files.find((f) => f.endsWith(".mrb"));
   if (!mrbFile) throw new Error(`no .mrb in ${distDir}/dist`);
   const bytecode = new Uint8Array(await readFile(join(distDir, "dist", mrbFile)));
   const vm = await createVM({ wasm: `file://${COMPILED_WASM}` });
-  // Pre-load plug-in bytecode before user code so `register_directive`
-  // calls take effect before component mount. Mirrors the production
-  // `boot({ plugins })` path in `npm/lilac-compiled/index.js`.
-  for (const pluginPath of pluginMrbPaths) {
-    const pluginBytes = new Uint8Array(await readFile(pluginPath));
-    vm.loadBytecode(pluginBytes);
+  // Pre-load package bytecode before user code so `register_directive`
+  // calls / class definitions are ready before component mount.
+  // Mirrors the production boot scripts the lilac-cli emits.
+  for (const pkgPath of packageMrbPaths) {
+    const pkgBytes = new Uint8Array(await readFile(pkgPath));
+    vm.loadBytecode(pkgBytes);
   }
   vm.loadBytecode(bytecode);
   return vm;
@@ -276,7 +276,7 @@ async function runFixture(fixtureName, createVM) {
   await sleep(50);
 
   const compiledDoc = await freshDom(mountHtml);
-  const compiledVm  = await loadCompiled(createVM, compiledDir, scenario.plugins || []);
+  const compiledVm  = await loadCompiled(createVM, compiledDir, scenario.packages || []);
   await sleep(50);
 
   for (const step of scenario.steps) {
@@ -314,11 +314,11 @@ async function main() {
   setupFetch();
   const createVM = await importMwrBridge();
 
-  // Build plug-in `.mrb` on the fly so the extras scenario has
+  // Build package `.mrb` on the fly so the extras scenario has
   // something for its `loadBytecode` step. Skipped silently if the
-  // scenario doesn't reference plug-ins.
+  // scenario doesn't reference packages.
   EXTRAS_MRB = await buildExtrasMrb();
-  SCENARIOS.extras.plugins = [EXTRAS_MRB];
+  SCENARIOS.extras.packages = [EXTRAS_MRB];
 
   let totalFail = 0;
   for (const name of Object.keys(SCENARIOS)) {

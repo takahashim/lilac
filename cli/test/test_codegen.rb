@@ -31,7 +31,7 @@ class TestCodegen < Minitest::Test
   def test_all_no_op_directives_still_emit_extension_trailer
     # `data-component` alone has no codegen target, but the generated
     # `bind_template_hook` still trails with a `scan_extensions` call
-    # so plug-in directives (e.g. `data-tooltip` on a child) get
+    # so package directives (e.g. `data-tooltip` on a child) get
     # dispatched at mount time. See decisions §23.
     component_directive = Lilac::CLI::Directive.new(
       kind: :component,

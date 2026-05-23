@@ -48,7 +48,7 @@ module Lilac
       #
       # `class_` trailing underscore avoids shadowing Ruby's reserved
       # `class` keyword in pattern-match contexts; symbol-side only.
-      # Plug-in extension registry. Entries shaped like DIRECTIVE_PATTERNS
+      # Package extension registry. Entries shaped like DIRECTIVE_PATTERNS
       # rows but registered at runtime by feature gems (form, future).
       # Built-in DIRECTIVE_PATTERNS is consulted first so extensions
       # cannot shadow core directives.

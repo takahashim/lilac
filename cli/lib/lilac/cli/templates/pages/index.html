@@ -24,20 +24,20 @@
     const vm = await createVM({
       wasm: "/vendor/lilac-full/lilac-full.wasm",
     });
-    // If `lilac.config.rb` declares Lilac plug-in gems via Bundler,
-    // `lilac build` stages them under `dist/plugins/` and writes a
-    // `lilac.plugins.json` manifest. Load each before evaluating the
-    // page's text/ruby scripts so `register_directive` calls take
-    // effect before component mount (decisions §25).
+    // If `lilac.config.rb` declares Lilac package gems via Bundler,
+    // `lilac build` stages them under `dist/packages/` and writes a
+    // `lilac.packages.json` manifest. Load each before evaluating the
+    // page's text/ruby scripts so `register_directive` calls / class
+    // definitions are ready before component mount (decisions §25/§26).
     try {
-      const res = await fetch("/lilac.plugins.json");
+      const res = await fetch("/lilac.packages.json");
       if (res.ok) {
-        const { plugins = [] } = await res.json();
-        for (const url of plugins) {
+        const { packages = [] } = await res.json();
+        for (const url of packages) {
           vm.loadBytecode(new Uint8Array(await (await fetch(url)).arrayBuffer()));
         }
       }
-    } catch { /* No manifest => no plug-ins; harmless. */ }
+    } catch { /* No manifest => no packages; harmless. */ }
     document.querySelectorAll('script[type="text/ruby"]')
       .forEach(s => vm.eval(s.textContent));
     vm.eval("Lilac.start");

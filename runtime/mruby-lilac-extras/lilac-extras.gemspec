@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 Gem::Specification.new do |spec|
-  spec.name = "lilac-plugin-extras"
+  spec.name = "lilac-extras"
   spec.version = "0.1.0"
   spec.authors = ["takahashim"]
 
-  spec.summary = "Lilac plug-in: `data-tooltip` and `data-autofocus` directives"
+  spec.summary = "Lilac package: `data-tooltip` and `data-autofocus` directives"
   spec.description = "Adds `data-tooltip` (bind the `title` attribute to a " \
                      "signal) and `data-autofocus` (focus the element after " \
                      "mount) to apps built with the lilac-compiled wasm " \
@@ -21,10 +21,10 @@ Gem::Specification.new do |spec|
   spec.files = Dir["mrblib/**/*.rb", "*.gemspec"]
 
   spec.metadata = {
-    # Sentinel for `Lilac::CLI::PluginDiscovery`. lilac-cli walks
+    # Sentinel for `Lilac::CLI::PackageDiscovery`. lilac-cli walks
     # `Bundler.load.specs` and selects entries where this is "true",
-    # then reads `mrblib/*.rb` to feed `lilac plugin-build`.
-    "lilac_plugin"          => "true",
+    # then reads `mrblib/*.rb` to feed `lilac package-build`.
+    "lilac_package"         => "true",
     "source_code_uri"       => "https://github.com/takahashim/lilac",
     "rubygems_mfa_required" => "true",
   }

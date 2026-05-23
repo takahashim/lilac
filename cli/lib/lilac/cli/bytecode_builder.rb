@@ -71,7 +71,7 @@ module Lilac
       end
 
       # Compile a Ruby source string into raw mruby bytecode (no write,
-      # no hashing). Used by `lilac plugin-build` which wants explicit
+      # no hashing). Used by `lilac package-build` which wants explicit
       # control over output path / filename — it has no need for the
       # content-hash cache-busting that `build` does for `.lil` apps.
       def compile_to_bytes(ruby_source, source_label: '(aggregated)')
