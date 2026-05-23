@@ -102,7 +102,9 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.gem "#{mwr_mrbgem}/mruby-wasm-js"
   conf.gem "#{runtime_dir}/mruby-regexp-compat"  # Regexp class for user code & form validators
   conf.gem "#{runtime_dir}/mruby-lilac"
+  conf.gem "#{runtime_dir}/mruby-lilac-directives" # required as direct dep for plug-in `register_named_directive`
   conf.gem "#{runtime_dir}/mruby-lilac-form"   # Phase A: form is core
+  conf.gem "#{runtime_dir}/mruby-lilac-extras" # convention-based plug-in directives (tooltip, autofocus)
 
   conf.bins = []
 end

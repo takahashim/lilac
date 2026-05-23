@@ -34,41 +34,55 @@ module Lilac
       PHASES = %i[pre default].freeze
 
       # Built-in directive kinds that cannot be overridden by extensions.
-      # Includes both the always-on built-ins and the form gem's
-      # currently-registered kinds (form/field/button) so plug-ins can't
-      # silently take them over.
+      # These are dispatched via the `dispatch` case statement (not via
+      # the EXTENSIONS table), so they wouldn't trigger the duplicate-
+      # registration check on their own. The form gem's directives
+      # (form/field/button) are NOT here — form registers them via the
+      # same plug-in API as third-party plug-ins, so duplicate-registration
+      # protection comes from the EXTENSIONS check.
       RESERVED_NAMES = %w[
         text unsafe-html bind show hide each key class component
-        on attr css form field button
+        on attr css
       ].freeze
 
       class << self
-        def register_directive(pattern:, kind:, captures_name: false, phase: :default, &dispatch)
-          raise ArgumentError, "block required" unless dispatch
-          raise ArgumentError, "unknown phase #{phase.inspect}" unless PHASES.include?(phase)
-          EXTENSIONS[:directives][kind] = {
-            pattern: pattern, captures_name: captures_name,
-            phase: phase, dispatch: dispatch
-          }
-        end
-
         # Convention-based registration: takes a kebab-case `name` and
         # an explicit `handler:` module. Dispatch routes to
-        # `handler.hook_<snake_name>(scanner, raw_value, el, item)` and
-        # validation metadata (value:/allowed_tags:/conflicts_with:/
-        # iteration:) is enforced before the handler runs. See
-        # `lilac-proposals.md` "Directive plug-in 機構".
-        def register_named_directive(name, handler:,
-                                     value: :reactive,
-                                     allowed_tags: nil,
-                                     conflicts_with: [],
-                                     iteration: :both)
+        # `handler.hook_<snake_name>(scanner, raw_value, el, item)`.
+        # Value validation is left to the hook body (errors raised
+        # there route through `Lilac.logger.error` at mount time —
+        # mirroring how built-in directive value errors surface).
+        # See decisions §23.
+        #
+        # `phase:` controls when the directive dispatches relative to
+        # other directives on the same element:
+        #   - `:default` (default) — runs in DOM order alongside built-in
+        #     directives like data-text / data-on-X
+        #   - `:pre` — runs before `:default` directives on the same
+        #     element. Used by directives that other directives depend
+        #     on (e.g., form's :field declares state that data-text
+        #     references later).
+        NAME_PATTERN = /\A[a-z][a-z0-9]*(-[a-z0-9]+)*\z/
+
+        def register_named_directive(name, handler:, phase: :default)
           raise ArgumentError, "handler: required" unless handler
-          if (err = Validation.check_name_format(name))
-            raise ArgumentError, err
+          unless PHASES.include?(phase)
+            raise ArgumentError,
+                  "unknown phase #{phase.inspect} (expected one of #{PHASES.inspect})"
+          end
+          name_str = name.to_s
+          if name_str.start_with?("data-")
+            raise ArgumentError,
+                  "directive name must omit the `data-` prefix " \
+                  "(register #{name_str.sub(/\Adata-/, "").inspect} not #{name_str.inspect})"
+          end
+          unless NAME_PATTERN.match?(name_str)
+            raise ArgumentError,
+                  "directive name must be kebab-case lowercase " \
+                  "([a-z][a-z0-9-]*) — got #{name.inspect}"
           end
           kind = name.to_sym
-          if RESERVED_NAMES.include?(name.to_s)
+          if RESERVED_NAMES.include?(name_str)
             raise Lilac::Error,
                   "directive name #{name.inspect} is reserved (built-in directive)"
           end
@@ -76,42 +90,18 @@ module Lilac
             raise Lilac::Error,
                   "directive #{name.inspect} is already registered"
           end
-          unless Validation::VALUE_MODES.include?(value)
-            raise ArgumentError, "unknown value: mode #{value.inspect}"
-          end
-          unless Validation::ITERATION_MODES.include?(iteration)
-            raise ArgumentError, "unknown iteration: mode #{iteration.inspect}"
-          end
 
-          method_sym = "hook_#{name.to_s.tr("-", "_")}".to_sym
-          pattern = /\Adata-#{Regexp.escape(name.to_s)}\z/
-          label = "data-#{name}"
+          method_sym = "hook_#{name_str.tr("-", "_")}".to_sym
+          pattern = /\Adata-#{Regexp.escape(name_str)}\z/
 
-          dispatch = lambda do |scanner, _name_arg, raw_value, el, item, descriptor|
-            if (err = Validation.check_value(raw_value, value))
-              raise Lilac::Error, "#{label}: #{err}"
-            end
-            if (err = Validation.check_iteration(!item.nil?, iteration))
-              raise Lilac::Error, "#{label}: #{err}"
-            end
-            tag = el[:tagName].to_s.downcase
-            if (err = Validation.check_allowed_tags(tag, allowed_tags))
-              raise Lilac::Error, "#{label}: #{err}"
-            end
-            if value == :custom && handler.respond_to?("validate_#{name.to_s.tr("-", "_")}")
-              handler.public_send("validate_#{name.to_s.tr("-", "_")}".to_sym, raw_value)
-            end
+          dispatch = lambda do |scanner, _name_arg, raw_value, el, item, _descriptor|
             handler.public_send(method_sym, scanner, raw_value, el, item)
           end
 
           EXTENSIONS[:directives][kind] = {
             pattern: pattern, captures_name: false,
-            phase: :default, dispatch: dispatch,
-            metadata: {
-              name: name.to_s, handler: handler, method: method_sym,
-              value: value, allowed_tags: allowed_tags,
-              conflicts_with: conflicts_with, iteration: iteration,
-            }
+            phase: phase, dispatch: dispatch,
+            metadata: { name: name_str, handler: handler, method: method_sym },
           }
         end
 
@@ -792,5 +782,16 @@ module Lilac
         Lilac::RefElement.new(el_js, @host)
       end
     end
+  end
+end
+
+# Component-side lazy Scanner accessor — used by CLI codegen's hook
+# call sites (`Lilac::Foo.hook_X(scanner, ...)`) and available to
+# user code in `setup` for ad-hoc directive operations. Memoised per
+# component instance so plug-in directives across multiple scopes share
+# one Scanner (one Evaluator allocation, one extension_state hash).
+class Lilac::Component
+  def scanner
+    @_directive_scanner ||= Lilac::Directives::Scanner.new(self)
   end
 end

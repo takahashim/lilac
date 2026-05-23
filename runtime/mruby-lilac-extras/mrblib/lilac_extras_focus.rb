@@ -5,13 +5,13 @@
 # Equivalent to HTML's `autofocus` attribute, but framework-driven:
 # component remounts (route changes, bind_list re-renders) re-fire the
 # focus, where HTML's autofocus is honoured only at initial page load.
+#
+# `.focus()` on non-focusable elements is a browser no-op, so we don't
+# constrain the tag set here.
 
 module Lilac
   module Extras
-    Lilac::Directives::Scanner.register_named_directive(
-      "autofocus", handler: self, value: :none,
-      allowed_tags: %w[input textarea select button]
-    )
+    Lilac::Directives::Scanner.register_named_directive("autofocus", handler: self)
 
     def self.hook_autofocus(_scanner, _raw_value, el, _item)
       el.call(:focus)

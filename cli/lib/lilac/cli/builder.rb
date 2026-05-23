@@ -28,6 +28,13 @@ if File.exist?(default_build_config)
       pattern: /\Adata-#{Regexp.escape(spec.name)}\z/,
       kind: spec.kind,
     )
+    # Skip when a hand-tuned CLI emitter has already been registered for
+    # this kind (e.g. form_extension.rb's emit_form/field/button). The
+    # plug-in's runtime hook is still callable through the runtime
+    # Scanner — only the CLI codegen path uses the existing emitter as
+    # an optimization (mirrors how built-in directives like data-text
+    # bypass the hook abstraction at codegen time).
+    next if Lilac::CLI::Codegen.emitter_for(spec.kind)
     Lilac::CLI::Codegen.register_named_directive_emitter(spec)
   end
 end

@@ -49,11 +49,29 @@ module Lilac
         end
 
         # `data-form` on a non-<form> element is a hard scope violation.
-        def validate_data_form_target!(el, descriptor)
+        def validate_data_form_target!(el)
           tag = el[:tagName].to_s.downcase
           return if tag == "form"
           raise Lilac::Error,
-                "data-form is only allowed on <form> elements (got <#{tag}>, #{descriptor})"
+                "data-form is only allowed on <form> elements (got <#{tag}>)"
+        end
+
+        # ---- named-directive hook methods ------------------------------
+        # Called from the dispatch wrapper that `register_named_directive`
+        # builds. The hook signature is (scanner, raw_value, el, item)
+        # — descriptor isn't forwarded by the named API, so the form
+        # validation messages reconstruct minimal context from `el`.
+
+        def hook_form(_scanner, _raw_value, el, _item)
+          validate_data_form_target!(el)
+        end
+
+        def hook_field(scanner, raw_value, el, _item)
+          dispatch_field(scanner, raw_value, el)
+        end
+
+        def hook_button(scanner, raw_value, el, _item)
+          dispatch_button(scanner, raw_value, el)
         end
 
         # ---- <form>: submit auto-wire -----------------------------------
@@ -228,3 +246,28 @@ module Lilac
     end
   end
 end
+
+# ---- Scanner extension registrations ---------------------------------
+#
+# Placed at module-level *after* `Lilac::Form::Wiring` is fully defined
+# so the `handler:` kwarg resolves at register time without depending on
+# mrblib alphabetical load order.
+
+Lilac::Directives::Scanner.register_collect_hook do |scanner, tag, attrs, descriptor|
+  Lilac::Form::Wiring.validate_form_element!(scanner, tag, attrs, descriptor)
+  Lilac::Form::Wiring.warn_on_form_attr(scanner, tag, attrs)
+end
+
+Lilac::Directives::Scanner.register_tag_hook("form", phase: :pre) do |scanner, el, attrs, _descriptor|
+  Lilac::Form::Wiring.wire_form_submit(scanner, el, attrs)
+end
+
+Lilac::Directives::Scanner.register_named_directive(
+  "form", handler: Lilac::Form::Wiring, phase: :pre
+)
+Lilac::Directives::Scanner.register_named_directive(
+  "field", handler: Lilac::Form::Wiring, phase: :pre
+)
+Lilac::Directives::Scanner.register_named_directive(
+  "button", handler: Lilac::Form::Wiring, phase: :pre
+)

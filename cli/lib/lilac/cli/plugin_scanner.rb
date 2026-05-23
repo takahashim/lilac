@@ -17,14 +17,10 @@ module Lilac
     # deterministic.
     module PluginScanner
       # One registered directive's specification, extracted from a
-      # `register_named_directive("name", handler: Mod, ...)` call.
+      # `register_named_directive("name", handler: Mod)` call.
       PluginDirectiveSpec = Struct.new(
         :name,             # String, e.g. "tooltip"
         :handler_constant, # String constant path, e.g. "Lilac::Extras"
-        :value_mode,       # Symbol — :reactive / :ident / :none / :class_hash / :custom
-        :allowed_tags,     # Array<String> or nil
-        :conflicts_with,   # Array<Symbol>
-        :iteration,        # Symbol — :both / :item_only / :host_only
         :source_path,      # absolute mrblib file path (for error messages)
         :source_line,      # line number of the register call
         keyword_init: true,
@@ -138,10 +134,6 @@ module Lilac
         PluginDirectiveSpec.new(
           name: name,
           handler_constant: handler_const,
-          value_mode: kwargs.fetch("value", :reactive).is_a?(Symbol) ? kwargs.fetch("value", :reactive) : :reactive,
-          allowed_tags: kwargs["allowed_tags"],
-          conflicts_with: Array(kwargs["conflicts_with"]),
-          iteration: kwargs["iteration"] || :both,
           source_path: path,
           source_line: node.location.start_line,
         )

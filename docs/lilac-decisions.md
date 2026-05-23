@@ -2166,6 +2166,215 @@ codegen 文字列 / runtime directives gem の FormWiring) のうち、
 
 ---
 
+## 23. Directive plug-in 機構: 命名規約ベースの mrblib-only API (§17 補完)
+
+決定日: 2026-05-23
+
+### 23.1 判断
+
+Lilac の **extension directive** (第三者 plug-in が定義する directive、例:
+`data-tooltip`、`data-autofocus`) について、以下の API + ポリシーを確立する:
+
+- **`Lilac::Directives::Scanner.register_named_directive(name, handler:)`**
+  を新設。**name + handler のみの最小 API**:
+  - Plug-in 作者は **mrblib に 1 ファイル**書くだけで directive を追加可能
+  - `handler:` は **`self` kwarg 明示渡し** (mruby/MRI の `Module.nesting`
+    が呼び出し元 lexical scope を取れないため、自動解決は不採用)
+  - Dispatch は `handler.hook_<snake_name>(scanner, raw_value, el, item)` を
+    自動呼び出し
+  - **値検証は hook 本体に委ねる** (raise した Lilac::Error は dispatch_record
+    の rescue 経由で `Lilac.logger.error` へルーティング — built-in directive
+    と同じ severity)
+  - **`phase: :default | :pre` で dispatch 順序を制御** (`:pre` は form の
+    :field のような「他の directive が参照する宣言系」用)
+- **Extension directive の dispatch logic は mrblib 単一 SSOT** とし、
+  §17 の grammar diff-0 ペア構造の **対象外** とする
+- **CLI は build 起動時に `runtime/mruby-lilac-*/mrblib/**/*.rb` を
+  Prism で AST スキャン** し、`register_named_directive` の呼び出しから
+  TemplateAST + Codegen 双方の emitter を auto-wire
+- Codegen は `<handler_module>.hook_<name>(scanner, raw_value, ref.to_js,
+  item)` の **メソッド呼び出しコードを直接 emit** する
+  (CLI/runtime とも同じメソッドを呼ぶ → 挙動 divergence が原理的に防止)。
+  `scanner` は `Lilac::Component#scanner` の lazy memo accessor
+  (per-mount 1 Scanner instance)
+- **`register_directive` (block 版) は廃止**。directive 登録は
+  `register_named_directive` のみが canonical。
+  Form gem (built-in) も同じ API へ migrate 済み
+- **CLI 側の hand-tuned emitter は引き続き許容**: form_extension.rb のように
+  特定 directive の codegen 出力を hand-write した emitter があれば、
+  PluginScanner はそれを上書きせず尊重する (built-in directive の data-text
+  等が emit_text 直書きを使うのと同じ位置付け)
+- **Name 衝突は register 時 raise**:
+  - Built-in directive 名 (`text` / `bind` 等) と衝突 → raise
+  - 既登録 extension と衝突 → raise (`form` / `field` / `button` は form gem の
+    registration で確保される)
+- **Load order は alphabetical** (gem ディレクトリ名 + 各 gem 内 mrblib
+  ファイル名で sort)
+
+#### API surface を最小に絞った理由
+
+当初は `value:` / `allowed_tags:` / `conflicts_with:` / `iteration:` の
+4 軸 metadata schema を持っていたが、検討の過程で順次撤回:
+
+1. **`allowed_tags:` / `conflicts_with:` / `iteration:`** — 具体的なユースケース
+   がなく、API surface を不必要に広げる。Plug-in 側で hook 本体に書けば足りる
+2. **`value:`** — `:reactive` 等の宣言は build-time + runtime の値検証を担う
+   が、hook 内で `Value.parse(raw_value)` を実質再実装する重複構造になっていた。
+   §22 (form lint 廃止) の rationale 「runtime での error message で実用上
+   十分」を extension にも適用すれば、build-time error 化のためだけの
+   metadata は不要
+
+結果として **`name + handler` の 2 引数のみ** の API に収束。
+`Lilac::Directives::Validation` モジュール (一時的に追加した diff-0 ペア)
+も削除した。
+
+後日 plug-in が増えて「同じ value validation を何度も書く」摩擦が顕在化
+したら、その時点で **plug-in 側の共通ヘルパ** (`Lilac::Directives.parse_value!`
+等) として実装する選択肢を残す (= core API は変えない)。
+
+### 23.2 背景
+
+Step 2 (form 分離 + Scanner / Codegen 拡張点 API 導入) で
+「第三者が独自 directive を作れる」状態にはなったが、PoC として
+`mruby-lilac-extras` (tooltip + autofocus) を試作したところ以下の摩擦が
+顕在化した:
+
+- Plug-in 作成に **2 ファイル必要**: `runtime/mruby-lilac-X/mrblib/*.rb`
+  (runtime registration) + `cli/lib/lilac/cli/X_extension.rb`
+  (CLI emitter)
+- 「**title 属性に bind する**」という同じ概念を runtime 側 (Ruby method
+  call) と CLI 側 (Ruby ソース文字列) で別表現で書く必要があった
+- Block ベース registration は CLI から **中身を解釈できない blob**
+  なので、CLI emit は手書きするしかなかった
+
+これは `runtime canonical / CLI は optional optimization layer` (§1) の
+原則と整合しない (plug-in 作者に CLI 側の知識まで要求する形になっていた)。
+
+### 23.3 rationale
+
+- **§1 (runtime canonical) の原則を extension directive にも明示的に適用**。
+  Plug-in 作者は CLI のことを考えなくて済む
+- **§17 を覆さない / 補完する** 構造:
+  - Binding canonical は **codegen のまま** (CLI が hook method の呼び出し
+    コードを emit)
+  - Core grammar (`Value` / `Grammar` / `ClassParser`) の **diff-0 SSOT は
+    維持**
+  - Extension dispatch logic は **mrblib 単一 SSOT** という新ポリシーを
+    §17 の SSOT 構造に追加 (= diff-0 ペアを要求しない領域)
+- **§6 / §22 (runtime と CLI の振る舞い一貫) の精神を保持**: CLI / runtime
+  とも **同じ `<handler>.hook_<name>` メソッドを呼ぶ** 構造により、
+  挙動 divergence が原理的に防止される
+- **検証コスト**: 命名規約 (`hook_<name>`) と AST 検出 (`register_named_directive`
+  call node を Prism で抽出) で済むため、CLI 側 AST マッチャーや
+  DSL 解釈は不要
+
+### 23.4 トレードオフ
+
+- **失うもの**:
+  - Plug-in author は **`handler: self` を毎回書く** 必要がある
+    (Module.nesting で自動解決できないため)
+  - Inline block で closure 状態を畳み込む書き方ができない
+    (メソッドベース必須)
+  - `data-on-X` のような **captures_name 系 directive** は第一版で
+    サポートしない (named API は固定 `data-<name>` パターンのみ。
+    captures_name が必要な plug-in が出てきたら API 拡張で対処)
+  - **値検証 / タグ制約 / 衝突 check** は metadata として持たない。
+    必要なら hook 本体で `raise Lilac::Error` する。Build-time error と
+    mount-time error の差はあるが、§22 と同じく runtime 一本化の方針
+- **`mruby-lilac-directives` を `lilac-compiled.rb` の direct dep として明示**:
+  - 以前は `mruby-lilac-form` の transitive dep として暗黙にロード
+    されていたが、`mruby-lilac-extras` を追加した時に mruby の
+    dependency resolution が `mruby-regexp-compat` を解決できず build
+    が壊れた
+  - 解決策として `conf.gem ".../mruby-lilac-directives"` を明示
+- **bundle 影響**:
+  - `lilac-compiled` に `mruby-lilac-extras` を追加: +少量 KB (validation
+    metadata は軽量、hook method は 2 つで ~数百 bytes)
+  - `lilac-full` の影響は無視できる範囲
+
+### 23.5 実装
+
+- **Runtime**:
+  - `runtime/mruby-lilac-directives/mrblib/lilac_directives_scanner.rb`:
+    `register_named_directive(name, handler:, phase:)` + `RESERVED_NAMES`
+    + `NAME_PATTERN` 追加、`register_directive` (block 版) 撤去
+  - `runtime/mruby-lilac-directives/mrbgem.rake` のデフォルト dep を
+    path 付きに更新 (lilac-compiled の transitive dep 解決のため)
+- **Runtime (form gem migrate)**:
+  - `runtime/mruby-lilac-form/mrblib/lilac_form_wiring.rb` に `hook_form` /
+    `hook_field` / `hook_button` メソッド追加
+    (`dispatch_field` / `dispatch_button` / `validate_data_form_target!`
+    の thin wrapper)
+  - Scanner extension の registration call (`register_collect_hook` /
+    `register_tag_hook` / `register_named_directive` × 3) を同じファイル
+    末尾に統合 (`module Lilac::Form::Wiring ... end` の **外側** に置けば
+    constant resolution は完了している)。`lilac_form_directives.rb`
+    は廃止
+- **CLI**:
+  - `cli/lib/lilac/cli/plugin_scanner.rb` 新設
+    (`register_named_directive` の AST 抽出 — name + handler 抽出のみ)
+  - `cli/lib/lilac/cli/codegen.rb` に
+    `register_named_directive_emitter` + `emit_named_directive` 追加
+  - `cli/lib/lilac/cli/builder.rb` で起動時 plugin scan → auto-wire
+    (既存 emitter がある kind は上書きしない = hand-tuned emit を尊重)
+  - `cli/lib/lilac/cli/form_extension.rb` は **そのまま残す**
+    (form 用 hand-tuned emit。built-in directive の emit_text / emit_bind
+    と同じ位置付け、PluginScanner は上書きしない)
+- **Plug-in (PoC)**:
+  - `runtime/mruby-lilac-extras/` を新 API に migrate
+    (`register_named_directive` + `def self.hook_X`)
+  - `cli/lib/lilac/cli/extras_extension.rb` 削除 (auto-wire で代替)
+- **Build config**:
+  - `build_config/lilac-full.rb`: `mruby-lilac-extras` 既存
+  - `build_config/lilac-compiled.rb`: `mruby-lilac-directives` + `mruby-lilac-extras` 追加
+
+### 23.6 §17 への影響 (本 §23 と整合)
+
+§17 の SSOT 構造に以下が追加される (§17 自体の section 内に補足を入れる):
+
+- **Extension directive の dispatch logic は mrblib 単一 SSOT** であり、
+  §17 の diff-0 ペアルールの対象外であることを明文化
+- `Scanner` の役割整理に「**Extension directive registry を保持**
+  (`EXTENSIONS[:directives]` Hash)」を追加
+
+### 23.7 後続作業 (本決定スコープ外)
+
+第一版で省略している論点 (proposals.md → 本 § 昇格時に carry-over):
+
+- `data-on-X` のような **captures_name 系 directive** の named API
+  サポート (現状は block 版で書く必要)
+- Metadata schema の追加 (`value:` / `allowed_tags:` / `conflicts_with:` /
+  `iteration:` 等) — 当初は導入したが「実需未顕在 + plug-in 側で
+  書ける + §22 と同じく runtime 一本化方針」と判断して順次撤回
+  (本 §23.1 参照)。将来 plug-in が 5-10 個に増えて「複数 directive で
+  同じ value validation を再実装する」摩擦が出てきたら、共通ヘルパ
+  (`Lilac::Directives.parse_value!` 等) として plug-in 側に追加する選択肢
+  を残す
+- Plug-in 作者向け **testing strategy** ガイド + mock utility 提供
+- `docs/lilac-directive-plugin-spec.md` 新設による
+  plug-in 仕様の SSOT 化
+- `lilac dev` の **hot-reload** で mrblib 変更を即反映する仕組み
+- `lilac-compiled` build で plug-in gem 不在を **build error として検出**
+  する仕組み (現状は runtime NoMethodError になる)
+- 既存 `mruby-lilac-form` の named API への migrate
+  (API breaking のため pre-1.0 期の判断保留)
+
+### 23.8 ステータス
+
+完了 (2026-05-23):
+
+- Phase 0 (PoC 検証): Module.nesting / Prism コスト / mrblib MRI load /
+  build_config 抽出方法を実証
+- Phase 1 (runtime): `register_named_directive` + Validation 実装、
+  72/72 spec files pass
+- Phase 2 (CLI): PluginScanner + Codegen emitter + builder auto-wire、
+  475/475 CLI test runs pass
+- Phase 3 (extras migrate): `mruby-lilac-extras` を新 API へ書き直し、
+  `cli/lib/lilac/cli/extras_extension.rb` 削除
+- Phase 4 (`lilac-compiled` 動作確認): 2.9M bundle 生成成功
+
+---
+
 ## Appendix: 設計判断の年表
 
 主要な判断とその spec 反映先:
@@ -2195,6 +2404,7 @@ codegen 文字列 / runtime directives gem の FormWiring) のうち、
 | Component scope rules(`.lil` project-global / page-inline page-local の 3 階層 + R1〜R4 build-time guard)+ `Lilac.start` 自動化(framework boot を user 空間から外す、idempotent + auto-inject) | (本 doc §20 が SSOT。実装は `cli/lib/lilac/cli/builder.rb` + `script_analyzer.rb` + `runtime/mruby-lilac/mrblib/lilac_registry.rb`) | 完了 (2026-05-20) | §20 |
 | `data-bind` の復活と form の "集約 layer" 化(§2 部分覆し)— input binding は data-bind が canonical、form は validation / submit の集約。3 経路(data-bind / data-field / source:)で完全カバー | `lilac-directive-spec.md` §3 / §5 / §6.2 / §8 + `lilac-form-spec.md` §1 / §2 / §11.8 / §12 + `lilac-design.md` §4.5 | 完了 (2026-05-19 実装、2026-05-20 spec 反映 + 昇格) | §21 |
 | Form 関連の CLI build-time lint 廃止(§6 部分覆し)— `data-form` / `data-field` / `data-button` の cross-reference check を削除、Ruby AST 側の form block tracking も全廃。form 直交 lint は runtime に一本化 | (本 doc §22 が SSOT。実装は `cli/lib/lilac/cli/script_analyzer.rb` + `cross_ref_linter.rb`) | 完了 (2026-05-22) | §22 |
+| Directive plug-in 機構: 命名規約ベースの mrblib-only API (§17 補完)— `register_named_directive(name, handler:)` の最小 API + CLI auto-wire。Extension dispatch logic は mrblib 単一 SSOT(§17 の diff-0 ペア対象外)、値検証は hook 本体に委ねる | (本 doc §23 が SSOT。実装は `runtime/mruby-lilac-directives/mrblib/lilac_directives_scanner.rb`、`cli/lib/lilac/cli/plugin_scanner.rb` + `codegen.rb`) | 完了 (2026-05-23) | §23 |
 
 各判断の詳細・例・段階移行は対応する spec を参照。
 
