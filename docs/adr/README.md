@@ -63,7 +63,7 @@ refinement** として位置付ける。
 | [0024](./0024-npm-distributed-plugin-superseded.md) | Plug-in 配布形態: `lilac-compiled` core + 個別 npm plug-in(**superseded by ADR-0025**) | (歴史) | 上書き済み (2026-05-23) |
 | [0025](./0025-pivot-plugin-distribution-to-rubygems.md) | Plug-in 配布を rubygems に pivot、npm は `lilac-full` の CDN 配布のみに集約 | `runtime/mruby-lilac-*/lilac-*.gemspec` + `cli/lib/lilac/cli/package_discovery.rb` + Builder 統合 | 着手 (2026-05-23)、ADR-0026 で用語 rename |
 | [0026](./0026-rename-plugin-to-package.md) | 「plug-in」用語を「package」に rename | gemspec / CLI / docs / tests / examples の機械的 rename | 完了 (2026-05-23) |
-| [0027](./0027-class-first-handler-api.md) | Package Handler を class-first API として整備 (class-first principle) | `runtime/mruby-lilac-directives/mrblib/` + `cli/lib/lilac/cli/` + `docs/lilac-package-spec.md` | 着手 (2026-05-24) |
+| [0027](./0027-class-first-handler-api.md) | Package Handler を class-first API として整備 (class-first principle) | `runtime/mruby-lilac-directives/mrblib/` + `cli/lib/lilac/cli/` + `docs/lilac-package-spec.md` | 完了 (2026-05-24)、Phase C/F は trigger 待ちで保留 |
 
 ## このドキュメントの位置付け
 

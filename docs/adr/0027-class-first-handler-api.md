@@ -185,39 +185,67 @@ Lilac::Directives::Scanner.register("Lilac::Extras::TooltipDirective")
 
 ### Migration phase
 
-| Phase | 内容 |
-|---|---|
-| A | 本 §27 ドラフト |
-| B | `Lilac::Directives::Handler` + Context 実装、Scanner.register(String) 改修 |
-| C | `Lilac::CLI::Emitter` 基底新設 + Codegen.register(String) 改修 |
-| D | 既存 extras (2 directive) を Handler class に書き換え |
-| E | 既存 form の runtime 側 (mrblib) を Handler class に書き換え (内部の TagHook / CollectHook は block 維持) |
-| F | 既存 form の CLI 側 (form_extension.rb) の 3 emitter を class 化 (class 化の見本) |
-| G | scan_extensions の `except:` を attribute-name-string-list に変更 |
-| H | block-based `register_directive` の削除、test 全体の update |
-| I | docs/lilac-package-spec.md の全面 update、namespace 規約明記 |
-| J | parity-runner 等の動作確認 |
+| Phase | 内容 | 状態 |
+|---|---|---|
+| A | 本 §27 ドラフト | ✅ 2026-05-24 |
+| B | `Lilac::Directives::Handler` + Context 実装、Scanner.register(String) 改修 | ✅ 2026-05-24 |
+| C | `Lilac::CLI::Emitter` 基底新設 + Codegen.register(String) 改修 | ⏸️ **保留** (§27.6 参照) |
+| D | 既存 extras (2 directive) を Handler class に書き換え | ✅ 2026-05-24 |
+| E | 既存 form の runtime 側 (mrblib) を Handler class に書き換え (内部の TagHook / CollectHook は block 維持) | ✅ 2026-05-24 |
+| F | 既存 form の CLI 側 (form_extension.rb) の 3 emitter を class 化 (class 化の見本) | ⚠️ **部分完了** (§27.6 参照) |
+| G | scan_extensions の `except:` を attribute-name-string-list に変更 | ✅ 2026-05-24 |
+| H | block-based `register_directive` の削除、test 全体の update | ✅ 2026-05-24 |
+| I | docs/lilac-package-spec.md の全面 update、namespace 規約明記 | ✅ 2026-05-24 |
+| J | parity-runner 等の動作確認 | ✅ 2026-05-24 |
 
-合計 ~1000-1500 行差分見込み。
+実装中に当初 spec を超えて以下も完了 (= class-first principle の自然な拡張):
 
-## 27.6 後続作業 (本決定スコープ外)
+| 追加項目 | 内容 | 状態 |
+|---|---|---|
+| K | `COLLISION_PAIRS` を attribute-name 文字列に統一 (build-time/runtime 双方で同じ rule 表記) | ✅ 2026-05-24 |
+| L | `Lilac::Directives::Compat` → `Lilac::Directives::Lints` rename (`compat.rb` → `lints.rb` / `compat_rules.rb` → `collision_rules.rb`) — `Compat` が CLI/runtime 互換性に誤読される問題を解消 | ✅ 2026-05-24 |
+| M | form Wiring helpers を Context-only signature に refactor — `ctx.advanced.scanner` 依存を form 内部から完全除去 | ✅ 2026-05-24 |
 
-- **built-in directive の opportunistic class 化**: `emit_each` / `emit_on` 等の
-  複雑なものを必要に応じて class 化。優先度は低い (= 既存 method-based で機能
-  しているもの)
-- **TagHook / CollectHook を公式 API として再評価**: 3rd party の use case が
-  出てきたら §27 の延長として class 化を検討
-- **`attribute_prefix` を Handler 側にも追加するか**: 現状は Emitter 側のみ
-  (built-in 用)。package 側に需要が出たら検討 (= 3rd party が data-X-Y 形式の
-  directive を書きたくなったとき)
+総差分: 31 + 3 + 3 = 約 800 行 + 200 行追加。当初見積もり (~1000-1500) と概ね一致。
+
+## 27.6 後続作業 (本決定スコープ外、trigger 待ち)
+
+### 保留中の作業
+
+- **Phase C: `Lilac::CLI::Emitter` 基底 + `Codegen.register(String)`** — 実質的な
+  benefit (= attribute-name 統一) は Phase F の `register_emitter(:form,
+  attribute: "data-form")` kwarg で達成済み。残るのは block→class の cosmetic
+  変換のみ。build-time コードは Lilac maintainer + form gem 内部しか触らず
+  3rd party use case が存在しないため、symmetric 化のためだけに ~200 行
+  追加するのは ROI 負け。**「2 つ目の CLI emitter consumer が現れた時に着手」**
+- **Phase F (部分完了)**: `EMITTER_ATTRIBUTES` の追加で attribute-name 化は完了。
+  3 emitter 自体の class 化は Phase C と同根のため同じ判断で保留。
+
+### Trigger 待ちの将来検討項目
+
+- **built-in directive の opportunistic class 化** (`emit_each` / `emit_on` 等):
+  ADR-0027 §27.4 で「強制しない」と明記済み。既存 method-based で機能していて、
+  package 作者からは見えない。**Trigger**: 内部 refactor で複雑性が問題になった時
+- **TagHook / CollectHook を公式 API として再評価**: 現在 form 内部のみで使用、
+  3rd party use case 0 件。**Trigger**: 2 つ目の consumer (3rd party package or
+  別の core 機能) が現れた時。speculation で API を固定するより design data point
+  が揃ってから確定する方が良い
+- **`attribute_prefix` を Handler 側にも追加するか**: 現状 Emitter 側にも未実装。
+  built-in `data-on-X` / `data-attr-X` / `data-css-X` は scanner 内 case 分岐で
+  処理されている。**Trigger**: 3rd party が `data-i18n-locale` のような prefix 型
+  directive を書きたくなった時
 - **`Lilac::Directives::Scanner.register` の error 戦略**: 未定義 class を register
-  したとき、初 dispatch で `Lilac.logger.error` + skip するが、startup 時の lint
-  (lilac doctor) で早期発見させるかどうか
+  したとき、初 dispatch で `Lilac.logger.error` + skip が現状動作。**Trigger**:
+  3rd party 作者から「typo が runtime まで発見されない」フィードバックが来た時、
+  `lilac doctor` で startup 時 lint を実装
 
 ## 27.7 ステータス
 
-着手 (2026-05-24)。Phase A 完了後、B 〜 J を順次実装。
+**完了** (2026-05-24)。Phase B-J + 追加 K-M を実装、`make test-all` (487 CLI +
+71 wasm-rb + 634 node + 5 parity scenarios) すべて green。
+
+未実装の Phase C / F (class 化部分) および §27.6 後続項目は **trigger 待ち** として
+本 ADR のスコープ外に確定。当面の実装は不要。
 
 `lilac-cli` / `lilac-wasm-bin` の release は §25 の wasmtime-rb v45 release 待ち
-のため、本 §27 の実装は **release path 整備と並行で進められる** (実装 → release
-タイミングまでに master に landed)。
+のため、本 §27 は **master に landed 済み、release tagging 待ち** の状態。
