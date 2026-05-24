@@ -101,4 +101,5 @@ jobs:
         working-directory: lilac/cli
         env:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+          MRUBY_WASM_JS_PATH: ${{ github.workspace }}/mruby-wasm-runtime/mrbgem/mruby-wasm-js/js
         run: bundle exec rake test
