@@ -11,29 +11,6 @@ mruby compiled to WebAssembly via [mruby-wasm-runtime][mwr].
 
 [mwr]: https://github.com/takahashim/mruby-wasm-runtime
 
-## Layout
-
-```
-lilac/
-├── runtime/        # mrbgems compiled into the wasm bundle
-│   ├── mruby-lilac/             # Component / Signal / Effect / Bindable
-│   ├── mruby-lilac-directives/  # runtime data-* directive scanner
-│   ├── mruby-lilac-async/       # Fetchy / Resource
-│   ├── mruby-lilac-router/
-│   ├── mruby-lilac-form/
-│   └── mruby-regexp-compat/     # vendored Regexp engine
-├── cli/            # Ruby gem (lilac-cli) — optional build / dev / scaffold / lint
-│   ├── lib/lilac/cli/
-│   ├── exe/lilac
-│   └── lilac-cli.gemspec
-├── build_config/   # mruby cross-build configs for the wasm bundles
-├── docs/           # directive spec, framework design notes
-├── examples/
-│   ├── runtime-only/  # no-build demos (inline <script type="text/ruby">)
-│   └── 7guis/         # 7GUIs benchmark gallery built by `lilac build` / `lilac dev`
-└── Makefile        # builds lilac-{full,compiled}.wasm
-```
-
 `mruby-wasm-runtime` is a **separate repo** that owns the underlying
 mruby + WASI build and the `mruby-wasm-js` JS↔mruby bridge. Lilac
 depends on it as a peer clone (see "Setup" below).
@@ -115,11 +92,22 @@ make serve   # builds the wasm bundle, symlinks mrbgem, starts wsv
 
 | Variant | Compiler | Mrbgems | Use case |
 |---|---|---|---|
-| `lilac-full` | ✅ | core + directives + async + router + form + regexp-compat | default, no-build, runtime canonical |
-| `lilac-compiled` | ❌ (apps must ship `mrbc`-compiled IREP via `lilac build`) | core + form + regexp-compat | production size optimization |
+| `lilac-full` | ✅ | core + directives + async + router + form + extras + regexp-compat | default, no-build, runtime scanner canonical |
+| `lilac-compiled` | ❌ (apps must ship `mrbc`-compiled IREP via `lilac build`) | core + directives + form + regexp-compat | production size optimization (codegen canonical, scanner as runtime fallthrough for package directives) |
 
 Add `-release` to any target for the optimised (`-Os --strip-debug`)
 variant.
+
+## Distribution
+
+Lilac is distributed across **two channels** (ADR-25 / ADR-28):
+
+| What | Channel | URL / package |
+|---|---|---|
+| `lilac-full.wasm` + boot helper (Mode 1 = CDN-only browser use) | GitHub Pages | `https://takahashim.github.io/lilac/v$VERSION/` *(after first release tag)* |
+| `lilac-compiled.wasm` + bridge files (consumed by `lilac-cli`) | rubygems | `gem "lilac-wasm-bin"` *(release pending wasmtime-rb v45)* |
+| `lilac-cli` CLI gem | rubygems | `gem "lilac-cli"` *(release pending wasmtime-rb v45)* |
+| Package gems (extras / router / async / form) | rubygems | `gem "lilac-extras"` etc. *(release pending)* |
 
 ## CLI (optional)
 
@@ -149,6 +137,15 @@ What the CLI adds on top:
 
 See `cli/README.md` for usage details.
 
+## Design decisions
+
+Architecture-level rationales (= "why does it work this way?") live as
+ADRs under [`docs/adr/`](./docs/adr/). The
+[index](./docs/adr/README.md) lists each decision; per-ADR files
+record the problem, the trade-offs considered, and the resulting
+implementation. Speculative / unconfirmed proposals are tracked
+separately in [`docs/lilac-proposals.md`](./docs/lilac-proposals.md).
+
 ## Tests
 
 ```bash
@@ -162,21 +159,6 @@ make test-all     # CLI + Ruby wasm_spec + Node wasm_spec. Pre-release sweep.
 # Equivalent low-level invocation for the CLI tests:
 cd cli && bundle exec rake test
 ```
-
-## Dependency on mruby-wasm-runtime
-
-Lilac's wasm bundle bakes in two pieces from `mruby-wasm-runtime`:
-
-- `mrbgem/mruby-wasm-js/` — the JS↔mruby bridge (callbacks, await,
-  JS::Object), required for every Lilac runtime call.
-- `mrbgem/hal-wasi-io/` + `mrbgem/mruby-wasi-{dir,env}/` — WASI shims
-  / Ruby surface for filesystem / env access.
-
-During the pre-1.0 phase, Lilac tracks `mruby-wasm-runtime/main` and
-the local clone must be present (the build_config `abort`s without
-`MRUBY_WASM_RUNTIME_PATH` set). Once mruby-wasm-runtime cuts a stable
-release tag, the dependency will pin via `conf.gem github:` and the
-local clone becomes optional.
 
 ## License
 
