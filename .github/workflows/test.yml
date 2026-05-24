@@ -11,19 +11,19 @@ jobs:
 
     steps:
       - name: Checkout lilac
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: lilac
 
       - name: Checkout mruby-wasm-runtime
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: takahashim/mruby-wasm-runtime
           ref: v0.2.0
           path: mruby-wasm-runtime
 
       - name: Checkout wasmtime-rb
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: bytecodealliance/wasmtime-rb
           ref: main
@@ -48,13 +48,13 @@ jobs:
         run: bundle install
 
       - name: Cache wasi-sdk tarball
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/mruby-wasm-runtime
           key: wasi-sdk-33.0-x86_64-linux
 
       - name: Cache mruby clone
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: mruby-wasm-runtime/mruby
           key: mruby-4.0.0
@@ -89,19 +89,19 @@ jobs:
 
     steps:
       - name: Checkout lilac
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: lilac
 
       - name: Checkout mruby-wasm-runtime
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: takahashim/mruby-wasm-runtime
           ref: v0.2.0
           path: mruby-wasm-runtime
 
       - name: Download lilac-build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: lilac-build
           path: lilac/build/
@@ -116,13 +116,13 @@ jobs:
         run: bundle install
 
       - name: Cache wasi-sdk tarball
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/mruby-wasm-runtime
           key: wasi-sdk-33.0-x86_64-linux
 
       - name: Cache mruby clone
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: mruby-wasm-runtime/mruby
           key: mruby-4.0.0
@@ -143,19 +143,19 @@ jobs:
 
     steps:
       - name: Checkout lilac
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: lilac
 
       - name: Checkout mruby-wasm-runtime
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: takahashim/mruby-wasm-runtime
           ref: v0.2.0
           path: mruby-wasm-runtime
 
       - name: Download lilac-build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: lilac-build
           path: lilac/build/
@@ -166,13 +166,13 @@ jobs:
           node-version: '24'
 
       - name: Cache wasi-sdk tarball
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/mruby-wasm-runtime
           key: wasi-sdk-33.0-x86_64-linux
 
       - name: Cache mruby clone
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: mruby-wasm-runtime/mruby
           key: mruby-4.0.0
@@ -193,19 +193,19 @@ jobs:
 
     steps:
       - name: Checkout lilac
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: lilac
 
       - name: Checkout mruby-wasm-runtime
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: takahashim/mruby-wasm-runtime
           ref: v0.2.0
           path: mruby-wasm-runtime
 
       - name: Download lilac-build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: lilac-build
           path: lilac/build/
@@ -220,13 +220,13 @@ jobs:
         run: bundle install
 
       - name: Cache wasi-sdk tarball
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/mruby-wasm-runtime
           key: wasi-sdk-33.0-x86_64-linux
 
       - name: Cache mruby clone
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: mruby-wasm-runtime/mruby
           key: mruby-4.0.0

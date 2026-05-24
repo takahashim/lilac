@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout lilac
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: lilac
 
@@ -30,20 +30,20 @@ jobs:
       # `@takahashim/mruby-wasm-js` on npm — bump this ref when adopting
       # a newer mruby-wasm-runtime release.
       - name: Checkout mruby-wasm-runtime
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: takahashim/mruby-wasm-runtime
           ref: v0.2.0
           path: mruby-wasm-runtime
 
       - name: Cache wasi-sdk tarball
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/mruby-wasm-runtime
           key: wasi-sdk-33.0-x86_64-linux
 
       - name: Cache mruby clone
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: mruby-wasm-runtime/mruby
           key: mruby-4.0.0
@@ -75,7 +75,7 @@ jobs:
       # overwriting prior /v$TAG/ trees (keep_files: true), so each
       # release adds a new immutable version directory.
       - name: Publish to gh-pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: lilac/dist-pages
