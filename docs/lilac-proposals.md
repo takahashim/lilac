@@ -712,3 +712,4 @@ synthetic ref を無視するので harmless。`refs.foo` の user-authored ref 
 ~80 行のみ。dev rebuild 高速化と HTML 可読性向上が主な動機なので、
 体感メリットを実測してから判断するのも一つの選択。
 
+

@@ -166,8 +166,8 @@ module Lilac
           warn(
             'lilac-compiled.wasm not discoverable — `lilac build` (default ' \
             'target=compiled) will fail. Either run `make lilac-compiled` ' \
-            'in the lilac monorepo, `npm install @takahashim/lilac-compiled` ' \
-            'in this project, or use `lilac build --target full` to skip it.'
+            'in the lilac monorepo, add `gem "lilac-wasm-bin"` to your Gemfile ' \
+            'and `bundle install`, or use `lilac build --target full` to skip it.'
           )
         end
       end

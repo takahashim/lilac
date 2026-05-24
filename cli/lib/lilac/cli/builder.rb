@@ -708,8 +708,8 @@ module Lilac
         #   does NOT call `vm.eval` (would require mruby-compiler /
         #   mruby-eval, both excluded from the compiled wasm)
         # - target=:full — do nothing here; the Pattern A boot helper
-        #   (scaffold `boot.js`, `@takahashim/lilac-full#boot`, …) runs
-        #   `vm.eval("Lilac.start")` at the tail of its eval loop
+        #   (scaffold `boot.js`, lilac-full's GitHub Pages CDN `boot`, …)
+        #   runs `vm.eval("Lilac.start")` at the tail of its eval loop
         bundle_scripts =
           if @target == :compiled
             user_scripts = scripts + page_inline_scripts.reject { |s| s.strip.empty? }

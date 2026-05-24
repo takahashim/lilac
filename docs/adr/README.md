@@ -53,17 +53,18 @@ refinement** として位置付ける。
 | [0014](./0014-props-p2-prop-semantics-extension.md) | Props P2: `prop` の意味拡張(ivar 宣言 + accessor + 値式) | `lilac-props-spec.md` | 完了 |
 | [0015](./0015-lilac-full-bundle-size-optimization.md) | lilac-full の bundle size 最適化(browser-only + explicit allow-list + -Oz) | `build_config/lilac-full.rb`, `Makefile` | 完了 (2026-05-19、-25.3% raw / -23.0% brotli) |
 | [0016](./0016-drop-it-path-and-bare-ident-scope.md) | `it.path` 全廃 + value-binding bare-ident scope + data-prop-* auto-fill | `lilac-directive-spec.md` §3 / §5 / §6.2、`lilac-props-spec.md` §7.5 / §7.6 | 完了 (2026-05-19) |
-| [0017](./0017-codegen-canonical-scanner-grammar-only.md) | directive binding は codegen が canonical / scanner gem は grammar reference | `cli/lib/lilac/directives/` ↔ `runtime/mruby-lilac-directives/mrblib/` | 完了 (2026-05-19) |
-| [0018](./0018-lilac-build-compiled-single-command.md) | `lilac build --target compiled` 単一コマンド deploy | `cli/lib/lilac/cli/builder.rb` + `compiled_runtime_resolver.rb` | 完了 (2026-05-20) |
+| [0017](./0017-codegen-canonical-scanner-grammar-only.md) | directive binding は codegen が canonical / scanner gem は grammar reference | `cli/lib/lilac/directives/` ↔ `runtime/mruby-lilac-directives/mrblib/` | 完了 (2026-05-19)、ADR-27 Phase L でファイル名 rename |
+| [0018](./0018-lilac-build-compiled-single-command.md) | `lilac build --target compiled` 単一コマンド deploy | `cli/lib/lilac/cli/builder.rb` + `compiled_runtime_resolver.rb` | 完了 (2026-05-20)、ADR-19 / ADR-25 で内部実装更新 |
 | [0019](./0019-codegen-positional-lil-ref.md) | Codegen positional `lilN`(`data-ref` 注入の廃止) | `cli/lib/lilac/cli/template_ast.rb` + `runtime/mruby-lilac/mrblib/lilac_ref.rb` | 完了 (2026-05-20) |
 | [0020](./0020-component-scope-rule-and-lilac-start.md) | Component scope rule の確定 と `Lilac.start` 自動化 | `cli/lib/lilac/cli/builder.rb` + `script_analyzer.rb` + `runtime/mruby-lilac/mrblib/lilac_registry.rb` | 完了 (2026-05-20) |
 | [0021](./0021-data-bind-revival-form-as-aggregation.md) | `data-bind` の復活と form の "集約 layer" 化(ADR-0002 部分覆し) | `lilac-directive-spec.md` + `lilac-form-spec.md` + `lilac-design.md` §4.5 | 完了 (2026-05-20) |
 | [0022](./0022-drop-form-cli-build-time-lint.md) | Form 関連の CLI build-time lint を廃止(ADR-0006 部分覆し) | `cli/lib/lilac/cli/script_analyzer.rb` + `cross_ref_linter.rb` | 完了 (2026-05-22) |
 | [0023](./0023-plugin-mechanism-runtime-fallthrough.md) | Plug-in 機構: runtime canonical の延長としての runtime fallthrough | `runtime/mruby-lilac-directives/mrblib/lilac_directives_scanner.rb` + `cli/lib/lilac/cli/codegen.rb` | 完了 (2026-05-23) |
 | [0024](./0024-npm-distributed-plugin-superseded.md) | Plug-in 配布形態: `lilac-compiled` core + 個別 npm plug-in(**superseded by ADR-0025**) | (歴史) | 上書き済み (2026-05-23) |
-| [0025](./0025-pivot-plugin-distribution-to-rubygems.md) | Plug-in 配布を rubygems に pivot、npm は `lilac-full` の CDN 配布のみに集約 | `runtime/mruby-lilac-*/lilac-*.gemspec` + `cli/lib/lilac/cli/package_discovery.rb` + Builder 統合 | 着手 (2026-05-23)、ADR-0026 で用語 rename |
+| [0025](./0025-pivot-plugin-distribution-to-rubygems.md) | Plug-in 配布を rubygems に pivot、npm は `lilac-full` の CDN 配布のみに集約 | `runtime/mruby-lilac-*/lilac-*.gemspec` + `cli/lib/lilac/cli/package_discovery.rb` + Builder 統合 | 着手 (2026-05-23)、ADR-0026 で用語 rename、ADR-0028 で npm 配布全廃 |
 | [0026](./0026-rename-plugin-to-package.md) | 「plug-in」用語を「package」に rename | gemspec / CLI / docs / tests / examples の機械的 rename | 完了 (2026-05-23) |
 | [0027](./0027-class-first-handler-api.md) | Package Handler を class-first API として整備 (class-first principle) | `runtime/mruby-lilac-directives/mrblib/` + `cli/lib/lilac/cli/` + `docs/lilac-package-spec.md` | 完了 (2026-05-24)、Phase C/F は trigger 待ちで保留 |
+| [0028](./0028-drop-npm-distribution-github-pages-cdn.md) | npm 配布を全廃、`lilac-full` を GitHub Pages から CDN 配信(ADR-25 完成) | `.github/workflows/release.yml` + `Makefile` + `pages/lilac-full/` | 着手 (2026-05-24)、初回 release tag 待ち |
 
 ## このドキュメントの位置付け
 

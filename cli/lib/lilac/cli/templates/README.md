@@ -65,13 +65,12 @@ the CLI resolves the wasm + JS bridge from one of:
 1. `--lilac-compiled-path` / `--mruby-wasm-js-path` CLI flags
 2. `c.lilac_compiled_path` / `c.mruby_wasm_js_path` in `lilac.config.rb`
 3. `LILAC_COMPILED_WASM` / `MRUBY_WASM_JS_PATH` env vars
-4. The Lilac monorepo (if you're working inside this repo)
-5. `node_modules/@takahashim/lilac-compiled` and
-   `node_modules/@takahashim/mruby-wasm-js`
+4. The `lilac-wasm-bin` Ruby gem (canonical install path — your
+   scaffolded `Gemfile` declares it, so `bundle install` brings the
+   wasm + bridge in automatically)
+5. The Lilac monorepo (if you're working inside this repo)
 
-Most projects can simply `npm install @takahashim/lilac-compiled` (which
-pulls in the bridge as a peer dependency) and the build picks it up
-automatically.
+Most projects rely on path 4 — `bundle install` is all you need.
 
 ## Configuration
 

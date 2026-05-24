@@ -1,22 +1,28 @@
-// @takahashim/lilac-full — Lilac full variant: wasm + boot helper.
+// lilac-full — Lilac full variant boot helper for browser CDN delivery.
 //
-// Bundles the full Lilac wasm (runtime parser + directive scanner +
-// async/router/form/regexp-compat) and a `boot()` helper that wires
-// it up to a `<script type="text/ruby">` tag.
+// Loads the bundled wasm (runtime parser + directive scanner + async /
+// router / form / regexp-compat) and a `boot()` helper that wires it up
+// to a `<script type="text/ruby">` tag. Ships via GitHub Pages at
+// https://takahashim.github.io/lilac/v$VERSION/ — load via:
 //
-//   import { boot } from "@takahashim/lilac-full";
-//   await boot();
+//   <script type="module">
+//     import { boot } from "https://takahashim.github.io/lilac/v0.1.0/index.js";
+//     await boot();
+//   </script>
 //
-// `boot()` defaults to loading the bundled wasm and evaluating the
-// first `<script type="text/ruby">` in the document after
-// DOMContentLoaded. After evaluation it fires `Lilac.start` to mount
-// every `data-component` element (decisions §20.6 / §20.7 — Pattern A
-// boot helpers own the framework boot). The runtime-side
-// `Lilac::Registry#start` is idempotent so user code that calls
-// `Lilac.start` explicitly stays correct.
+// `boot()` defaults to loading the co-located wasm and evaluating the
+// first `<script type="text/ruby">` after DOMContentLoaded. It then
+// fires `Lilac.start` to mount every `data-component` element
+// (ADR-20.6 / ADR-20.7 — Pattern A boot helpers own the framework
+// boot). The runtime-side `Lilac::Registry#start` is idempotent so
+// user code that calls `Lilac.start` explicitly stays correct.
+//
+// Bridge files (mruby-wasm-js/index.js etc.) are co-located in the
+// same versioned directory so all imports stay relative — no package
+// manager or import map needed.
 
-export { createVM } from "@takahashim/mruby-wasm-js";
-import { createVM } from "@takahashim/mruby-wasm-js";
+export { createVM } from "./mruby-wasm-js/index.js";
+import { createVM } from "./mruby-wasm-js/index.js";
 
 const DEFAULT_WASM_URL = new URL("./lilac.wasm", import.meta.url);
 const DEFAULT_SCRIPT_SELECTOR = "script[type='text/ruby']";
@@ -26,8 +32,8 @@ const DEFAULT_SCRIPT_SELECTOR = "script[type='text/ruby']";
  *
  * @param {object} [opts]
  * @param {string | URL} [opts.wasm]
- *   Override the bundled wasm URL. Defaults to this package's
- *   `./lilac.wasm`.
+ *   Override the bundled wasm URL. Defaults to this build's
+ *   co-located `./lilac.wasm`.
  * @param {Uint8Array | ArrayBuffer} [opts.bytecode]
  *   Pre-compiled mruby bytecode (`.mrb`). Mutually exclusive with
  *   `source` / `script`.
@@ -48,7 +54,7 @@ const DEFAULT_SCRIPT_SELECTOR = "script[type='text/ruby']";
  *   When `false`, skip the automatic `vm.eval("Lilac.start")` call.
  *   Use this only for tests or specialised pre-boot setup; normal
  *   usage relies on the helper firing boot itself (Pattern A —
- *   decisions §20.7).
+ *   ADR-20.7).
  * @returns {Promise<any>} resolved with the VM.
  */
 export async function boot(opts = {}) {
@@ -79,8 +85,8 @@ export async function boot(opts = {}) {
   }
 
   // Boot the framework at the tail of the eval/load step so user code
-  // stays purely declarative (decisions §20.6). Idempotent on the
-  // runtime side, so explicit user `Lilac.start` calls remain safe.
+  // stays purely declarative (ADR-20.6). Idempotent on the runtime
+  // side, so explicit user `Lilac.start` calls remain safe.
   if (opts.autoStart !== false) {
     vm.eval("Lilac.start");
   }

@@ -192,9 +192,11 @@ my-app/
 └── db/
 ```
 
-Lilac の wasm / JS bridge は `@takahashim/lilac-full` npm package(将来) もしくは
-手動コピーで `public/lilac/vendor/lilac-full/` に置く。Rails の asset pipeline
-(propshaft / sprockets) に乗せる必要はない — 純 static で十分。
+Lilac の wasm / JS bridge は GitHub Pages CDN
+(`https://takahashim.github.io/lilac/v$VERSION/`) から fetch するか、同 URL
+から `wget` / `curl` で `public/lilac/vendor/lilac-full/` に手動コピーする。
+Rails の asset pipeline (propshaft / sprockets) に乗せる必要はない — 純 static
+で十分。
 
 ### Layout への組み込み
 

@@ -68,6 +68,13 @@ codegen → page-inline class 本体 → Lilac.start]`。`Lilac::Bindings::<Clas
 embed する必要がある)。pages-with-no-Ruby のケースだけは empty bundle で
 .mrb も bootstrap も emit しない、という gate を維持。
 
+> **註 (2026-05-20)**: 本節の `scan_page_components` を起点とする Nokogiri
+> 書き戻し力技は [ADR-19](./0019-codegen-positional-lil-ref.md) で廃止され、
+> `synthesize_page_inline_components` (= page-inline subtree を in-memory
+> `SFC::Component` として組み立て `<lilac-component>` placeholder に置換) に
+> 置換された。page-inline data-component を codegen にかけるという目的は維持。
+> 詳細は ADR-19 §影響 / §実装 を参照。
+
 ### B. Target-namespaced vendor layout
 
 `public/vendor/` 直下を target ごとに分ける規約を確立:
@@ -134,6 +141,20 @@ monorepo の wasm 検出が **build/ 優先 → npm/ fallback** なのは、`npm
 a callable` で落ちるケースがあるため。現 `build_config/lilac-compiled.rb` は `-flto`
 を外しており、`make lilac-compiled` で作る `build/lilac-compiled.wasm` は env import を
 持たない(= 現 bridge と整合する)。
+
+> **註 (2026-05-23)**: 本 discovery table は [ADR-25](./0025-pivot-plugin-distribution-to-rubygems.md)
+> で再編された。`@takahashim/lilac-compiled` の npm 配布は廃止、`lilac-wasm-bin`
+> gem 経由の配布に統一されたため、段階 4b (`npm/lilac-compiled/lilac.wasm`) と
+> 段階 5/6 (`node_modules/@takahashim/...`) は **削除済み**。現在の段階順は次:
+>
+> | 段階 | wasm | bridge |
+> |---|---|---|
+> | 1 | `--lilac-compiled-path` / `c.lilac_compiled_path` | `--mruby-wasm-js-path` / `c.mruby_wasm_js_path` |
+> | 2 | `LILAC_COMPILED_WASM` env | `MRUBY_WASM_JS_PATH` env |
+> | 3 | **`lilac-wasm-bin` gem** (canonical install path) | **`lilac-wasm-bin` gem** |
+> | 4 | monorepo `build/lilac-compiled.wasm` | monorepo `mrbgem/mruby-wasm-js/js/` |
+>
+> 実装 SSOT は `cli/lib/lilac/cli/compiled_runtime_resolver.rb`。
 
 boot helper は npm package の `index.js` を vendor せず、builder template として
 `render_compiled_boot_module` で inline 出力する(上記決定 C 参照)ので、boot helper

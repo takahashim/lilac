@@ -11,7 +11,7 @@
 #   make lilac-all-release Build both variants (release: -Oz + strip-debug;
 #                          compile-time -flto handled by build_config)
 #   make test              Run wasm_spec against the full bundle
-#   make npm-pack          Stage release wasms into npm/lilac-*/lilac.wasm
+#   make pages-pack        Stage gh-pages CDN tree under dist-pages/v$VERSION/
 #   make clean             Remove this repo's build/ artifacts
 
 # Locate mruby-wasm-runtime. ENV takes precedence; otherwise look at
@@ -277,35 +277,48 @@ serve: lilac-full mrbgem
 	@echo "Examples (7GUIs gallery): cd examples/7guis && bundle exec lilac dev"
 	@wsv .
 
-# ── npm package staging ─────────────────────────────────────────────────
-# Copies *.release.wasm into npm/{lilac-full,lilac-compiled}/lilac.wasm
-# so the variant packages can be `npm publish`'d from those directories.
-# Uses *-release artefacts (= -Os + symbol stripping); dev wasms are ~5x
-# larger and not suitable for end users.
-NPM_DIR := $(CURDIR)/npm
+# ── GitHub Pages release staging ────────────────────────────────────────
+# Stages a self-contained CDN delivery tree under dist-pages/v$VERSION/
+# for publication to the gh-pages branch (ADR-28). Layout:
+#
+#   dist-pages/v$VERSION/
+#     lilac.wasm                  ← compiled wasm (release build, -Os)
+#     index.js / index.d.ts       ← boot helper from pages/lilac-full/
+#     README.md / LICENSE
+#     mruby-wasm-js/              ← bridge files for browser ES module
+#
+# All imports inside index.js are relative (./mruby-wasm-js/index.js)
+# so the tree is self-contained — no bundler / import map needed.
+# Invoked by .github/workflows/release.yml on each tag push (v*).
+PAGES_DIR     := $(CURDIR)/dist-pages
+PAGES_SOURCE  := $(CURDIR)/pages/lilac-full
+BRIDGE_SOURCE := $(MRUBY_WASM_RUNTIME)/mrbgem/mruby-wasm-js/js
 
-.PHONY: npm-pack
-npm-pack: $(NPM_DIR)/lilac-full/lilac.wasm
-	@echo "npm package staged. To publish:"
-	@echo "  cd npm/lilac-full && npm publish"
+# VERSION defaults to the current git tag; release workflow passes
+# VERSION=v$tag explicitly. Local invocation: `make pages-pack VERSION=v0.1.0`.
+VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || echo "vdev")
 
-$(NPM_DIR)/lilac-full/lilac.wasm: $(BUILD_WASM_LILAC_FULL_RELEASE)
-	cp $< $@
+.PHONY: pages-pack
+pages-pack: $(BUILD_WASM_LILAC_FULL_RELEASE)
+	@mkdir -p $(PAGES_DIR)/$(VERSION)/mruby-wasm-js
+	@cp $(BUILD_WASM_LILAC_FULL_RELEASE) $(PAGES_DIR)/$(VERSION)/lilac.wasm
+	@cp $(PAGES_SOURCE)/index.js     $(PAGES_DIR)/$(VERSION)/index.js
+	@cp $(PAGES_SOURCE)/index.d.ts   $(PAGES_DIR)/$(VERSION)/index.d.ts
+	@cp $(PAGES_SOURCE)/README.md    $(PAGES_DIR)/$(VERSION)/README.md
+	@cp $(PAGES_SOURCE)/LICENSE      $(PAGES_DIR)/$(VERSION)/LICENSE
+	@cp $(BRIDGE_SOURCE)/*.js        $(PAGES_DIR)/$(VERSION)/mruby-wasm-js/
+	@cp $(BRIDGE_SOURCE)/*.d.ts      $(PAGES_DIR)/$(VERSION)/mruby-wasm-js/ 2>/dev/null || true
+	@echo "Pages tree staged at $(PAGES_DIR)/$(VERSION)/"
+	@echo "Release workflow pushes this to gh-pages branch."
 
-.PHONY: npm-clean
-npm-clean:
-	rm -f $(NPM_DIR)/lilac-full/lilac.wasm
+.PHONY: pages-clean
+pages-clean:
+	rm -rf $(PAGES_DIR)
 
 # ── clean ───────────────────────────────────────────────────────────────
 # `clean` removes everything Lilac generates: the wasm build dir, the
-# mruby per-config build cache, and the npm-staged wasm artefacts.
-# The latter used to be excluded, which let stale (e.g. LTO-era) wasm
-# files survive a `make clean` and then trip up `CompiledRuntimeResolver`
-# when it fell through to the npm fallback — keep this scoped wide so
-# the obvious "wipe everything" workflow really does wipe everything.
-# Use `make npm-clean` standalone when you only want to drop the npm
-# wasm (during a release flow that's about to repack from build/).
-clean: npm-clean
+# mruby per-config build cache, and the pages-staged release tree.
+clean: pages-clean
 	rm -rf $(MRUBY_DIR)/build/lilac-*
 	rm -rf $(MRUBY_DIR)/build/mrbc-host*
 	rm -rf $(MRUBY_DIR)/build/lilac-full-host*

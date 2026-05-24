@@ -1,6 +1,7 @@
 # Build outputs
 /build/
 /dist/
+/dist-pages/
 
 # Copy created by `make serve` so wsv can resolve example imports of
 # `../mrbgem/...` from within the served root.
@@ -25,18 +26,6 @@ build_config/*.lock
 /cli/.bundle/
 /cli/Gemfile.lock
 /cli/pkg/
-
-# npm build artefact: lilac-full.wasm copied by `make npm-pack` from
-# the release build. JS / package.json / LICENSE / README stay tracked.
-# `.mrb` glob remains for transitional cleanup — plug-in distribution
-# moved to rubygems (decisions §25) so no production `.mrb` should land
-# under npm/ anymore, but stale files from earlier builds may.
-/npm/**/*.wasm
-/npm/**/*.mrb
-
-# npm
-/npm/lilac-*/node_modules/
-/npm/lilac-*/package-lock.json
 
 # Misc
 *.tsbuildinfo

@@ -1,0 +1,83 @@
+name: release
+
+# Build lilac-full release artifacts on each `v*` tag and publish to
+# the gh-pages branch under `/v$TAG/`. The published tree is the
+# canonical CDN delivery surface for `lilac-full` (ADR-28 — npm
+# distribution is deprecated; consumers load from
+# https://takahashim.github.io/lilac/v$TAG/index.js).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Required for peaceiris/actions-gh-pages to push to gh-pages branch.
+permissions:
+  contents: write
+
+jobs:
+  publish-pages:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout lilac
+        uses: actions/checkout@v4
+        with:
+          path: lilac
+
+      # Same mruby-wasm-runtime pin as CI. Release artifacts must build
+      # against the exact runtime version users get from
+      # `@takahashim/mruby-wasm-js` on npm — bump this ref when adopting
+      # a newer mruby-wasm-runtime release.
+      - name: Checkout mruby-wasm-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: takahashim/mruby-wasm-runtime
+          ref: v0.2.0
+          path: mruby-wasm-runtime
+
+      - name: Cache wasi-sdk tarball
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mruby-wasm-runtime
+          key: wasi-sdk-33.0-x86_64-linux
+
+      - name: Cache mruby clone
+        uses: actions/cache@v4
+        with:
+          path: mruby-wasm-runtime/mruby
+          key: mruby-4.0.0
+
+      - name: Bootstrap wasi-sdk + mruby clone
+        working-directory: mruby-wasm-runtime
+        run: make wasi-sdk && make js
+
+      # Release build: -Oz + strip-debug. ~322 KB brotli for lilac-full.
+      - name: Build lilac-full (release)
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+        run: make lilac-full-release
+
+      - name: Stage gh-pages tree
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+          VERSION: ${{ github.ref_name }}
+        run: |
+          make pages-pack VERSION="${VERSION}"
+          # Mirror to /latest/ so consumers can pin to a moving "latest"
+          # alongside the immutable /v$VERSION/ URL.
+          rm -rf dist-pages/latest
+          cp -r "dist-pages/${VERSION}" dist-pages/latest
+
+      # peaceiris/actions-gh-pages: appends to gh-pages branch without
+      # overwriting prior /v$TAG/ trees (keep_files: true), so each
+      # release adds a new immutable version directory.
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: lilac/dist-pages
+          keep_files: true
+          full_commit_message: 'release: ${{ github.ref_name }}'

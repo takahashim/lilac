@@ -1,13 +1,13 @@
-// Type definitions for @takahashim/lilac-full
+// Type definitions for lilac-full (browser CDN delivery via GitHub Pages).
 
-import type { createVM } from "@takahashim/mruby-wasm-js";
+import type { createVM } from "./mruby-wasm-js/index.js";
 
-export { createVM } from "@takahashim/mruby-wasm-js";
+export { createVM } from "./mruby-wasm-js/index.js";
 
 export type LilacVM = Awaited<ReturnType<typeof createVM>>;
 
 export interface BootOptions {
-  /** Override the bundled wasm URL. Defaults to this package's `./lilac.wasm`. */
+  /** Override the bundled wasm URL. Defaults to this build's co-located `./lilac.wasm`. */
   wasm?: string | URL;
   /** Pre-compiled mruby bytecode. Mutually exclusive with `source` / `script`. */
   bytecode?: Uint8Array | ArrayBuffer;
@@ -22,6 +22,11 @@ export interface BootOptions {
   scriptSelector?: string;
   /** Callback fired after the script is evaluated. */
   onReady?: (vm: LilacVM) => void | Promise<void>;
+  /**
+   * When `false`, skip the automatic `vm.eval("Lilac.start")` call.
+   * Use this only for tests or specialised pre-boot setup.
+   */
+  autoStart?: boolean;
 }
 
 export function boot(opts?: BootOptions): Promise<LilacVM>;
