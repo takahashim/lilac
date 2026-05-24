@@ -1,0 +1,43 @@
+name: Test (Ruby host)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-ruby-spec:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout lilac
+        uses: actions/checkout@v4
+        with:
+          path: lilac
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lilac-build
+
+      - name: Download mruby-wasm-runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: mruby-wasm-runtime
+          path: mruby-wasm-runtime
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+
+      - name: Set up lilac dependencies
+        working-directory: lilac/cli
+        run: bundle install
+
+      - name: Run wasm_spec (Ruby host)
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+        run: make test

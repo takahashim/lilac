@@ -1,0 +1,87 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout lilac
+        uses: actions/checkout@v4
+        with:
+          path: lilac
+
+      - name: Checkout mruby-wasm-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: takahashim/mruby-wasm-runtime
+          ref: v0.2.0
+          path: mruby-wasm-runtime
+
+      - name: Checkout wasmtime-rb
+        uses: actions/checkout@v4
+        with:
+          repository: bytecodealliance/wasmtime-rb
+          ref: main
+          path: wasmtime-rb
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+
+      - name: Build wasmtime-rb
+        working-directory: wasmtime-rb
+        run: bundle install && bundle exec rake compile
+
+      - name: Set up lilac dependencies
+        working-directory: lilac/cli
+        run: bundle install
+
+      - name: Cache wasi-sdk tarball
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mruby-wasm-runtime
+          key: wasi-sdk-33.0-x86_64-linux
+
+      - name: Cache mruby clone
+        uses: actions/cache@v4
+        with:
+          path: mruby-wasm-runtime/mruby
+          key: mruby-4.0.0
+
+      - name: Bootstrap wasi-sdk + mruby clone
+        working-directory: mruby-wasm-runtime
+        run: make wasi-sdk && make js
+
+      - name: Build lilac-full
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+        run: make lilac-full
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lilac-build
+          path: |
+            lilac/build/
+            lilac/cli/
+            wasmtime-rb/lib/wasmtime/
+          retention-days: 1
+
+      - name: Upload mruby-wasm-runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: mruby-wasm-runtime
+          path: mruby-wasm-runtime/
+          retention-days: 1
