@@ -49,11 +49,11 @@ module Lilac
         end
 
         # `data-form` on a non-<form> element is a hard scope violation.
-        def validate_data_form_target!(el, descriptor)
-          tag = el[:tagName].to_s.downcase
+        def validate_data_form_target!(ctx)
+          tag = ctx.element.to_js[:tagName].to_s.downcase
           return if tag == "form"
           raise Lilac::Error,
-                "data-form is only allowed on <form> elements (got <#{tag}>, #{descriptor})"
+                "data-form is only allowed on <form> elements (got <#{tag}>, #{ctx.descriptor})"
         end
 
         # ---- <form>: submit auto-wire -----------------------------------
@@ -78,59 +78,58 @@ module Lilac
 
         # Resolve enclosing form, ensure field is registered (auto-register
         # from HTML when Ruby didn't declare it), then wire the input + UI.
-        def dispatch_field(scanner, raw_value, el)
-          sym = parse_ident!(raw_value, "data-field")
-          form = resolve_form_for(scanner, el)
-          input_el = find_form_control(el)
-          field = ensure_field_registered(scanner, form, sym, input_el)
-          field.bind_to(scanner.wrap_ref(input_el)) if input_el
-          wire_field_ui(scanner, field, el)
+        def dispatch_field(ctx)
+          sym = parse_ident!(ctx.raw_value, "data-field")
+          form = resolve_form_for(ctx)
+          input_el = find_form_control(ctx.element.to_js)
+          field = ensure_field_registered(ctx.host, form, sym, input_el)
+          field.bind_to(ctx.wrap(input_el)) if input_el
+          wire_field_ui(ctx, field)
         end
 
         # ---- data-button dispatch ---------------------------------------
 
         # Look up the declared button (raise if missing), wire click event.
-        def dispatch_button(scanner, raw_value, el)
-          sym = parse_ident!(raw_value, "data-button")
-          form = resolve_form_for(scanner, el)
+        def dispatch_button(ctx)
+          sym = parse_ident!(ctx.raw_value, "data-button")
+          form = resolve_form_for(ctx)
           unless form.has_button?(sym)
             raise Lilac::Error,
                   "data-button=#{sym.inspect} but form has no `f.button :#{sym}` declaration"
           end
-          ref = scanner.wrap_ref(el)
-          ref.on(:click) { |event| form.invoke_button(sym, event) }
+          ctx.on(:click) { |event| form.invoke_button(sym, event) }
         end
 
         # ---- helpers ----------------------------------------------------
 
         # Return the field registered under `sym`, auto-registering from HTML
         # (form-spec §10.3.1) when Ruby didn't declare it.
-        def ensure_field_registered(scanner, form, sym, input_el)
-          auto_register_field(scanner, form, sym, input_el) unless form.has_field?(sym)
+        def ensure_field_registered(host, form, sym, input_el)
+          auto_register_field(host, form, sym, input_el) unless form.has_field?(sym)
           form[sym]
         end
 
         # All UI wiring tied to a `data-field` container: invalid/valid class
         # toggling and the optional error slot. Skips class wiring when the
         # author opts out via `data-field-no-class`.
-        def wire_field_ui(scanner, field, container_el)
+        def wire_field_ui(ctx, field)
+          container_el = ctx.element.to_js
           unless container_el.call(:hasAttribute, "data-field-no-class").js_bool
-            wire_field_container_class(scanner, field, container_el)
+            wire_field_container_class(ctx.host, field, container_el)
           end
-          wire_field_error_slot(scanner, field, container_el)
+          wire_field_error_slot(ctx.host, field, container_el)
         end
 
         # Container class wiring per form-spec §10.4. is-invalid toggles on
         # show_error?; is-valid toggles on touched? && valid?. Class names are
         # customizable via data-field-invalid / data-field-valid so design
         # systems with their own conventions can re-route without patching.
-        def wire_field_container_class(scanner, field, container_el)
+        def wire_field_container_class(host, field, container_el)
           invalid_attr = container_el.call(:getAttribute, "data-field-invalid")
           valid_attr   = container_el.call(:getAttribute, "data-field-valid")
           invalid_class = invalid_attr.js_null? ? "is-invalid" : invalid_attr.to_s
           valid_class   = valid_attr.js_null?   ? "is-valid"   : valid_attr.to_s
-          host = scanner.host
-          host.bind(scanner.wrap_ref(container_el), class: {
+          host.bind(host.wrap(container_el), class: {
             invalid_class => host.computed { field.show_error? },
             valid_class   => host.computed { field.touched? && field.valid? },
           })
@@ -142,12 +141,11 @@ module Lilac
         #   3. none → silent (some designs don't render per-field error text)
         # When found: bind textContent to error_signal, hidden attr to
         # !show_error?.
-        def wire_field_error_slot(scanner, field, container_el)
+        def wire_field_error_slot(host, field, container_el)
           slot = container_el.call(:querySelector, "[data-field-error]")
           slot = container_el.call(:querySelector, ".error") if slot.js_null?
           return if slot.js_null?
-          host = scanner.host
-          host.bind(scanner.wrap_ref(slot),
+          host.bind(host.wrap(slot),
                     text: field.error_signal,
                     attr: { "hidden" => host.computed { !field.show_error? } })
         end
@@ -168,9 +166,9 @@ module Lilac
         # via host.form(name) if needed (form-spec §8). We don't ascend past
         # the host's own root so other components' form scopes are out of
         # reach by design.
-        def resolve_form_for(scanner, el)
-          host = scanner.host
-          node = el[:parentElement]
+        def resolve_form_for(ctx)
+          host = ctx.host
+          node = ctx.element.to_js[:parentElement]
           host_root_js = host.root.to_js
           loop do
             break if node.js_null?
@@ -201,7 +199,7 @@ module Lilac
         # Auto-register field from HTML. type: checkbox → :checkbox, else
         # :text. initial: <input value="..."> attribute only (checked /
         # textContent / option selected are intentionally ignored, §10.3.1).
-        def auto_register_field(scanner, form, sym, input_el)
+        def auto_register_field(host, form, sym, input_el)
           type = :text
           initial = ""
           if input_el && input_el[:tagName].to_s.downcase == "input"
@@ -217,7 +215,7 @@ module Lilac
           form.field(sym, initial: initial, type: type)
           Lilac.logger.warn(
             "auto-registered field :#{sym} (no `f.field :#{sym}` declaration) " \
-            "in component #{scanner.host.class.name}"
+            "in component #{host.class.name}"
           )
         end
 

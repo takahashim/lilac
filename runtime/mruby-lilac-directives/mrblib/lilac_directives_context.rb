@@ -89,6 +89,25 @@ module Lilac
         @element.on(event, options, &block)
       end
 
+      # The `Lilac::Component` instance the directive is wiring into.
+      # Stable surface — exposes the component-level API (`bind`,
+      # `effect`, `computed`, `signal`, `form(...)`, ...). Prefer the
+      # Context helpers (`bind_attribute`, `on`, ...) when they cover
+      # the case; reach for `ctx.host` when the directive needs the
+      # full Component surface (e.g. form's `host.form(sym)` lookup).
+      def host
+        @scanner.host
+      end
+
+      # Wrap a raw `JS::Object` DOM element as a `RefElement` bound to
+      # the host component. Useful when the directive walks the DOM to
+      # locate a descendant element (e.g. form's `data-field` finding
+      # the inner `<input>`) and needs to bind / listen on it through
+      # the framework's ergonomic API.
+      def wrap(js_element)
+        @scanner.host.wrap(js_element)
+      end
+
       # Short `<tag data-ref="...">` form for error / warn messages.
       # Mirrors the scanner's internal `element_descriptor` so handler
       # error messages match the framework's wording.
