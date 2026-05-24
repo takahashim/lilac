@@ -843,6 +843,8 @@ class TestBuilder < Minitest::Test
     # no monorepo.
     sandbox = Dir.mktmpdir("lilac-no-rt-")
     no_repo = File.join(sandbox, "nope")
+    saved_lilac_compiled_wasm = ENV["LILAC_COMPILED_WASM"]
+    saved_mruby_wasm_js_path = ENV["MRUBY_WASM_JS_PATH"]
     begin
       write_page "index", <<~HTML
         <html><body><script type="text/ruby">class X; end</script></body></html>
@@ -878,6 +880,8 @@ class TestBuilder < Minitest::Test
       end
       assert_match(/lilac-compiled\.wasm not found/, err.message)
     ensure
+      ENV["LILAC_COMPILED_WASM"] = saved_lilac_compiled_wasm
+      ENV["MRUBY_WASM_JS_PATH"] = saved_mruby_wasm_js_path
       FileUtils.remove_entry(sandbox)
     end
   end
