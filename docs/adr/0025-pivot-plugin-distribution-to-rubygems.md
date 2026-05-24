@@ -35,6 +35,14 @@
     ```
   - npm install + bundler 等の Node ecosystem workflow は **想定しない**
     (Mode 1 ユーザーは Node / npm / Vite を一切持たない前提)
+
+> **註 (2026-05-24 追記)**: 本節は
+> [ADR-28](./0028-drop-npm-distribution-github-pages-cdn.md) で **全廃**。
+> `@takahashim/lilac-full` の npm 配布も停止し、`lilac-full` の CDN delivery
+> は GitHub Pages 経由 (`https://takahashim.github.io/lilac/v$VERSION/`) に
+> 移行した。本 ADR の「Lilac は Ruby-native」方針は ADR-28 で完成する形に
+> なっている。「Lilac の配布物は rubygems + GitHub Pages の 2 系統のみ」が
+> 最終的な配布アーキテクチャ。
 - **`lilac dev` 既定 target は `:full`** のまま (canonical で mrbc を経ない
   ので iteration が手軽)
 - **`lilac build --target full` でも plug-in が動くようにする**:
