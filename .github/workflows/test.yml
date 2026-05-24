@@ -76,25 +76,11 @@ jobs:
           path: lilac/build/
           retention-days: 1
 
-      - name: Upload cli
-        uses: actions/upload-artifact@v4
-        with:
-          name: lilac-cli
-          path: lilac/cli/
-          retention-days: 1
-
       - name: Upload wasmtime-rb
         uses: actions/upload-artifact@v4
         with:
           name: wasmtime-rb
           path: wasmtime-rb/lib/
-          retention-days: 1
-
-      - name: Upload mruby-wasm-runtime
-        uses: actions/upload-artifact@v4
-        with:
-          name: mruby-wasm-runtime
-          path: mruby-wasm-runtime/
           retention-days: 1
 
   test-ruby-spec:
@@ -107,38 +93,43 @@ jobs:
         with:
           path: lilac
 
+      - name: Checkout mruby-wasm-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: takahashim/mruby-wasm-runtime
+          ref: v0.2.0
+          path: mruby-wasm-runtime
+
       - name: Download lilac-build
         uses: actions/download-artifact@v4
         with:
           name: lilac-build
           path: lilac/build/
 
-      - name: Download mruby-wasm-runtime
-        uses: actions/download-artifact@v4
-        with:
-          name: mruby-wasm-runtime
-          path: mruby-wasm-runtime/
-
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
 
-      - name: Download lilac-cli
-        uses: actions/download-artifact@v4
-        with:
-          name: lilac-cli
-          path: lilac/cli/
-
       - name: Set up lilac dependencies
         working-directory: lilac/cli
         run: bundle install
 
-      - name: Download wasmtime-rb
-        uses: actions/download-artifact@v4
+      - name: Cache wasi-sdk tarball
+        uses: actions/cache@v4
         with:
-          name: wasmtime-rb
-          path: wasmtime-rb/lib/
+          path: ~/.cache/mruby-wasm-runtime
+          key: wasi-sdk-33.0-x86_64-linux
+
+      - name: Cache mruby clone
+        uses: actions/cache@v4
+        with:
+          path: mruby-wasm-runtime/mruby
+          key: mruby-4.0.0
+
+      - name: Bootstrap wasi-sdk + mruby clone
+        working-directory: mruby-wasm-runtime
+        run: make wasi-sdk && make js
 
       - name: Run wasm_spec (Ruby host)
         working-directory: lilac
@@ -156,22 +147,39 @@ jobs:
         with:
           path: lilac
 
+      - name: Checkout mruby-wasm-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: takahashim/mruby-wasm-runtime
+          ref: v0.2.0
+          path: mruby-wasm-runtime
+
       - name: Download lilac-build
         uses: actions/download-artifact@v4
         with:
           name: lilac-build
           path: lilac/build/
 
-      - name: Download mruby-wasm-runtime
-        uses: actions/download-artifact@v4
-        with:
-          name: mruby-wasm-runtime
-          path: mruby-wasm-runtime/
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+
+      - name: Cache wasi-sdk tarball
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mruby-wasm-runtime
+          key: wasi-sdk-33.0-x86_64-linux
+
+      - name: Cache mruby clone
+        uses: actions/cache@v4
+        with:
+          path: mruby-wasm-runtime/mruby
+          key: mruby-4.0.0
+
+      - name: Bootstrap wasi-sdk + mruby clone
+        working-directory: mruby-wasm-runtime
+        run: make wasi-sdk && make js
 
       - name: Run wasm_spec (Node + happy-dom)
         working-directory: lilac
@@ -189,17 +197,18 @@ jobs:
         with:
           path: lilac
 
-      - name: Download lilac-cli
-        uses: actions/download-artifact@v4
+      - name: Checkout mruby-wasm-runtime
+        uses: actions/checkout@v4
         with:
-          name: lilac-cli
-          path: lilac/cli/
+          repository: takahashim/mruby-wasm-runtime
+          ref: v0.2.0
+          path: mruby-wasm-runtime
 
-      - name: Download mruby-wasm-runtime
+      - name: Download lilac-build
         uses: actions/download-artifact@v4
         with:
-          name: mruby-wasm-runtime
-          path: mruby-wasm-runtime/
+          name: lilac-build
+          path: lilac/build/
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -209,6 +218,22 @@ jobs:
       - name: Set up lilac dependencies
         working-directory: lilac/cli
         run: bundle install
+
+      - name: Cache wasi-sdk tarball
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mruby-wasm-runtime
+          key: wasi-sdk-33.0-x86_64-linux
+
+      - name: Cache mruby clone
+        uses: actions/cache@v4
+        with:
+          path: mruby-wasm-runtime/mruby
+          key: mruby-4.0.0
+
+      - name: Bootstrap wasi-sdk + mruby clone
+        working-directory: mruby-wasm-runtime
+        run: make wasi-sdk && make js
 
       - name: Run cli minitest
         working-directory: lilac/cli
