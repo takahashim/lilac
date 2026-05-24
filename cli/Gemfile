@@ -23,7 +23,7 @@ group :development do
   gem "rake", "~> 13.0"
   # Ruby-host DOM polyfill backing the wasmtime-rb test runner.
   # Maintained as a standalone gem in a sibling clone of this repo.
-  gem "dommy", path: File.expand_path("../../dommy", __dir__)
+  gem "dommy", ">= 0.6"
 end
 
 # wasmtime-rb drives `mrbc-host.wasm` from the host Ruby in
