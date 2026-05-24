@@ -10,6 +10,19 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual trigger for testing the release pipeline before cutting a real
+  # tag. Defaults to dry-run (build only, no gh-pages push) so accidental
+  # runs don't pollute the gh-pages branch.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build only, do not publish to gh-pages'
+        type: boolean
+        default: true
+      version:
+        description: 'Version tag (e.g. v0.0.0-test)'
+        type: string
+        default: 'v0.0.0-test'
 
 # Required for peaceiris/actions-gh-pages to push to gh-pages branch.
 permissions:
@@ -18,6 +31,9 @@ permissions:
 jobs:
   publish-pages:
     runs-on: ubuntu-latest
+    # Resolved version: tag name on tag push, or the workflow_dispatch input.
+    env:
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
 
     steps:
       - name: Checkout lilac
@@ -63,7 +79,6 @@ jobs:
         working-directory: lilac
         env:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
-          VERSION: ${{ github.ref_name }}
         run: |
           make pages-pack VERSION="${VERSION}"
           # Mirror to /latest/ so consumers can pin to a moving "latest"
@@ -74,10 +89,13 @@ jobs:
       # peaceiris/actions-gh-pages: appends to gh-pages branch without
       # overwriting prior /v$TAG/ trees (keep_files: true), so each
       # release adds a new immutable version directory.
+      # Skipped when workflow_dispatch runs with dry_run=true (the default
+      # for manual runs) so test runs build but don't publish.
       - name: Publish to gh-pages
+        if: github.event_name == 'push' || github.event.inputs.dry_run != 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: lilac/dist-pages
           keep_files: true
-          full_commit_message: 'release: ${{ github.ref_name }}'
+          full_commit_message: 'release: ${{ env.VERSION }}'
