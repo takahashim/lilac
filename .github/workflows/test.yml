@@ -27,6 +27,13 @@ jobs:
           ref: v0.2.0
           path: mruby-wasm-runtime
 
+      - name: Checkout wasmtime-rb
+        uses: actions/checkout@v4
+        with:
+          repository: bytecodealliance/wasmtime-rb
+          ref: main
+          path: wasmtime-rb
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
