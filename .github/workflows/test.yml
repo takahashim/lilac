@@ -83,6 +83,13 @@ jobs:
           path: wasmtime-rb/lib/
           retention-days: 1
 
+      - name: Upload Gemfile.lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemfile-lock
+          path: lilac/cli/Gemfile.lock
+          retention-days: 1
+
   test-ruby-spec:
     runs-on: ubuntu-latest
     needs: build
@@ -112,14 +119,18 @@ jobs:
           name: wasmtime-rb
           path: wasmtime-rb/lib/
 
+      - name: Download Gemfile.lock
+        uses: actions/download-artifact@v8
+        with:
+          name: gemfile-lock
+          path: lilac/cli/
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-
-      - name: Set up lilac dependencies
-        working-directory: lilac/cli
-        run: bundle install
+          bundler-cache: true
+          working-directory: lilac/cli
 
       - name: Cache wasi-sdk tarball
         uses: actions/cache@v5
@@ -228,14 +239,18 @@ jobs:
           name: wasmtime-rb
           path: wasmtime-rb/lib/
 
+      - name: Download Gemfile.lock
+        uses: actions/download-artifact@v8
+        with:
+          name: gemfile-lock
+          path: lilac/cli/
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-
-      - name: Set up lilac dependencies
-        working-directory: lilac/cli
-        run: bundle install
+          bundler-cache: true
+          working-directory: lilac/cli
 
       - name: Cache wasi-sdk tarball
         uses: actions/cache@v5
