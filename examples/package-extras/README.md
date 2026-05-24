@@ -1,7 +1,7 @@
 # examples/package-extras
 
 Demonstrates Lilac's gem-based package distribution
-([decisions §25 / §26](../../docs/lilac-decisions.md)). The
+([decisions §25 / §26](../../docs/adr/README.md)). The
 `lilac-compiled` core wasm doesn't link the extras gem —
 `data-tooltip` and `data-autofocus` work because `lilac build`
 discovers the `lilac-extras` gem via Bundler, compiles its

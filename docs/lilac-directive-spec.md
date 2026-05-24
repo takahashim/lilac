@@ -326,7 +326,7 @@ input / button の form 連携は **`docs/lilac-form-spec.md` Section 11** で
 - **`it.field` / `it`** — `it.path` 構文は廃止済み。
   `data-text="it.name"` → `data-text="name"`、`data-prop-X="it.Y"` → child の
   `prop :Y` 宣言 + auto-fill 経由([`lilac-props-spec.md`](./lilac-props-spec.md))。
-  経緯は [`lilac-decisions.md` §16](./lilac-decisions.md)
+  経緯は [ADR-0016](./adr/0016-drop-it-path-and-bare-ident-scope.md)
 
 ### 過去に削除された directive
 

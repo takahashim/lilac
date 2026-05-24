@@ -27,7 +27,7 @@ canonical な仕様であり、文書中の API / 挙動はすべて実装済み
 
 - フォームの **per-field reactive state** と **集約 validity** を Lilac の Signal /
   Effect 上で提供する
-- **input binding 自体は form 非依存** ([decisions §21](./lilac-decisions.md))。
+- **input binding 自体は form 非依存** ([ADR-0021](./adr/0021-data-bind-revival-form-as-aggregation.md))。
   form gem は validation / submit / reset / base_error の **集約 layer** として
   位置付ける。input ↔ signal の sync は `data-bind="@X"` directive
   (directive-spec §6.2) が canonical で、form と無関係に成立。form は
@@ -75,7 +75,7 @@ canonical な仕様であり、文書中の API / 挙動はすべて実装済み
   同型サブ form を増減させる UI、配列 index で管理)
 
 field array("tags" のような同型 field の動的追加 / 削除)については
-[decisions §21](./lilac-decisions.md) で **方針確定済み** —
+[ADR-0021](./adr/0021-data-bind-revival-form-as-aggregation.md) で **方針確定済み** —
 「field を form に動的 register する」のではなく、各行を per-row 子
 component で表現してその中で `data-bind` + ローカル signal を持つ、あるいは
 `data-each` 内で bare ident `data-bind="qty"`(decisions §16)を使って
@@ -489,7 +489,7 @@ block が受け取る `field` は `Field` インスタンス。`field.value` で
 
 ### `source:` で外部 backing を指定(+ `Lilac::FieldComponent`)
 
-設計判断の rationale は [`lilac-decisions.md §10`](./lilac-decisions.md)。
+設計判断の rationale は [ADR-0010](./adr/0010-stateful-input-component-form-integration.md)。
 
 stateful な子 component(typeahead / 日付ピッカー等)を form の field
 として組み込むパターン用。`source:` は **`FieldComponent` か Signal を
@@ -627,7 +627,7 @@ form do |f|
 end
 ```
 
-auto-register 規約(詳細は §11.3 + [lilac-decisions.md §7](./lilac-decisions.md)):
+auto-register 規約(詳細は §11.3 + [ADR-0007](./adr/0007-input-value-auto-register.md)):
 
 - **type**: `<input type="checkbox">` → `:checkbox`、他はすべて `:text`
 - **initial**: HTML の `value` 属性のみ参照(checkbox の `checked` 属性、
@@ -1085,7 +1085,7 @@ ident         ::= [a-z_][a-zA-Z0-9_]*
 
 #### 11.2.1 `<form>` 要素のみ scope を作れる(構成パターン)
 
-設計判断の rationale は [`lilac-decisions.md §8`](./lilac-decisions.md)。
+設計判断の rationale は [ADR-0008](./adr/0008-form-scope-resolution-rules.md)。
 
 | パターン | scope | 動作 |
 |---|---|---|
@@ -1112,7 +1112,7 @@ ident         ::= [a-z_][a-zA-Z0-9_]*
 
 #### 11.2.2 HTML `form=""` 属性は Lilac は解釈しない
 
-設計判断の rationale は [`lilac-decisions.md §9`](./lilac-decisions.md)。
+設計判断の rationale は [ADR-0009](./adr/0009-input-form-attribute.md)。
 
 ```html
 <form id="signup-form" data-form="signup">...</form>
@@ -1187,7 +1187,7 @@ severity:
 - **CLI lint**: `data-field="X"` に対応する `f.field :X` が無い場合
   build warning(error ではなく warning、auto-register で動作するため)
 
-詳細 rationale は [`lilac-decisions.md §7`](./lilac-decisions.md)。
+詳細 rationale は [ADR-0007](./adr/0007-input-value-auto-register.md)。
 
 ### 11.4 オプション属性
 
@@ -1791,8 +1791,8 @@ unmount 時に通常の effect cleanup と一緒に自動解放される。Form 
 
 scanner は DOM を **one-pass** で走査し、収集した directive を **2 段階で
 処理** する(走査自体は 1 回だけ、内部の処理順序を組み替える)。設計判断の
-rationale は [`lilac-decisions.md §8`(scope)](./lilac-decisions.md) /
-[`§11`(2-phase processing)](./lilac-decisions.md)。
+rationale は [ADR-0008](./adr/0008-form-scope-resolution-rules.md) /
+[ADR-0011](./adr/0011-scanner-one-pass-two-phase.md)。
 
 ```
 Phase 1: DOM walk (one pass)

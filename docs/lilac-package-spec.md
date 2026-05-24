@@ -15,8 +15,8 @@ package** として core から切り出して配布できる。本書は packag
 | 7 | 公式 package 一覧 |
 | 8 | 第三者 package の作り方 |
 
-関連: [decisions §23](./lilac-decisions.md) (runtime fallthrough)、
-[§24](./lilac-decisions.md) (配布形態)、
+関連: [ADR-0023](./adr/0023-plugin-mechanism-runtime-fallthrough.md) (runtime fallthrough)、
+[ADR-0024](./adr/0024-npm-distributed-plugin-superseded.md) (配布形態)、
 [directive spec](./lilac-directive-spec.md) (directive 全般)。
 
 ---
@@ -472,10 +472,10 @@ runtime/mruby-lilac-extras/
 
 ## 参考
 
-- [decisions §23 — 機構 (runtime fallthrough)](./lilac-decisions.md)
-- [decisions §24 — 配布形態 (npm 経由、superseded by §25)](./lilac-decisions.md)
-- [decisions §25 — rubygems に pivot](./lilac-decisions.md)
-- [decisions §26 — 「plug-in」用語を「package」に rename](./lilac-decisions.md)
+- [ADR-0023](./adr/0023-plugin-mechanism-runtime-fallthrough.md)
+- [ADR-0025](./adr/0025-pivot-plugin-distribution-to-rubygems.md)
+- [ADR-0025](./adr/0025-pivot-plugin-distribution-to-rubygems.md)
+- [ADR-0026](./adr/0026-rename-plugin-to-package.md)
 - [directive spec](./lilac-directive-spec.md) — directive 値の文法
 - 実装 SSOT:
   - `runtime/mruby-lilac-directives/mrblib/lilac_directives_scanner.rb` —

@@ -1,18 +1,18 @@
 # Lilac 検討中の提案
 
 このドキュメントは Lilac の **未確定な設計提案** を記録する。確定判断は
-[`lilac-decisions.md`](./lilac-decisions.md) 側に蓄積され、本 doc は
+[`adr/`](./adr/) 配下に ADR (1 判断 = 1 ファイル) として蓄積され、本 doc は
 「これから議論する候補」を扱う。
 
 両 doc の関係:
 
-| doc | 内容 | 更新頻度 | 順序 |
+| doc | 内容 | 更新頻度 | 構成 |
 |---|---|---|---|
-| `lilac-decisions.md` | **確定** した設計判断の history。覆された判断も `(superseded by §N)` として残す | 月単位で追記、削除なし | §1〜§N の通し番号 |
-| `lilac-proposals.md` (本 doc) | **未確定** の提案。議論で更新、却下なら削除、確定したら decisions.md §N+1 に昇格して本 doc から消す | 任意のタイミングで編集 | テーマ別の節構成、番号なし |
+| `adr/NNNN-*.md` | **確定** した設計判断の history (1 判断 = 1 ファイル)。覆された判断も `(superseded by ADR-NN)` として残す | 判断単位で追加、削除なし | ADR-0001 〜 ADR-NNNN |
+| `lilac-proposals.md` (本 doc) | **未確定** の提案。議論で更新、却下なら削除、確定したら新 ADR として昇格して本 doc から消す | 任意のタイミングで編集 | テーマ別の節構成、番号なし |
 
 設計原則と positioning は [`lilac-design.md`](./lilac-design.md) を参照。
-各提案は原則 / 既存判断との関係を本文中で明示する。
+各提案は原則 / 既存 ADR との関係を本文中で明示する。
 
 ## 提案エントリのフォーマット
 
@@ -23,18 +23,19 @@
 - **利点** — 採用するとどう良くなるか
 - **現状の workaround** — 採用しなくても回避できる方法(回避コストの提示)
 - **実装的課題** — 採用したらどこに手が入るか
-- **関連する確定判断**(任意) — decisions.md の §N との関係(覆す / 補完する / 直交する)
+- **関連する確定判断**(任意) — 既存 ADR との関係(覆す / 補完する / 直交する)
 - **ステータス** — 未判断 / 議論中 / 実装プロトタイプ中 等
 
-提案が確定したら本 doc から削除し、`lilac-decisions.md` に新節として
-追記。Appendix 年表にも追加。**昇格時の operation**:
+提案が確定したら本 doc から削除し、新 ADR ファイルとして昇格させる。
+**昇格時の operation**:
 
 1. 本 doc から該当節を削除
-2. decisions.md の末尾に新 §N として追加(判断 / 背景 / rationale /
-   トレードオフ の 4 節構成)
-3. decisions.md の Appendix 年表に新行追加
-4. 関連 spec doc(form-spec / directive-spec 等)にも反映
-5. 覆された旧判断があれば `(superseded by §N)` をタイトル冒頭に追加
+2. `docs/adr/NNNN-slug.md` を新規作成 (NNNN = 4 桁 zero-padded、`# NNNN. Title` で始める)
+3. ADR の中身を「判断 / 背景 / rationale / トレードオフ / 実装 / 後続作業 /
+   ステータス」のフォーマットで記述
+4. `docs/adr/README.md` の「ADR 一覧」テーブルに 1 行追加
+5. 関連 spec doc(form-spec / directive-spec 等)にも反映
+6. 覆された旧 ADR があればそのタイトル冒頭に `(superseded by ADR-NN)` を追加
 
 ---
 
@@ -119,9 +120,8 @@ Vue (`<template v-for>` / `<template v-if>`) と同じ慣行。
 
 ### ステータス
 
-未判断。将来 spec 拡張候補として記録のみ。実装着手するなら
-`lilac-decisions.md` に新節 §N として「判断」を昇格させ、Appendix 年表に
-追記する。
+未判断。将来 spec 拡張候補として記録のみ。実装着手するなら新 ADR ファイル
+として昇格させる。
 
 ---
 

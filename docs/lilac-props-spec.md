@@ -20,8 +20,8 @@ auto-init 宣言 + 同名 public reader の auto-define** を兼ねる。templat
 | III — HTML | §6-§8 | `data-prop-X` 属性、型変換、値式、制約 |
 | IV — Implementation | §9-§10 | 実装履歴 / 実装メモ |
 
-設計判断の rationale は [`lilac-decisions.md §12`](./lilac-decisions.md) と
-[`§14`](./lilac-decisions.md)(P2 = ivar 宣言拡張)。
+設計判断の rationale は [ADR-0012](./adr/0012-props-mechanism-introduction.md) と
+[ADR-0014](./adr/0014-props-p2-prop-semantics-extension.md)(P2 = ivar 宣言拡張)。
 
 ---
 
@@ -661,5 +661,5 @@ type 変換と value validation の両方を提供する形。
 
 - form spec での props 活用: [`lilac-form-spec.md`](./lilac-form-spec.md)
   の `LabeledInput` 例(§3.1)、`FieldComponent` との組み合わせ
-- 設計判断: [`lilac-decisions.md §12`](./lilac-decisions.md)
+- 設計判断: [ADR-0012](./adr/0012-props-mechanism-introduction.md)
 - Lilac 全体仕様: [`lilac-spec.md`](./lilac-spec.md)
