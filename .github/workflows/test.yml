@@ -34,10 +34,6 @@ jobs:
           ref: main
           path: wasmtime-rb
 
-      - name: Build wasmtime-rb
-        working-directory: wasmtime-rb
-        run: bundle install && bundle exec rake compile
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -49,8 +45,14 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
-          bundler-cache: true
-          working-directory: lilac/cli
+
+      - name: Build wasmtime-rb
+        working-directory: wasmtime-rb
+        run: bundle install && bundle exec rake compile
+
+      - name: Set up lilac dependencies
+        working-directory: lilac/cli
+        run: bundle install
 
       # Bump cache key suffix when WASI_SDK_VERSION / MRUBY_TAG change
       # in mruby-wasm-runtime/Makefile.
