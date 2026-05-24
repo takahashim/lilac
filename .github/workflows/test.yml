@@ -39,9 +39,9 @@ jobs:
         with:
           ruby-version: '3.4'
 
-      - name: Cache wasmtime-rb build
+      - name: Restore wasmtime-rb build cache
         id: cache-wasmtime-rb
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: |
             wasmtime-rb/lib
@@ -53,6 +53,16 @@ jobs:
         if: steps.cache-wasmtime-rb.outputs.cache-hit != 'true'
         working-directory: wasmtime-rb
         run: bundle install && bundle exec rake compile
+
+      - name: Save wasmtime-rb build cache
+        if: steps.cache-wasmtime-rb.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            wasmtime-rb/lib
+            wasmtime-rb/target
+            wasmtime-rb/tmp
+          key: wasmtime-rb-${{ runner.os }}-ruby-3.4-${{ hashFiles('wasmtime-rb/Gemfile.lock', 'wasmtime-rb/Cargo.lock') }}
 
       - name: Install wasmtime-rb dependencies
         if: steps.cache-wasmtime-rb.outputs.cache-hit == 'true'
