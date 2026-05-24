@@ -105,12 +105,12 @@ Lilac::CLI::TemplateAST.register_directive(
 # hook is a follow-up; until then the registration here would shadow
 # the built-in entry and risk double-detection.
 
-Lilac::CLI::Codegen.register_emitter(:form) do |codegen, directive, context|
+Lilac::CLI::Codegen.register_emitter(:form, attribute: "data-form") do |codegen, directive, context|
   Lilac::CLI::FormExtension.emit_form(codegen, directive, context)
 end
-Lilac::CLI::Codegen.register_emitter(:field) do |codegen, directive, context|
+Lilac::CLI::Codegen.register_emitter(:field, attribute: "data-field") do |codegen, directive, context|
   Lilac::CLI::FormExtension.emit_field(codegen, directive, context)
 end
-Lilac::CLI::Codegen.register_emitter(:button) do |codegen, directive, context|
+Lilac::CLI::Codegen.register_emitter(:button, attribute: "data-button") do |codegen, directive, context|
   Lilac::CLI::FormExtension.emit_button(codegen, directive, context)
 end

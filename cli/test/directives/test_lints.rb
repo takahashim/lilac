@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-class TestCompat < Minitest::Test
+class TestLints < Minitest::Test
   def dir(kind, ref_id: "lil0", line: 1, tag: "div", value: "@x", name: nil, scope_id: nil, element_attrs: nil)
     Lilac::CLI::Directive.new(
       kind: kind, name: name, value: value, ref_id: ref_id,
@@ -14,23 +14,23 @@ class TestCompat < Minitest::Test
   # ---- collision pairs --------------------------------------------
 
   def test_text_and_unsafe_html_on_same_element_raise
-    err = assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!([dir(:text), dir(:unsafe_html, line: 2)], file: "x.lil")
+    err = assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!([dir(:text), dir(:unsafe_html, line: 2)], file: "x.lil")
     end
     assert_includes err.message, "x.lil:2"
     assert_includes err.message, "data-text and data-unsafe-html"
   end
 
   def test_text_and_each_on_same_element_raise
-    err = assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!([dir(:text, tag: "ul"), dir(:each, tag: "ul", value: "@items")], file: "x.lil")
+    err = assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!([dir(:text, tag: "ul"), dir(:each, tag: "ul", value: "@items")], file: "x.lil")
     end
     assert_includes err.message, "data-text and data-each"
   end
 
   def test_show_and_hide_on_same_element_raise
-    err = assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!([dir(:show), dir(:hide, line: 3)], file: "x.lil")
+    err = assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!([dir(:show), dir(:hide, line: 3)], file: "x.lil")
     end
     assert_includes err.message, "x.lil:3"
     assert_includes err.message, "data-show and data-hide"
@@ -41,8 +41,8 @@ class TestCompat < Minitest::Test
   # collision with `data-field` (form-scope binding) tested below.
 
   def test_bind_and_field_on_same_element_raise
-    err = assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!(
+    err = assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!(
         [
           dir(:bind, value: "@qty", tag: "input"),
           dir(:field, value: "qty", tag: "input", line: 4),
@@ -55,8 +55,8 @@ class TestCompat < Minitest::Test
   end
 
   def test_component_and_each_on_same_element_raise
-    err = assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!(
+    err = assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!(
         [
           dir(:component, value: "X", tag: "ul"),
           dir(:each, value: "@items", tag: "ul", line: 6),
@@ -70,7 +70,7 @@ class TestCompat < Minitest::Test
 
   def test_collisions_on_different_elements_are_allowed
     # Same kinds, but on different refs — no collision.
-    Lilac::Directives::Compat.check!(
+    Lilac::Directives::Lints.check!(
       [
         dir(:text, ref_id: "lil0"),
         dir(:unsafe_html, ref_id: "lil1"),
@@ -87,8 +87,8 @@ class TestCompat < Minitest::Test
   # ---- lil-hidden conflict ----------------------------------------
 
   def test_data_class_gn_hidden_with_data_show_raises
-    err = assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!(
+    err = assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!(
         [
           dir(:show, value: "@vis"),
           dir(:class_, value: "{ 'lil-hidden': @x }", line: 5),
@@ -101,8 +101,8 @@ class TestCompat < Minitest::Test
   end
 
   def test_data_class_gn_hidden_with_data_hide_raises
-    assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!(
+    assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!(
         [
           dir(:hide, value: "@vis"),
           dir(:class_, value: "{ 'lil-hidden': @x }"),
@@ -113,7 +113,7 @@ class TestCompat < Minitest::Test
   end
 
   def test_data_class_without_gn_hidden_key_ok
-    Lilac::Directives::Compat.check!(
+    Lilac::Directives::Lints.check!(
       [
         dir(:show, value: "@vis"),
         dir(:class_, value: "{ active: @a }"),
@@ -126,14 +126,14 @@ class TestCompat < Minitest::Test
     # No data-show / data-hide on element → no conflict, even with the
     # reserved key in data-class. The standalone reservation warning is
     # a lint concern handled by the cross-reference linter, not a build error.
-    Lilac::Directives::Compat.check!([dir(:class_, value: "{ 'lil-hidden': @x }")], file: "x.lil")
+    Lilac::Directives::Lints.check!([dir(:class_, value: "{ 'lil-hidden': @x }")], file: "x.lil")
   end
 
   def test_data_class_substring_gn_hidden_in_value_does_not_false_positive
     # Re-parse guards against substring matches inside values (which are
     # ivar / bare ident only and can't carry that string anyway, but
     # defense in depth).
-    Lilac::Directives::Compat.check!(
+    Lilac::Directives::Lints.check!(
       [
         dir(:show, value: "@vis"),
         dir(:class_, value: "{ active: @a, 'not-lil-hidden-key': @b }"),
@@ -145,7 +145,7 @@ class TestCompat < Minitest::Test
   def test_malformed_data_class_does_not_raise_here
     # Parse errors are reported by emit_class with a cleaner message;
     # compatibility check just returns rather than double-erroring.
-    Lilac::Directives::Compat.check!(
+    Lilac::Directives::Lints.check!(
       [
         dir(:show, value: "@vis"),
         dir(:class_, value: "{ 'lil-hidden': }"),
@@ -157,8 +157,8 @@ class TestCompat < Minitest::Test
   # ---- form scope rules (Phase C) ---------------------------------
 
   def test_data_form_on_non_form_element_raises
-    err = assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!(
+    err = assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!(
         [dir(:form, value: "signup", tag: "div", line: 3)],
         file: "x.lil",
       )
@@ -169,15 +169,15 @@ class TestCompat < Minitest::Test
   end
 
   def test_data_form_on_form_element_ok
-    Lilac::Directives::Compat.check!(
+    Lilac::Directives::Lints.check!(
       [dir(:form, value: "signup", tag: "form")],
       file: "x.lil",
     )
   end
 
   def test_multiple_bare_form_raises_default_collision
-    err = assert_raises(Lilac::Directives::Compat::Error) do
-      Lilac::Directives::Compat.check!(
+    err = assert_raises(Lilac::Directives::Lints::Error) do
+      Lilac::Directives::Lints.check!(
         [
           dir(:form, value: "", tag: "form", ref_id: "lil0", line: 2),
           dir(:form, value: "", tag: "form", ref_id: "lil1", line: 5),
@@ -192,7 +192,7 @@ class TestCompat < Minitest::Test
   def test_bare_form_and_named_form_coexist_ok
     # `data-form="signup"` has a name; the other bare form takes :default.
     # No collision.
-    Lilac::Directives::Compat.check!(
+    Lilac::Directives::Lints.check!(
       [
         dir(:form, value: "", tag: "form", ref_id: "lil0"),
         dir(:form, value: "signup", tag: "form", ref_id: "lil1"),
@@ -202,7 +202,7 @@ class TestCompat < Minitest::Test
   end
 
   def test_multiple_named_forms_ok
-    Lilac::Directives::Compat.check!(
+    Lilac::Directives::Lints.check!(
       [
         dir(:form, value: "login",  tag: "form", ref_id: "lil0"),
         dir(:form, value: "signup", tag: "form", ref_id: "lil1"),

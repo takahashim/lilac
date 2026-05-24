@@ -3,39 +3,44 @@ module Lilac
     # Collision rules SSOT — duplicate pair (build-time / runtime).
     # See decisions §17.
     #
-    # The data here is consumed by both halves of `Compat`:
-    #   - build-time: `Lilac::Directives::Compat.check!` (raises)
-    #   - runtime:    `Lilac::Directives::Compat.check!` (warn+skip /
+    # The data here is consumed by both halves of `Lints`:
+    #   - build-time: `Lilac::Directives::Lints.check!` (raises)
+    #   - runtime:    `Lilac::Directives::Lints.check!` (warn+skip /
     #                 raise depending on severity)
     #
-    # Each row in COLLISION_PAIRS is `[kinds, message]` where `kinds`
-    # is the unordered pair of directive kinds that may not coexist on
-    # the same element, and `message` is the human-readable rationale
-    # used in both build-error and runtime warning text.
-    module Compat
+    # Each row in COLLISION_PAIRS is `[attrs, message]` where `attrs`
+    # is the unordered pair of `data-*` attribute names that may not
+    # coexist on the same element, and `message` is the human-readable
+    # rationale used in both build-error and runtime warning text.
+    # Attribute-name form (not Symbol kinds) lets the same rules apply
+    # uniformly to built-in directives and class-based Handler packages
+    # (ADR-0027) — the public surface a user actually writes is the
+    # attribute name, so matching against it removes the Symbol-pivot
+    # indirection on both sides.
+    module Lints
       COLLISION_PAIRS = [
         [
-          %i[text unsafe_html],
+          %w[data-text data-unsafe-html],
           "data-text and data-unsafe-html cannot coexist (both write the element body)",
         ],
         [
-          %i[text each],
+          %w[data-text data-each],
           "data-text and data-each cannot coexist (data-each generates children; data-text would overwrite them)",
         ],
         [
-          %i[unsafe_html each],
+          %w[data-unsafe-html data-each],
           "data-unsafe-html and data-each cannot coexist (data-each generates children; data-unsafe-html would overwrite them)",
         ],
         [
-          %i[show hide],
+          %w[data-show data-hide],
           "data-show and data-hide cannot coexist (use one; the inverse is implicit)",
         ],
         [
-          %i[component each],
+          %w[data-component data-each],
           "data-component and data-each cannot coexist (wrap with another element — put the child component inside the iteration body)",
         ],
         [
-          %i[bind field],
+          %w[data-bind data-field],
           "data-bind and data-field cannot coexist (both wire the input value — pick one: data-bind for form-independent binding, data-field for form-scope binding)",
         ],
       ].freeze

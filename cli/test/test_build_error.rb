@@ -55,8 +55,8 @@ class TestBuildError < Minitest::Test
     assert_includes codegen_err.message, "lilac: build error in a.lil:1"
     assert_includes codegen_err.message, "  oops"
 
-    compat_err = Lilac::Directives::Compat::Error.new("clash", at: loc("b.lil", 2))
-    assert_includes compat_err.message, "lilac: build error in b.lil:2"
-    assert_includes compat_err.message, "  clash"
+    lints_err = Lilac::Directives::Lints::Error.new("clash", at: loc("b.lil", 2))
+    assert_includes lints_err.message, "lilac: build error in b.lil:2"
+    assert_includes lints_err.message, "  clash"
   end
 end

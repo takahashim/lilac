@@ -236,7 +236,7 @@ module Lilac
           # entirely to keep the dist HTML byte-identical and the
           # linter input clean. The :component record only matters
           # when it coexists with another directive (e.g. `data-each`)
-          # so Lilac::Directives::Compat can flag the collision.
+          # so Lilac::Directives::Lints can flag the collision.
           has_real_directive = element_directives.any? { |k, _, _| k != :component }
           ref_id = nil
 

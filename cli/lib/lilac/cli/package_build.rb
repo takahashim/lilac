@@ -8,10 +8,10 @@ require_relative 'bytecode_builder'
 module Lilac
   module CLI
     # Compile one or more pure-Ruby package source files (mrblib-style:
-    # `Lilac::Directives::Scanner.register_directive(...) { ... }` or
-    # plain Ruby class definitions) into a single `.mrb` bytecode file
-    # that can be loaded into a running `lilac-compiled` VM via
-    # `vm.loadBytecode(bytes)`.
+    # Handler class definitions plus
+    # `Lilac::Directives::Scanner.register("ClassName")` calls) into a
+    # single `.mrb` bytecode file that can be loaded into a running
+    # `lilac-compiled` VM via `vm.loadBytecode(bytes)`.
     #
     # Wire-level: this is a thin wrapper around `BytecodeBuilder` (which
     # owns mrbc backend discovery + the wasm-driven mrbc fallback). The

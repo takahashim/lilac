@@ -1426,7 +1426,7 @@ walk し、block 引数名 (`f` / `form_builder` 等) を anchor として `f.fi
 helper 経由の宣言 (`helper_form(self) { |f| f.field :x }`) は静的解析の射程外で、
 false-positive を避けるため lint を控える。
 
-それ以外で build error になるのは `DirectiveCompatibility` や codegen 自身が
+それ以外で build error になるのは `Lilac::Directives::Lints` や codegen 自身が
 検出する構文 / scope / applicability 違反
 (`data-form` を `<form>` 以外に置く、`data-field` 内に control が無い等)。
 

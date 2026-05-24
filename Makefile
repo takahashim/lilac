@@ -197,7 +197,7 @@ $(BUILD_WASM_MRBC_HOST_RELEASE): $(LIBMRUBY_MRBC_HOST_RELEASE) | $(BUILD_DIR)
 # sync; this target fails the test run if any pair drifts so a
 # one-sided edit gets caught immediately rather than at the next time
 # someone runs `diff(1)` by hand.
-PAIR_BASES := value grammar class_parser compat_rules
+PAIR_BASES := value grammar class_parser collision_rules
 
 check-pair-diff:
 	@failed=0; \

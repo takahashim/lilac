@@ -546,8 +546,8 @@ class TestDirectiveCodegen < Minitest::Test
 
   def test_codegen_propagates_collision_check_failure
     # `text + unsafe_html` on the same ref_id triggers
-    # Lilac::Directives::Compat, surfaced before emit runs.
-    err = assert_raises(Lilac::Directives::Compat::Error) do
+    # Lilac::Directives::Lints, surfaced before emit runs.
+    err = assert_raises(Lilac::Directives::Lints::Error) do
       gen(
         [
           text(value: "@x", ref_id: "lil0"),
@@ -562,8 +562,8 @@ class TestDirectiveCodegen < Minitest::Test
 
   def test_codegen_propagates_form_scope_check_failure
     # data-form on a non-<form> element is a scope violation; codegen
-    # surfaces the underlying Lilac::Directives::Compat::Error.
-    err = assert_raises(Lilac::Directives::Compat::Error) do
+    # surfaces the underlying Lilac::Directives::Lints::Error.
+    err = assert_raises(Lilac::Directives::Lints::Error) do
       gen(
         [
           Lilac::CLI::Directive.new(kind: :form, name: nil, value: "signup",

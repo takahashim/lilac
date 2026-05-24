@@ -21,8 +21,11 @@ module Lilac
   #                      → public_send), shared by Evaluator and PropAutoFill
   #   - `PropAutoFill` — populates child component props from iteration item
   #                      when no explicit `data-prop-X` is given
-  #   - `Compat`       — runtime compatibility / element-type checks
+  #   - `Lints`        — runtime directive collision / orphan checks
   #   - `Scanner`      — DOM walk + per-directive dispatch
+  #   - `Handler`      — base class for package-defined directives
+  #                      (ADR-0027 class-first API)
+  #   - `Context`      — stable per-element argument passed to `Handler#wire`
   module Directives
   end
 end

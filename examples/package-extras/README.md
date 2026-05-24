@@ -44,8 +44,9 @@ The generated `dist/index.html` should contain:
 ```
 
 The package load line precedes the user bytecode load, which is what
-makes `register_directive(:tooltip)` take effect before any component
-mounts and dispatches `data-tooltip` through `scan_extensions`.
+makes `Lilac::Extras::TooltipDirective` register with the scanner
+before any component mounts and dispatches `data-tooltip` through
+`scan_extensions`.
 
 ## `lilac dev` with packages
 

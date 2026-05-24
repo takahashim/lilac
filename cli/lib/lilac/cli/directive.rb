@@ -25,7 +25,7 @@ module Lilac
     # Nokogiri's `node.line`), used for error reporting.
     #
     # `element_tag` is the HTML element name (e.g. "div", "button"),
-    # consumed by Lilac::Directives::Compat to enforce applicability rules
+    # consumed by Lilac::Directives::Lints to enforce applicability rules
     # (e.g. `data-value` requires a form control).
     # `scope_id` is the `ref_id` of the enclosing `data-each` element,
     # or `nil` for directives at the component's top level. Codegen
@@ -37,7 +37,7 @@ module Lilac
     # source element, keyed by lowercase name. Shared by reference
     # across every Directive on the same element so the cost is one
     # Hash per element rather than per directive. Used by
-    # Lilac::Directives::Compat for checks that need attributes beyond
+    # Lilac::Directives::Lints for checks that need attributes beyond
     # the tag name (e.g. `data-value` requires that an `<input>`'s
     # `type` be text-style).
     # Form-directive-specific fields (filled only for :form / :field /

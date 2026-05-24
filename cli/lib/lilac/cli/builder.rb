@@ -807,9 +807,10 @@ module Lilac
       # so it runs as part of `loadBytecode` (decisions §20.6 caveat).
       def render_compiled_boot_module(mrb_filename, package_urls = [])
         # Package `.mrb` bundles load BEFORE the user bytecode so any
-        # `register_directive` calls / pre-defined classes are ready by
-        # the time component mount runs. Mirrors the load ordering in
-        # `npm/lilac-compiled/index.js`'s boot helper.
+        # `Scanner.register("ClassName")` calls (and the Handler classes
+        # they refer to) are ready by the time component mount runs.
+        # Mirrors the load ordering in `npm/lilac-compiled/index.js`'s
+        # boot helper.
         # The heredoc below uses 2-space indent (squiggly heredoc strips
         # the common leading whitespace). Package load lines slot in
         # before `const bytecode = ...` at the same depth.

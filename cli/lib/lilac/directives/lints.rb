@@ -9,15 +9,15 @@ module Lilac
     #
     # Duplicate pair (build-time / runtime). See decisions §17. The
     # build-time half raises on every violation; the runtime half
-    # (runtime/mruby-lilac-directives/mrblib/lilac_directives_compat.rb)
+    # (runtime/mruby-lilac-directives/mrblib/lilac_directives_lints.rb)
     # applies warn+skip for ergonomics violations.
     #
     # Currently checks pair collisions, tag-level applicability, and
     # `<input>` type-attribute constraints. Not yet enforced:
     #   - data-arg-X validations — data-arg has no emitter yet
-    module Compat
-      # `COLLISION_PAIRS` lives in `compat_rules.rb` (the duplicate-pair
-      # SSOT). This file consumes it via the constant lookup below.
+    module Lints
+      # `COLLISION_PAIRS` lives in `collision_rules.rb` (the duplicate-
+      # pair SSOT). This file consumes it via the constant lookup below.
       class Error < Lilac::CLI::BuildError; end
 
       def self.check!(directives, file:)
@@ -69,18 +69,27 @@ module Lilac
       end
 
       def self.check_collisions(dirs, file)
-        kinds = dirs.map(&:kind).uniq
+        attr_names = dirs.map { |d| attribute_for(d) }
         COLLISION_PAIRS.each do |pair, message|
-          next unless pair.all? { |k| kinds.include?(k) }
+          next unless pair.all? { |a| attr_names.include?(a) }
 
           # Report at the line of the second (later) directive in the
           # pair so users see where the conflict was introduced.
-          offenders = dirs.select { |d| pair.include?(d.kind) }
+          offenders = dirs.select { |d| pair.include?(attribute_for(d)) }
           raise Error.new(
             "Directive collision: #{message}",
             at: offenders.last.source_location(file),
           )
         end
+      end
+
+      # Derive the `data-*` attribute name from a TemplateAST directive.
+      # Mirrors the runtime helper of the same name: both built-in
+      # directive kinds and CLI-registered emitter kinds (form's
+      # `:form` / `:field` / `:button`) follow the `data-<kind>` rule
+      # with `_` → `-` and a trailing `_` stripped.
+      def self.attribute_for(directive)
+        "data-#{directive.kind.to_s.tr('_', '-').chomp('-')}"
       end
 
       # `lil-hidden` is reserved by data-show / data-hide. If the user

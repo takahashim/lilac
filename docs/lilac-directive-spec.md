@@ -447,7 +447,7 @@ submit / reset / error UI など form-scope の機能が要らない場合に使
 #### Collision: `data-bind` と `data-field` の併用は禁止
 
 同一要素に両方書くと **両方が同じ input value を取り合う effect** を二重に
-設置することになり、挙動が破綻する。Compat layer が `Lilac::Error` を
+設置することになり、挙動が破綻する。Lints layer が `Lilac::Error` を
 raise する(§8 参照)。
 
 #### 命令的 escape hatch

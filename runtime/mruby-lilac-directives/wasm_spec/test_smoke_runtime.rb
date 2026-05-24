@@ -5,7 +5,7 @@ Spec.describe "smoke test: directive scanner loaded" do
     Spec.assert_true Lilac::Directives.const_defined?(:Value), "Value defined"
     Spec.assert_true Lilac::Directives.const_defined?(:Grammar), "Grammar defined"
     Spec.assert_true Lilac::Directives.const_defined?(:Evaluator), "Evaluator defined"
-    Spec.assert_true Lilac::Directives.const_defined?(:Compat), "Compat defined"
+    Spec.assert_true Lilac::Directives.const_defined?(:Lints), "Lints defined"
   end
 
   Spec.assert "Grammar predicates use JS regexp engine correctly" do

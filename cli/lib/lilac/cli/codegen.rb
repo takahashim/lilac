@@ -3,7 +3,7 @@
 require "set"
 require_relative "build_error"
 require_relative "component_name"
-require_relative "../directives" # Lilac::Directives::* (Value / Grammar / ClassParser / Compat)
+require_relative "../directives" # Lilac::Directives::* (Value / Grammar / ClassParser / Lints)
 
 module Lilac
   module CLI
@@ -43,10 +43,21 @@ module Lilac
       # time via `Scanner#scan_extensions` (see decisions §23).
       EMITTERS = {}
 
+      # Parallel map of kind → attribute-name string (e.g. "data-field").
+      # Used to build the `except:` arg passed to `scan_extensions` so the
+      # runtime fallthrough skips attributes the CLI already emitted. See
+      # ADR-0027 §27 Phase F/G — kind Symbols are an internal pivot;
+      # the attribute name is the package-author-visible identifier and
+      # the only thing the runtime can match against class-based handlers.
+      EMITTER_ATTRIBUTES = {}
+
       class << self
-        def register_emitter(kind, &emitter)
+        def register_emitter(kind, attribute:, &emitter)
           raise ArgumentError, "block required" unless emitter
+          raise ArgumentError, "attribute: must be a String (got #{attribute.class})" \
+            unless attribute.is_a?(String)
           EMITTERS[kind] = emitter
+          EMITTER_ATTRIBUTES[kind] = attribute
         end
 
         def emitter_for(kind)
@@ -126,7 +137,7 @@ module Lilac
         # Composition + applicability checks. Run before key_map so
         # composition violations are reported with their own messages
         # rather than getting masked by a downstream parse/emit error.
-        Lilac::Directives::Compat.check!(@directives, file: @file)
+        Lilac::Directives::Lints.check!(@directives, file: @file)
 
         # data-key directives are paired with their data-each by
         # ref_id; build the lookup once so emit_each doesn't have to
@@ -179,14 +190,14 @@ module Lilac
 
       # Emit a trailing call to `Scanner#scan_extensions` so any
       # package directive (registered at runtime via
-      # `Lilac::Directives::Scanner.register_directive`) is dispatched
-      # at mount time. The `except:` list filters out kinds the codegen
-      # already hand-tuned (form's :form / :field / :button via
-      # `form_extension.rb`); third-party packages like
-      # `mruby-lilac-extras`' :tooltip / :autofocus go through the
-      # scan path. See decisions §23.
+      # `Lilac::Directives::Scanner.register`) is dispatched at mount
+      # time. The `except:` list is attribute-name strings that the
+      # codegen already hand-tuned (form's "data-form" / "data-field" /
+      # "data-button" via `form_extension.rb`); third-party packages
+      # like `mruby-lilac-extras`' tooltip / autofocus go through the
+      # scan path. See ADR-0027 §27.
       def scan_extensions_trailer(context)
-        except = Codegen::EMITTERS.keys
+        except = Codegen::EMITTER_ATTRIBUTES.values
         root_expr = context.in_iteration ? "t.to_js" : "root.to_js"
         item_expr = context.in_iteration ? ", item: it" : ""
         except_expr = except.empty? ? "" : ", except: #{except.inspect}"

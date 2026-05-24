@@ -17,15 +17,19 @@ module Lilac
     # `RefElement` per binding. This sidesteps the codegen's need for
     # a stable name to write into emitted Ruby.
     class Scanner
-      # Extension registry for plug-in gems (form / future) to add their
+      # Extension registry for package gems (form / future) to add their
       # own directives + per-element hooks without modifying core.
-      #   :directives    — kind → { pattern, captures_name, phase, dispatch }
+      #   :handlers      — Array of class-name Strings registered via
+      #                    `Scanner.register("ClassName")` (ADR-0027 public
+      #                    API for package authors). Resolved lazily into
+      #                    `handlers_by_attribute`.
       #   :tag_hooks     — tag-name → [{ phase, block }, ...] fired during
-      #                    dispatch_record on matching elements
+      #                    dispatch_record on matching elements (internal,
+      #                    form-only — see ADR-0027 §27.4).
       #   :collect_hooks — [block, ...] fired during build_record for
       #                    every element (e.g. <form> validation, scope
-      #                    tracking)
-      EXTENSIONS = { directives: {}, tag_hooks: {}, collect_hooks: [] }
+      #                    tracking — internal, form-only).
+      EXTENSIONS = { handlers: [], tag_hooks: {}, collect_hooks: [] }
 
       # Phases run in this order during scan_subtree. `:pre` is for
       # registrations that other directives can reference (e.g. form
@@ -34,21 +38,6 @@ module Lilac
       PHASES = %i[pre default].freeze
 
       class << self
-        # Register a plug-in directive. `pattern:` is the attribute-name
-        # regex (e.g. `/\Adata-tooltip\z/`), `kind:` is the Symbol used
-        # internally to dispatch. `phase: :pre` runs the directive before
-        # `:default` directives on the same element. The dispatch block
-        # signature is `(scanner, name, raw_value, el, item, descriptor)`.
-        # See decisions §23.
-        def register_directive(pattern:, kind:, captures_name: false, phase: :default, &dispatch)
-          raise ArgumentError, "block required" unless dispatch
-          raise ArgumentError, "unknown phase #{phase.inspect}" unless PHASES.include?(phase)
-          EXTENSIONS[:directives][kind] = {
-            pattern: pattern, captures_name: captures_name,
-            phase: phase, dispatch: dispatch
-          }
-        end
-
         def register_tag_hook(tag_name, phase: :pre, &block)
           raise ArgumentError, "block required" unless block
           raise ArgumentError, "unknown phase #{phase.inspect}" unless PHASES.include?(phase)
@@ -61,8 +50,78 @@ module Lilac
           EXTENSIONS[:collect_hooks] << block
         end
 
-        def extension_for_kind(kind)
-          EXTENSIONS[:directives][kind]
+        # Register a class-based directive Handler (ADR-0027). `name`
+        # is the fully-qualified class name as a String (e.g.
+        # `"Lilac::Extras::TooltipDirective"`) — passing a String, not
+        # the class, lets the registration live anywhere the class is
+        # defined later than the registration site. The class is
+        # resolved lazily, the first time the attribute index is built.
+        def register(name)
+          raise ArgumentError,
+                "Scanner.register expects a class name String " \
+                "(got #{name.class}); use the fully-qualified name " \
+                "so resolution is independent of load order" \
+                unless name.is_a?(String)
+          EXTENSIONS[:handlers] << name unless EXTENSIONS[:handlers].include?(name)
+          @handlers_by_attribute = nil
+          name
+        end
+
+        # `data-*` → Handler class index, built once and memoized. Reset
+        # whenever `register` is called.
+        def handlers_by_attribute
+          return @handlers_by_attribute if @handlers_by_attribute
+          out = {}
+          EXTENSIONS[:handlers].each do |name|
+            klass = resolve_handler_class(name)
+            next unless klass
+            attr_name = klass.attribute
+            unless attr_name.is_a?(String)
+              Lilac.logger.error(
+                "directive handler",
+                Lilac::Error.new("#{name} is missing `attribute \"data-...\"` declaration"),
+              )
+              next
+            end
+            if (existing = out[attr_name]) && existing != klass
+              Lilac.logger.error(
+                "directive handler",
+                Lilac::Error.new(
+                  "duplicate handler for #{attr_name.inspect}: " \
+                  "#{existing.name} and #{klass.name}",
+                ),
+              )
+              next
+            end
+            out[attr_name] = klass
+          end
+          @handlers_by_attribute = out
+        end
+
+        def handler_class_for(attr_name)
+          handlers_by_attribute[attr_name]
+        end
+
+        # Walk the namespace piece by piece — Rails-style `class_name:`
+        # late resolution. Returns nil + logs if the class isn't loaded
+        # so a typo doesn't kill the whole scan; the missing class will
+        # be retried on the next `register` call (which clears the cache).
+        def resolve_handler_class(name)
+          mod = Object
+          name.split("::").each do |segment|
+            return nil unless mod.const_defined?(segment, false)
+            mod = mod.const_get(segment)
+          end
+          unless mod.is_a?(Class) && mod < Handler
+            Lilac.logger.error(
+              "directive handler",
+              Lilac::Error.new("#{name} is not a Lilac::Directives::Handler subclass"),
+            )
+            return nil
+          end
+          mod
+        rescue NameError
+          nil
         end
 
         def tag_hooks_for(tag_name, phase:)
@@ -96,7 +155,7 @@ module Lilac
         # / data-checked). Property auto-selected from element type:
         # <input type=checkbox> → :checked, others → :value. Coexists
         # with data-field (form-spec §11.3) which adds form-scope
-        # registration + error UI wiring; Compat raises on collision.
+        # registration + error UI wiring; Lints raises on collision.
         [/\Adata-bind\z/,        :bind,        false],
         [/\Adata-show\z/,        :show,        false],
         [/\Adata-hide\z/,        :hide,        false],
@@ -138,12 +197,15 @@ module Lilac
         end
       end
 
-      # Walk subtree dispatching ONLY extension directives (kinds
-      # registered via `register_directive`). Built-in kinds in
+      # Walk subtree dispatching ONLY extension directives (Handler
+      # classes registered via `Scanner.register`, plus legacy
+      # `register_directive` entries). Built-in kinds in
       # DIRECTIVE_PATTERNS are skipped — the assumption is that CLI
-      # codegen has already emitted bindings for them. `except:` kinds
-      # are also skipped (used by codegen to filter out extensions it
-      # already hand-tuned, e.g. form's :field / :button / :form).
+      # codegen has already emitted bindings for them. `except:` is a
+      # list of attribute-name strings ("data-field" / "data-button"
+      # / ...) that are also skipped — used by codegen to filter out
+      # handlers it already hand-tuned (form's data-field / data-button
+      # / data-form via `form_extension.rb`).
       #
       # Used by codegen-emitted `bind_template_hook` as the runtime
       # fallthrough for plug-in directives the CLI doesn't know about
@@ -153,7 +215,7 @@ module Lilac
       # (e.g. form_extension.rb) handle their tag/collect-equivalent
       # logic via direct codegen.
       def scan_extensions(node_js, item: nil, except: [])
-        return if EXTENSIONS[:directives].empty?
+        return if EXTENSIONS[:handlers].empty?
         records = []
         collect_subtree(node_js, item: item, records: records,
                         extensions_only: true, except: except)
@@ -168,8 +230,8 @@ module Lilac
         return unless rec
         rec[:directives].each do |kind, name, raw_value|
           next if rec[:skip].include?(kind)
-          next unless phase_matches?(phase, kind)
-          dispatch(kind, name, raw_value, rec[:el], rec[:item], rec[:descriptor])
+          next unless phase_matches?(phase, kind, name)
+          dispatch(kind, name, raw_value, rec[:el], rec[:item])
         end
       rescue Lilac::Error => e
         Lilac.logger.error("directive", e, source: @host)
@@ -282,7 +344,12 @@ module Lilac
         end
 
         directives = extract_directives(el, extensions_only: extensions_only)
-        directives = directives.reject { |k, _, _| except.include?(k) } unless except.empty?
+        unless except.empty?
+          directives = directives.reject do |kind, payload, _|
+            attr_name = kind == :handler ? payload.attribute : nil
+            attr_name && except.include?(attr_name)
+          end
+        end
         has_tag_hook = if extensions_only
                          false
                        else
@@ -291,14 +358,14 @@ module Lilac
                        end
         return nil if directives.empty? && !has_tag_hook
 
-        # Compat collisions cover built-in pairs; in extensions_only mode
+        # Lints collisions cover built-in pairs; in extensions_only mode
         # the built-in directives aren't in the records, so collisions
         # between built-ins and extensions are already handled by codegen
         # at build time. Skip the runtime collision check.
         skip = if extensions_only || directives.empty?
                  []
                else
-                 Compat.check!(
+                 Lints.check!(
                    directives,
                    tag_name: tag,
                    attrs: attrs,
@@ -324,17 +391,17 @@ module Lilac
         return unless rec
         rec[:directives].each do |kind, name, raw_value|
           next if rec[:skip].include?(kind)
-          next unless phase_matches?(phase, kind)
-          dispatch(kind, name, raw_value, rec[:el], rec[:item], rec[:descriptor])
+          next unless phase_matches?(phase, kind, name)
+          dispatch(kind, name, raw_value, rec[:el], rec[:item])
         end
         run_tag_hooks(rec, phase)
       rescue Lilac::Error => e
         Lilac.logger.error("directive", e, source: @host)
       end
 
-      def phase_matches?(phase, kind)
-        if (ext = Scanner.extension_for_kind(kind))
-          return ext[:phase] == phase
+      def phase_matches?(phase, kind, payload = nil)
+        if kind == :handler
+          return payload.phase == phase
         end
         phase == :default
       end
@@ -359,28 +426,13 @@ module Lilac
             name = captures_name ? m[1] : nil
             value = el.call(:getAttribute, attr_name).to_s
             out << [kind, name, value]
-          else
-            ext_kind, ext_name, ext_value = match_extension_directive(el, attr_name)
-            out << [ext_kind, ext_name, ext_value] if ext_kind
+          elsif (handler_class = Scanner.handler_class_for(attr_name))
+            value = el.call(:getAttribute, attr_name).to_s
+            out << [:handler, handler_class, value]
           end
           i += 1
         end
         out
-      end
-
-      # Look up an attribute name against extension-registered directive
-      # patterns. Returns the [kind, captured_name, attribute_value]
-      # triple on match, or nil triple on miss. Extensions never shadow
-      # built-in directives (the DIRECTIVE_PATTERNS check runs first).
-      def match_extension_directive(el, attr_name)
-        EXTENSIONS[:directives].each do |kind, spec|
-          m = spec[:pattern].match(attr_name)
-          next unless m
-          name = spec[:captures_name] ? m[1] : nil
-          value = el.call(:getAttribute, attr_name).to_s
-          return [kind, name, value]
-        end
-        [nil, nil, nil]
       end
 
       def attribute_snapshot(el)
@@ -409,15 +461,15 @@ module Lilac
 
       # ---- per-directive dispatch ---------------------------------
 
-      def dispatch(kind, name, raw_value, el, item, descriptor)
-        if (ext = Scanner.extension_for_kind(kind))
-          ext[:dispatch].call(self, name, raw_value, el, item, descriptor)
+      def dispatch(kind, name, raw_value, el, item)
+        if kind == :handler
+          dispatch_handler(name, raw_value, el, item)
           return
         end
         case kind
         when :component, :key
           # data-component: handled by Registry.
-          # data-key:       orphan check filtered by Compat.
+          # data-key:       orphan check filtered by Lints.
           nil
         when :text
           dispatch_value_bind(raw_value, el, item, "data-text", :text)
@@ -780,6 +832,27 @@ module Lilac
 
       def wrap_ref(el_js)
         Lilac::RefElement.new(el_js, @host)
+      end
+
+      # Build a Context, invoke `handler.wire(ctx)`. Handler instances
+      # are cached per scanner (= per component mount) so a directive
+      # appearing N times on the page only allocates once even though
+      # `wire` runs per element.
+      def dispatch_handler(handler_class, raw_value, el, item)
+        handler = handler_instance_for(handler_class)
+        ctx = Context.new(
+          scanner: self,
+          attribute_name: handler_class.attribute,
+          raw_value: raw_value,
+          element: wrap_ref(el),
+          item: item,
+        )
+        handler.wire(ctx)
+      end
+
+      def handler_instance_for(klass)
+        @handler_instances ||= {}
+        @handler_instances[klass] ||= klass.new
       end
     end
   end
