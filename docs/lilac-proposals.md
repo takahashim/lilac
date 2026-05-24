@@ -600,3 +600,115 @@ Phase 2 (案 A) — 需要次第:
 package が複数増えた段階で着手するのが妥当**。
 
 
+## `lilac dev` の既定を `codegen: :off` に降格
+
+### 動機
+
+現状 `lilac dev` は `codegen: :auto` で動いており、`.lil` を保存するたびに
+`Codegen.generate` (= `Lilac::Bindings::<Class>` module の emit) が走る。
+runtime には `Lilac::Directives::Scanner` が linked 済み (lilac-full target)
+で、scanner が DOM walk で同じ binding を生成できるので、**dev での
+codegen 経路は純粋に最適化** (mount 時の DOM walk 1 回をスキップする) に
+なっている。
+
+ADR-0017 では「codegen canonical / scanner = grammar reference」と整理
+したが、dev では:
+
+- 毎セーブの rebuild 時間に codegen + lints + cross-ref linter が乗る
+  (大規模 project で数十 ms〜数百 ms)
+- 生成される inline `<script type="text/ruby">` に Bindings module の
+  boilerplate が混ざり、browser の dev tool で読みにくい
+- codegen / scanner 二重 path のうち codegen 経路でしか出ない bug が
+  dev で気付けない
+
+prod では codegen 経路に依存している (compiled target は scanner を wasm
+に linked していないため必須) が、dev は full target が既定なので、scanner
+だけで十分動く。
+
+### 提案
+
+新設の `c.dev_codegen` 設定 (既定 `:off`) を Config に追加し、`lilac dev`
+の Builder に `codegen: @config.dev_codegen` を渡す。`lilac build` 側は
+`c.build_codegen` (既定 `:auto`) で独立に制御する。
+
+```ruby
+# lilac.config.rb
+Lilac::CLI.configure do |c|
+  c.dev_codegen   = :off      # 既定。runtime scanner で動かす
+  c.build_codegen = :auto     # 既定。prod build は codegen emit
+end
+```
+
+CLI フラグ:
+```sh
+lilac dev --codegen=auto      # 例外的に dev でも codegen を走らせたい
+lilac build --codegen=off     # 例外的に prod でも scanner-only にしたい
+```
+
+### 利点
+
+- **dev rebuild の高速化** (~10-100 ms 程度の短縮、`.lil` の規模に依存)
+- **dev HTML が読みやすい** (inline script に codegen module の
+  boilerplate が混ざらず、user script のみ)
+- **codegen と scanner の二重 path 保守コストが dev では発生しない**
+- **`:off` モードは parity-runner で日常検証されている既存の path** なので
+  動作信頼性は確立済み
+- ADR-0017 と整合: prod (compiled) は codegen canonical のまま、dev は
+  「scanner = grammar reference」を直接利用するだけ
+
+### 現状の workaround
+
+`lilac.config.rb` で `c.codegen = :off` を明示すれば dev も build も
+scanner 経路になる。ただし build (prod) の compiled target で `:off` に
+すると wasm に scanner が無いので **動かない**。dev / build 別々に
+codegen を制御できないのが現状の不便さ。
+
+### 実装的課題
+
+- `Lilac::CLI::Settings` (config_loader.rb) に `dev_codegen` /
+  `build_codegen` を追加。既存 `codegen` は backward-compat の優先
+  fallback として残す
+- `Lilac::CLI::Config` で `lilac dev` の Builder 呼び出しは
+  `dev_codegen`、`lilac build` は `build_codegen` を渡すよう分岐
+- `lilac help` の CLI フラグ説明を更新
+- docs/lilac-workflow.md に「dev での codegen 挙動」節を追加
+- 既存の `codegen` 単一設定は **deprecated** とし、両方に伝播 (= 既存
+  config が破壊されない移行)
+- 実装規模: ~80 行 (config + builder + docs)
+
+`.lil` を含む project では dist HTML に synthetic `data-ref="lilN"` は
+引き続き injection される (template_ast の挙動は変わらない)。scanner は
+synthetic ref を無視するので harmless。`refs.foo` の user-authored ref も
+そのまま動く。
+
+### トレードオフ / 懸念
+
+- **build-time error が mount-time error に降格** — CrossRefLinter / Lints
+  はそのまま走るので大半の typo は build で捕まる。値文法エラー
+  (`data-text="@invalid syntax"`) のような scanner 専属のチェックだけ
+  mount 時に logger.error で出る
+- **codegen 経路の regression が dev で検出されにくくなる** — CI の
+  `make test-cli` + parity-runner が砦になる。CI を回さない手元作業中は
+  気付かない可能性
+- **`--target compiled` で dev する人** (現状の `c.dev_target = :compiled`
+  設定) は codegen が必要。`dev_codegen: :auto` への自動切替か、
+  config validation で警告
+
+### 関連する確定判断
+
+- [ADR-0017](./adr/0017-codegen-canonical-scanner-grammar-only.md) — codegen
+  canonical / scanner = grammar reference。本提案は「dev は scanner 経路に
+  寄せる」が ADR-0017 を覆さない (prod の codegen canonical は維持)
+- [ADR-0001](./adr/0001-runtime-canonical.md) — runtime canonical 原則と
+  整合 (= dev で runtime path をデフォルトにすることで原則を強化)
+- [ADR-0027](./adr/0027-class-first-handler-api.md) — 本提案で dev の
+  scanner path が main 経路になることで、Handler API の runtime
+  実装パスがより重要に
+
+### ステータス
+
+未判断 (proposal 段階)。**`codegen: :off` モードは Builder に既に実装済み
+で parity-runner で動作検証もされている**ため、実装コストは config 周りの
+~80 行のみ。dev rebuild 高速化と HTML 可読性向上が主な動機なので、
+体感メリットを実測してから判断するのも一つの選択。
+
