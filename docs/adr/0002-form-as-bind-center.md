@@ -1,10 +1,18 @@
-# 2. Form を input bind の中心機構に
+# 2. Form を input bind の中心機構に(ADR-21 で部分覆し)
 
 ## 2.1 判断
 
 input / textarea / select / checkbox の declarative binding は **form 経由
 が canonical**。汎用 `data-value` / `data-checked` は廃止、form の
 `data-field` directive に統一。
+
+> **注 (2026-05-20 追記)**: 本 ADR は [ADR-21](./0021-data-bind-revival-form-as-aggregation.md)
+> で **部分覆し**。collection 内の単発 input(receipt 行、todo 編集、
+> toggle、検索ボックス等)向けに `data-bind` directive が復活し、form 経由
+> (`data-field`) と form 非依存 (`data-bind`) の二択になった。本 ADR の
+> 「`data-field` に統一」は撤回されている。`data-value` / `data-checked` は
+> 引き続き廃止のまま(`data-bind` に統一吸収)。経緯と新しい 3 層構造の
+> 詳細は ADR-21 を参照。
 
 ## 2.2 背景
 

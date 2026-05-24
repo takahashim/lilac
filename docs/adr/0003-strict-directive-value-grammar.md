@@ -2,8 +2,14 @@
 
 ## 3.1 判断
 
-directive 値は **identifier 参照のみ** を許す。`@ivar`、`it[.field]`、
+directive 値は **identifier 参照のみ** を許す。`@ivar`、bare ident、
 method 名、登録名。任意 Ruby 式は禁止。
+
+> **履歴 (2026-05-19 追記)**: 当初例示していた `it.field` 構文は
+> [ADR-16](./0016-drop-it-path-and-bare-ident-scope.md) で全廃され、
+> iteration item field の参照は bare ident
+> (`<span data-text="title">` の `title`)に統一された。本 ADR の
+> 原則(任意式禁止 / identifier 参照のみ)はそのまま維持。
 
 ## 3.2 背景
 
