@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "source_location"
+require_relative "../source_location"
 
 module Lilac
   module CLI
