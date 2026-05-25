@@ -81,10 +81,17 @@ jobs:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
         run: |
           make pages-pack VERSION="${VERSION}"
-          # Mirror to /latest/ so consumers can pin to a moving "latest"
-          # alongside the immutable /v$VERSION/ URL.
-          rm -rf dist-pages/latest
-          cp -r "dist-pages/${VERSION}" dist-pages/latest
+          # Mirror to /latest/ only for stable releases (vMAJOR.MINOR.PATCH).
+          # Pre-release tags like v0.1.0.pre1 / v0.1.0-rc1 must not move the
+          # /latest/ pointer — npm-style "latest" tracks the newest stable
+          # only, so consumers pinning to /latest/ don't get surprised by
+          # an alpha/rc.
+          if [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            rm -rf dist-pages/latest
+            cp -r "dist-pages/${VERSION}" dist-pages/latest
+          else
+            echo "Pre-release ${VERSION}: keeping existing /latest/"
+          fi
 
       # peaceiris/actions-gh-pages: appends to gh-pages branch without
       # overwriting prior /v$TAG/ trees (keep_files: true), so each
