@@ -712,4 +712,391 @@ synthetic ref を無視するので harmless。`refs.foo` の user-authored ref 
 ~80 行のみ。dev rebuild 高速化と HTML 可読性向上が主な動機なので、
 体感メリットを実測してから判断するのも一つの選択。
 
+## `<lilac-component>` 廃止と `data-component=` / `data-use=` の役割分離
+
+### 動機
+
+現状の component 配置には 3 つの問題がある:
+
+**(1) `<lilac-component>` がビルド経由でしか動かない独自 DSL**
+
+- `lilac build` で `<lilac-component>` を `COMPONENT_PLACEHOLDER` 正規表現で
+  検出し、`.lil` の `<template>` 中身に **inline 展開** する
+- ランタイムは `<lilac-component>` という名前すら知らない (展開済みの
+  `data-component=` を見るだけ)
+- 結果、`examples/runtime-only/` のような **ノービルド** フローでは
+  `<lilac-component>` が完全に無効 (`grep` で 0 件)。**`<lilac-component>`
+  を使った瞬間に runtime canonical (ADR-0001) を外れる**
+
+**(2) `data-component=` が「定義」と「利用」の両方を中立的に表す**
+
+- `.lil` 内の `<template>` の中で書く `<div data-component="X">` は **定義** (雛形)
+- ページ内に書く `<div data-component="X">` は **利用** (mount される実体)
+- 同じ属性名で別の役割を担っているため、読み手にとって意図が読み取りづらい
+
+**(3) ノービルドで「複数箇所で同じ markup を使いたい」が破綻する**
+
+- page-inline で書いた markup を「別の場所でも再利用したい」となった瞬間、
+  現状は `<lilac-component>` + `.lil` への切り出しが必要 (ビルド前提)
+- ノービルド (`examples/runtime-only/`) では markup を物理的にコピペする
+  しかない (= 重複)
+- Alpine.js / petite-vue 等の同類ツールも同じ問題を抱えている (markup の
+  再利用機構を持たない) が、Lilac はこの「ノービルドで markup を再利用
+  したい」需要に応える独自ポジションを取り得る
+
+加えて、CLI/Builder の責務肥大化 (build 機能を最小化したい中長期方針) と
+合わせて、`<lilac-component>` 関連の処理 (~200 行) を builder.rb から
+削れないか検討の余地がある。
+
+### 設計哲学 — 段階的 DRY (YAGNI)
+
+本提案の中核は **「重複が発生したときだけ抽象化する」** という DRY 原則
+本来の精神 (= YAGNI と組み合わせた pragmatic DRY) に沿うことにある:
+
+- **1 個だけ書くなら**: そのまま書く (重複していないので共通化不要)
+- **2 個目を書くとき**: そこで抽象化を検討する (`data-use=` を導入)
+- **Rule of Three**: 3 個目まで来たら定義箇所を `<template>` に隔離する
+
+これは **Alpine.js / petite-vue の「inline で書く」哲学を継承しつつ、
+markup 再利用が必要になったときの逃げ道を提供する**、という設計選択。
+"最初から構造化を強制" (= predictive abstraction) は Lilac の軽量さと
+噛み合わない、という判断。
+
+### 提案
+
+**`<lilac-component>` 構文を完全廃止**し、**`data-component=` と新規
+`data-use=` で「定義」と「利用」を明示的に分ける**。
+
+#### 属性のセマンティクス
+
+| 属性 | 配置場所 | 動作 |
+|---|---|---|
+| `data-component="X"` | `<template>` の **中** | X の **定義のみ** (template として記録、レンダリングされない) |
+| `data-component="X"` | `<template>` の **外** | **定義 + 利用** (その場で表示 + template として記録 + mount) |
+| `data-use="X"` | `<template>` の **外** | **利用** (mount。要素が空なら template から markup 注入、markup あれば直書き優先) |
+
+中心概念は「**コンポーネント (`data-component`) = 定義そのもの**」「**利用
+(`data-use`) = インスタンス化**」。書き手は普段は `data-component=` だけ書けば
+よく、複数の利用箇所が欲しくなったタイミングで `data-use=` を導入する。
+
+#### 段階的な書き味
+
+**ケース 1: 1 個だけ使う (最頻出)** — 現状の page-inline と同じ書き味:
+
+```html
+<div data-component="counter">
+  <button data-on-click="decrement">-</button>
+  <span data-text="@count">0</span>
+  <button data-on-click="increment">+</button>
+</div>
+
+<script type="text/ruby">
+  class Counter < Lilac::Component
+    def setup; @count = signal(0); end
+    def increment(_ev) = @count.update(&:succ)
+    def decrement(_ev) = @count.update(&:pred)
+  end
+</script>
+```
+
+**ケース 2: 複数箇所で使う (DRY)** — 1 個目を定義 + 利用、以降は利用のみ:
+
+```html
+<div data-component="counter">
+  <button data-on-click="decrement">-</button>
+  <span data-text="@count">0</span>
+  <button data-on-click="increment">+</button>
+</div>
+
+<div data-use="counter"></div>
+<div data-use="counter"></div>
+```
+
+**ケース 3: 純粋な雛形として書く** — `<template>` に隔離、利用は全部 `data-use=`:
+
+```html
+<template>
+  <div data-component="counter">
+    <button data-on-click="decrement">-</button>
+    <span data-text="@count">0</span>
+    <button data-on-click="increment">+</button>
+  </div>
+</template>
+
+<div data-use="counter"></div>
+<div data-use="counter"></div>
+```
+
+**ケース 4: ネスト** — template 内に `data-use=` を書く形で自然に表現:
+
+```html
+<template>
+  <div data-component="todo-list">
+    <ul>
+      <li data-use="todo-item"></li>
+    </ul>
+  </div>
+</template>
+
+<template>
+  <div data-component="todo-item">
+    <input type="checkbox">
+    <span data-text="@text"></span>
+  </div>
+</template>
+
+<div data-use="todo-list"></div>
+```
+
+template が clone されて DOM に挿入されると `data-use="todo-item"` が DOM に
+出現し、既存の mount cascade で順次マウントされる。
+
+**ケース 5: markup の上書き** — `data-use=` 要素に直書きすればそれを使う:
+
+```html
+<template>
+  <div data-component="counter">...</div>
+</template>
+
+<!-- template から流し込み -->
+<div data-use="counter"></div>
+
+<!-- 個別 markup で上書き -->
+<div data-use="counter">
+  <h2>Custom Counter</h2>
+  <button data-on-click="reset">reset</button>
+</div>
+```
+
+#### 衝突はエラー
+
+暗黙の「先勝ち」「上書き」を排除し、衝突は **エラー** とする (1 page の
+scope 内で):
+
+| ケース | 扱い |
+|---|---|
+| 同名 `data-component=` の重複 (どこでも) | ❌ エラー |
+| `<template>` 内/外の両方に同名 `data-component=` | ❌ エラー |
+| 未定義の `data-use=` (対応する `data-component=` がない) | ❌ エラー |
+| `data-use=` に直書き markup | ✅ OK (直書き優先) |
+| `data-use=` 多数 + `data-component=` 1 個 | ✅ OK |
+
+エラーメッセージ例:
+
+```
+[lilac] Duplicate component definition: "counter"
+  - <template>:line 5 (defines markup A)
+  - <div data-component=>:line 23 (defines markup B)
+  Define each component name only once per page.
+
+[lilac] Unknown component "contre" referenced by <div data-use="contre">:line 15.
+  No matching <div data-component="contre"> found.
+  Did you mean "counter"?
+```
+
+#### ランタイム動作
+
+`Lilac::Registry` (mruby-lilac) で:
+
+1. **collect phase**: document を走査し、`data-component=` 要素を集める
+   - `<template>` 内 → definition table に `{name => template}` 記録
+   - `<template>` 外 → definition + mount target として記録
+   - 重複検出 → エラー
+2. **mount phase**: `data-component=` (template 外) と `data-use=` を走査
+   - `data-use=` 要素が空 → definition table から markup を `cloneNode` で
+     注入
+   - markup ありの `data-use=` → そのまま使う
+   - 通常通り `bind_template_hook` → mount
+
+#### ビルド動作
+
+`<lilac-component>` 関連処理を削除し、`.lil` の `<template>` を `<template>`
+要素として `</body>` 前に inject するだけのシンプルな経路に統一:
+
+- 削除: `COMPONENT_PLACEHOLDER` 正規表現置換、`default_markup` inline 展開、
+  `synthesize_page_inline_components` 内の `<lilac-component>` 由来分岐
+- 維持: `components/X.lil` がページで `data-use=` または `data-component=`
+  として参照される場合、`.lil` の `<template>` を `</body>` 前に inject
+  (既存の named template 注入と同じパターン)
+- 衝突検出: 上記の重複/未定義チェックを build 時に先回りで実行
+
+### 利点
+
+- **段階的な書き味 (YAGNI/DRY 適用)** — 1 個なら `data-component=` 直書き 1
+  行、2 個目で `data-use=` を足し、必要なら `<template>` に隔離する。
+  最小ケースで余計な構造を強要しない。Alpine.js / petite-vue の「inline で
+  書く」感覚を維持
+- **Alpine 系の上位互換ポジション** — Alpine が提供できない「markup 再利用」を
+  ノービルドで実現する。「Alpine の手軽さに最初は乗り、規模が育ったら
+  `<template>` + `data-use=` で DRY する」という成長パスが描ける
+- **「コンポーネント」という単語が直感通り** — `data-component=` が指すのは
+  「コンポーネントそのもの (= 定義)」。`data-use=` は動詞で利用を明示
+- **runtime canonical** — `<template>` + `data-component=` + `data-use=` は
+  全部 HTML 標準タグ + `data-*` 属性。ビルド有無に関わらず同じ動作。ADR-0001
+  の原則を強化
+- **衝突はエラー** — 同名 `data-component=` の重複、未定義 `data-use=` を
+  build / runtime 両方で検出。「先勝ち」「上書き優先」のような暗黙の
+  優先順位ルールは導入しない
+- **`<lilac-component>` の Web Components 風誤解を排除** — ハイフン入りタグ
+  を Custom Element として実装するか否かの議論ごとなくなる
+- **builder.rb の軽量化** — `COMPONENT_PLACEHOLDER` 関連 ~150〜200 行が削減。
+  「build 機能の最小化」方針に整合
+- **HTML 標準の `<template>` セマンティクスを活用** — 「DOM tree に出ない
+  content holder」という HTML 仕様の本来の意味で `<template>` を使う
+
+### 受容するトレードオフ
+
+設計上「明示性を犠牲にしても段階的書き味を優先した」結果、以下 2 つの
+**場所依存ルール** が残る。これは Alpine 系の `x-data` / petite-vue の
+`v-scope` と同列の「軽量さのコスト」として明文化する:
+
+**(1) `data-component=` の挙動は `<template>` 内外で変わる**
+
+| 位置 | 挙動 |
+|---|---|
+| `<template>` 内 | 定義のみ |
+| `<template>` 外 | 定義 + 利用 |
+
+`<template>` 自体が「DOM tree に出ない content holder」という HTML 標準の
+セマンティクスを持つため、書き手にとっては「`<template>` の中なら表示
+されない = 雛形」「外なら表示される = 実体」という自然な感覚で理解できる
+範囲。
+
+**(2) `data-use=` 要素の「空判定」**
+
+| 状態 | 挙動 |
+|---|---|
+| 内側が空 (whitespace/コメントのみ含む) | template から markup 注入 |
+| 内側に markup あり | 直書きを優先 |
+
+「上書き機能」のため必要。判定基準は `innerHTML.trim() === ""` をベースに、
+whitespace-only / comment-only も「空扱い」とする (ユーザーの直感に
+合わせる)。
+
+これらは「暗黙ルールゼロ」ではないが、Alpine 系のような **軽量 DOM 駆動
+ツールでは慣習化した形** であり、書き手の学習負荷も小さいと判断する。
+「明示性最優先・暗黙ルールゼロ」を求めるなら、後述の **棄却した代替案**
+を参照。
+
+### 棄却した代替案
+
+**案 B: `<template>` 強制 + `data-use=` markup 上書き禁止**
+
+`data-component=` を `<template>` 内強制、`data-use=` 内の markup は常に
+template で上書き (空判定を廃止) するアプローチも検討した:
+
+```html
+<!-- 案 B: 1 個だけでも <template> + data-use= が必須 -->
+<template>
+  <div data-component="counter">
+    <button data-on-click="decrement">-</button>
+    <span data-text="@count">0</span>
+    <button data-on-click="increment">+</button>
+  </div>
+</template>
+<div data-use="counter"></div>
+```
+
+- 利点: 「定義は `<template>` 内」「利用は `data-use=`」だけのルール、
+  暗黙ルールゼロ、grep / コピペ / case 分析が容易
+- 欠点: 1 個だけ書きたい最頻出ケースで 3 行増、上書きカスタマイズ不可、
+  YAGNI に反する (重複していないものを強制構造化)
+
+**棄却理由**: DRY 原則本来 ("重複が発生してから対処") と YAGNI に反する。
+Lilac の軽量さ (`x-data` / `v-scope` 系の手軽さ) を犠牲にしてまで予防的
+構造化を取る理由は薄い。明示性は失うが、`<template>` セマンティクスは
+HTML 標準そのものなので書き手の認知負荷は限定的。
+
+### 現状の workaround
+
+不要 — 現状でも `data-component=` 直書きで書けば最小ケースは動く。ただし
+複数箇所での再利用は `<lilac-component>` + `.lil` 一択となり、ノービルド
+では成立しない。
+
+### 実装的課題
+
+**ランタイム (mruby-lilac)**:
+
+- `Lilac::Registry` に `data-component=` / `data-use=` の collect / mount
+  phase 実装 (~30 行)
+- definition table の構築 (`{name => HTMLTemplateElement | Element}`)
+- 衝突検出ロジック (~20 行) — 重複 / 未定義の検出と `console.error` 出力
+- 空要素判定: `innerHTML.trim() === ""` ベース (whitespace/comment のみは空扱い)
+- mount cascade: template clone 後に新たに出現した `data-use=` の追跡
+
+**ビルド (CLI/Builder)**:
+
+- `COMPONENT_PLACEHOLDER` 正規表現と関連処理を削除
+- `default_markup` メソッド削除
+- `synthesize_page_inline_components` から `<lilac-component>` 関連分岐を
+  削除 (page-inline の `data-component=` 直書きはそのまま動作)
+- `build_scope_error_message` の `:lil_vs_page_inline` / `:class_name_vs_lil`
+  ケースは、新しい衝突検出 (`data-component=` の重複) に再編
+- `.lil` の `<template>` を `</body>` 前に inject する経路に統一
+- 衝突検出を build 時に先回りで実行 (runtime のエラーと同じロジック)
+- 推定削減: ~150〜200 行 (builder.rb 938 → 750 行程度)
+
+**互換性 (破壊的変更)**:
+
+- `<lilac-component>` を使う全コードを書き換え:
+  - `cli/lib/lilac/cli/templates/pages/index.html` (scaffold)
+  - `examples/7guis/pages/*.html` (`gallery-nav` の `<lilac-component>`)
+  - `examples/package-extras/pages/index.html`
+  - `cli/lib/lilac/cli/templates/` (scaffold 雛形)
+  - builder / doctor / command の関連テスト
+- 移行戦略: 当面は `<lilac-component>` を **deprecation warning** 付きで
+  受け入れ、いずれ削除するソフトランディングも可能
+- ドキュメント (`lilac-spec.md`, `lilac-workflow.md`, README, examples
+  README, scaffold ドキュメント等) の書き換え
+
+**Doctor**:
+
+- `dangling <lilac-component>` 検出ロジック (現状 `doctor.rb:94` 付近) は
+  削除
+- 代わりに「`data-use="X"` を使っているが対応する `data-component="X"` も
+  `.lil` も無い」という未定義チェックに置き換え
+- 重複 `data-component=` チェックも doctor で報告
+
+**未解決の細部**:
+
+- 「scope」の単位: 1 page = 1 HTML ファイル (+ ビルドで合流する `.lil` 群)
+  と定義するが、SPA 的に動的に DOM が増えるケースをどう扱うか
+- 動的に追加された `data-use=` の自動マウント (現状の mount cascade と
+  同じ責務範囲なら問題なし)
+- `data-component="X"` を `<template data-template="Y">` のような named
+  slot と組み合わせた時の挙動 (既存の named template 仕様との整合)
+
+### 関連する確定判断
+
+- [ADR-0001](./adr/0001-runtime-canonical.md) — runtime canonical 原則。
+  本提案は **canonical 原則を強化する**方向 (`<lilac-component>` という
+  build-only DSL を廃止し、属性 2 種で runtime / build 両方を同一仕様に)
+- [ADR-0017](./adr/0017-codegen-canonical-scanner-grammar-only.md) — codegen
+  canonical / scanner = grammar reference。本提案は component 配置の話で
+  直交するが、「Builder の責務縮小」という流れで方向性は一致
+
+### ステータス
+
+未判断 (proposal 段階)。`examples/` の grep 結果を見る限り、
+`<lilac-component>` の実利用は主に「複数ページ共通 nav (gallery-nav)」と
+scaffold 雛形に限られ、廃止のインパクトは限定的。
+
+実装の規模感:
+- ランタイム ~30 行追加 (collect + mount + 衝突検出)
+- Builder ~150〜200 行削減
+- 既存サンプル / scaffold / examples / doc の書き換え (大半は機械的置換)
+
+「build 機能を最小化」したい中長期方針 ([ADR 未起票] CLI スリム化議論
+参照) の入口として、まず本提案を実装する順序が筋良さそう。
+
+**設計選択の確認事項** (実装着手前):
+
+- 属性 2 種 (`data-component=` / `data-use=`) のネーミング (代替案:
+  `data-template-for=` / `data-component=` 等)
+- 受容するトレードオフ ((1) `<template>` 内外での挙動分岐、(2) 空判定) を
+  本当に許容するか、それとも案 B (`<template>` 強制 + 上書き禁止) に振り
+  直すか
+- Lilac の差別化軸として「Alpine 系の上位互換 (= 段階的 DRY)」を取るのか、
+  「Web Components 系の厳格分離 (= 予防的構造化)」を取るのか
+
 
