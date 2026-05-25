@@ -13,7 +13,7 @@ generated boot script `loadBytecode`s it before the app's own bundle.
 ```
 examples/package-extras/
 ├── components/tooltip-demo.lil  ← uses data-tooltip + data-autofocus
-├── pages/index.html             ← hosts <lilac-component>
+├── pages/index.html             ← hosts <div data-use=>
 ├── lilac.config.rb              ← (no package config — Bundler-driven)
 ├── Gemfile                      ← lilac-cli + lilac-extras
 └── README.md

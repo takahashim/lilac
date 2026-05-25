@@ -78,7 +78,7 @@ bundle exec lilac build           # → dist/
 ```
 
 各 task page は:
-- 上部に `<lilac-component name="gallery-nav">` で nav を差し込む
+- 上部に `<div data-use="gallery-nav"></div>` で nav を差し込む
 - task 固有の markup + `<script type="text/ruby">` を inline で書く
 - `<script type="module" src="/boot.js">` で boot
 

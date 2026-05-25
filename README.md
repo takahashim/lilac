@@ -127,7 +127,7 @@ What the CLI adds on top:
   attributes, grammar errors caught at build time with source
   positions (instead of at component mount time).
 - **`.lil` single-file components** + project structure
-  (`components/` + `pages/`) with `<lilac-component name="...">`
+  (`components/` + `pages/`) with `<div data-use="..."></div>`
   placeholder composition.
 - **Pre-compiled bindings** — directive interpretation moves from
   mount time to build time; the generated `Lilac::Bindings::<Class>`

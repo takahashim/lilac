@@ -36,7 +36,7 @@ my-app/
 ├── components/
 │   └── counter.lil        # SFC: <template> + <script type="text/ruby">
 ├── pages/
-│   └── index.html         # <lilac-component name="counter"></lilac-component> を置く
+│   └── index.html         # <div data-use="counter"></div> を置く
 └── public/                # 画像 / vendor wasm / 静的ファイル
 ```
 

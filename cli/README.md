@@ -11,7 +11,7 @@ repo-root README's Quick start). What lilac-cli adds on top:
 - **Static lint** for directive grammar / undeclared signals / dead
   methods, caught at build time with source positions.
 - **`.lil` single-file component** format + project structure
-  (`components/` + `pages/`) and `<lilac-component name="...">`
+  (`components/` + `pages/`) and `<div data-use="..."></div>`
   placeholders.
 - **Pre-compiled bindings** (`codegen: :auto`, default) — directive
   interpretation moves from mount time to build time; the generated
