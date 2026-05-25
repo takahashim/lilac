@@ -6,7 +6,8 @@ require_relative 'sfc'
 require_relative 'template_ast'
 require_relative 'codegen'
 require_relative 'component_name'
-require_relative '../cross_ref_linter'
+require_relative '../lint/cross_ref_linter'
+require_relative '../lint/build_linter'
 require_relative 'bytecode_builder'
 require_relative 'form_extension'
 
@@ -235,20 +236,17 @@ module Lilac
         # when the same component appears on multiple pages.
         @template_ast_cache = {}
 
-        # Records `{ name => [ [content_hash, page_path], ... ] }` for
-        # every page-inline `data-component` element across pages. The
-        # post-loop pass warns when the same name appears with
-        # different shapes (proposal §A.R3) — page-inline components
-        # are page-local, so divergent shapes don't break runtime, but
-        # users typically intend "same name = same UI" and the warning
-        # surfaces unintentional drift.
-        @page_inline_signatures = Hash.new { |h, k| h[k] = [] }
+        # Per-build linter holds page-inline component signatures for
+        # cross-page drift detection and runs class-name collision
+        # checks. Reset on each `build` so repeated invocations don't
+        # accumulate state across builds.
+        @build_linter = BuildLinter.new
 
         pages.each do |page_path|
           build_page(page_path, components)
         end
 
-        warn_cross_page_signature_drift!
+        @build_linter.warn_cross_page_signature_drift!
 
         # `:compiled` target needs the runtime (wasm + bridge + boot
         # helper) sitting under `dist/vendor/lilac-compiled/`. We emit
@@ -374,7 +372,7 @@ module Lilac
         # components (which carry no script) don't trigger false positives,
         # but BEFORE build_injection so the user sees a structured error
         # instead of a downstream Codegen / mrbc failure.
-        check_class_name_collisions!(page_inline_scripts, components, synthesized_names, page_path)
+        @build_linter.check_class_name_collisions!(page_inline_scripts, components, synthesized_names, page_path)
 
         used = used_inline.dup
         html = html.gsub(COMPONENT_PLACEHOLDER) do
@@ -509,7 +507,7 @@ module Lilac
           )
           synthesized_names << name
           # R3: record signature for cross-page drift detection.
-          @page_inline_signatures[name] << [signature_for(body_html), page_path] if @page_inline_signatures
+          @build_linter&.record_inline_signature(name, body_html, page_path)
           used_inline << name
 
           # Empty out `data-each` containers in the dist DOM. TemplateAST
@@ -525,73 +523,6 @@ module Lilac
         end
 
         [synthesized, doc.to_html, used_inline, synthesized_names]
-      end
-
-      # R4: any class declared at the top level of a page-inline script
-      # whose name collides with a `.lil`-derived class name aborts the
-      # build. Page-inline scripts and `.lil` scripts both land in the
-      # same Ruby namespace at runtime, so a colliding name would
-      # silently reopen the .lil class — surprise that we'd rather
-      # catch at build time.
-      def check_class_name_collisions!(page_inline_scripts, components, synthesized_names, page_path)
-        return if page_inline_scripts.empty?
-
-        # `.lil` class names (skip synthesized in-memory entries — those
-        # are the page-inline data-component snapshots, not real .lil files).
-        lil_class_names = {} # ruby_class_name => kebab (original file)
-        components.each_key do |name|
-          next if synthesized_names.include?(name)
-
-          ruby_name = ComponentName.new(name).ruby_class
-          lil_class_names[ruby_name] = name
-        end
-        return if lil_class_names.empty?
-
-        page_inline_scripts.each do |script|
-          ScriptAnalyzer.extract_top_level_class_names(script).each do |declared|
-            next unless lil_class_names.key?(declared)
-
-            raise Error, build_scope_error_message(
-              kind: :class_name_vs_lil,
-              name: declared,
-              page_path: page_path,
-              lil_basename: "#{lil_class_names[declared]}.lil"
-            )
-          end
-        end
-      end
-
-      # Stable hash of a page-inline component element body (outer HTML)
-      # for cross-page drift detection (proposal §A.R3). Whitespace
-      # normalised so cosmetic indentation differences across pages don't
-      # spuriously fire the warning.
-      def signature_for(body_html)
-        require 'digest' unless defined?(Digest)
-        Digest::SHA1.hexdigest(body_html.gsub(/\s+/, ' ').strip)
-      end
-
-      # R3: after every page is built, scan recorded signatures for the
-      # same name appearing with different content_hashes across pages.
-      # Output a single warning grouping divergent pages so the user can
-      # decide whether to rename one of them or align the shapes.
-      def warn_cross_page_signature_drift!
-        return unless @page_inline_signatures
-
-        @page_inline_signatures.each do |name, entries|
-          unique_sigs = entries.map { |sig, _| sig }.uniq
-          next if unique_sigs.size <= 1
-
-          pages_str = entries.uniq { |sig, _| sig }
-                             .map { |_sig, page| File.basename(page) }
-                             .join(', ')
-          warn(
-            "[lilac] page-inline component #{name.inspect} appears with " \
-            "different shapes across pages (#{pages_str}). " \
-            'Page-inline names are page-local so this is allowed, but ' \
-            'is likely unintentional drift — consider renaming or moving ' \
-            "the component to components/#{name}.lil to share one shape."
-          )
-        end
       end
 
       def default_markup(name, component)
@@ -615,10 +546,6 @@ module Lilac
           "data-component=#{name.inspect} on #{page_rel}:#{detail[:elem_line]} " \
             "is declared twice in the same page (first at line #{detail[:previous_line]}). " \
             'Page-inline component names must be unique within a page.'
-        when :class_name_vs_lil
-          "page-inline class #{name} in #{page_rel} collides with the class " \
-            "derived from components/#{detail[:lil_basename]}. " \
-            'Rename either the page-inline class or the .lil file.'
         else
           "scope violation: #{kind} (name=#{name.inspect}, page=#{page_rel})"
         end

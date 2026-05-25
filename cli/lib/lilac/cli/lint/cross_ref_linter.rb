@@ -2,8 +2,8 @@
 
 require_relative "script_analyzer"
 require_relative "lint_warning"
-require_relative "build/source_location"
-require_relative "../directives" # Lilac::Directives::ClassParser
+require_relative "../build/source_location"
+require_relative "../../directives" # Lilac::Directives::ClassParser
 
 module Lilac
   module CLI
