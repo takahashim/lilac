@@ -17,14 +17,15 @@ module Lilac
     # Reads `.lil` components and `.html` pages, then emits static HTML.
     #
     # Page authors mark component insertion points with
-    #   <lilac-component name="counter"></lilac-component>
-    # which is replaced by the component's default-template markup.
+    #   <div data-use="counter"></div>
+    # The runtime injects markup from the matching <template> +
+    # <div data-component="counter"> definition that the build emits.
     # Named sub-templates and Ruby class scripts from all components used
     # on the page are injected once each before `</body>`.
     #
     # Component file naming: `components/<data-component-name>.lil`. The file's
     # basename is taken verbatim as the component name, so
-    # `admin--user-card.lil` matches `<lilac-component name="admin--user-card">`
+    # `admin--user-card.lil` matches `<div data-use="admin--user-card">`
     # and (via the runtime autoregister) the `Admin::UserCard` class.
     class Builder
       class Error < StandardError; end
@@ -37,21 +38,12 @@ module Lilac
       # know which side they came from.
       RenderedTemplate = Struct.new(:name, :html, keyword_init: true)
 
-      # Accepted forms (all match the same component name in capture 1):
-      #
-      #   <lilac-component name="counter"></lilac-component>
-      #   <lilac-component name='counter'></lilac-component>
-      #   <lilac-component name="counter" />
-      #   <lilac-component name="counter"/>
-      #
-      # Additional attributes beyond `name` are intentionally NOT supported:
-      # the placeholder is replaced wholesale at build time, so any extra
-      # attribute would silently disappear rather than reach the component.
-      COMPONENT_PLACEHOLDER = %r{
-        <lilac-component
-        \s+name=(?:"([^"]+)"|'([^']+)')
-        \s*
-        (?:/>|>\s*</lilac-component>)
+      # Matches `data-use="X"` / `data-use='X'` attribute values on any
+      # element. We don't need to know which tag carries the attribute —
+      # just collect the referenced component names so the build can
+      # bundle their templates + scripts into the page.
+      DATA_USE_PATTERN = %r{
+        \bdata-use\s*=\s*(?:"([^"]+)"|'([^']+)')
       }x
 
       # Filenames that must not land in the build output even when they
@@ -285,12 +277,19 @@ module Lilac
         @build_linter.check_class_name_collisions!(page_inline_scripts, components, synthesized_names, page_path)
 
         used = used_inline.dup
-        html = html.gsub(COMPONENT_PLACEHOLDER) do
-          # Capture 1 = double-quoted name; capture 2 = single-quoted name.
-          name = Regexp.last_match(1) || Regexp.last_match(2)
-          comp = components[name] || raise(Error, "Unknown component: #{name.inspect} (referenced in #{page_path})")
+        # Page references to components via data-use="X" — the runtime
+        # injects markup from the matching <template>...<div data-component="X">
+        # definition that build_injection emits below. We only need to
+        # record each X in `used` so its template + script land in the
+        # injection bundle.
+        html.scan(DATA_USE_PATTERN) do |dq, sq|
+          name = dq || sq
+          unless components.key?(name)
+            raise Error,
+                  "Unknown component referenced by data-use=#{name.inspect} in #{page_path} " \
+                  "(no components/#{name}.lil and no page-inline data-component=#{name.inspect})"
+          end
           used << name
-          default_markup(name, comp)
         end
 
         injection = build_injection(used.uniq, components,
@@ -303,10 +302,9 @@ module Lilac
       end
 
       # Lifts page-inline `data-component` elements into the same
-      # codegen pipeline that `.lil` components go through, WITHOUT
-      # rewriting the page HTML to a `<lilac-component>` placeholder —
-      # the element stays where the user wrote it and the runtime mounts
-      # directly via the `data-component` attribute.
+      # codegen pipeline that `.lil` components go through. The element
+      # stays where the user wrote it and the runtime mounts directly
+      # via the `data-component` attribute.
       #
       # For every element carrying `data-component=` (top-level AND
       # nested — e.g. a `data-each` row component inside an outer page
@@ -435,10 +433,6 @@ module Lilac
         [synthesized, doc.to_html, used_inline, synthesized_names]
       end
 
-      def default_markup(name, component)
-        template_ast_for(name, component)[:default_html]
-      end
-
       # Build a structured scope-violation error message. See proposals.md
       # §A.R1〜R4 — the scope rule for `.lil` (project-global) vs page-
       # inline `data-component` (page-local) vs page-inline script
@@ -470,6 +464,16 @@ module Lilac
         # The user_script slot on each synthesized component stays empty
         # so the bundle doesn't end up with the inline scripts twice.
         synth_lint_script = page_inline_scripts.join("\n\n")
+
+        # Default templates: emit one <template><div data-component="X">...</div></template>
+        # per used component (skipping synthesized in-memory components,
+        # which already have their markup written inline on the page).
+        # The runtime registry consults these templates to fill empty
+        # data-use="X" elements at mount time.
+        default_templates = used_names.reject { |n| synthesized_names.include?(n) }.map do |name|
+          parsed = template_ast_for(name, components[name])
+          render_default_template(name, parsed[:default_html])
+        end
 
         named_templates = used_names.flat_map do |name|
           parsed = template_ast_for(name, components[name])
@@ -574,7 +578,7 @@ module Lilac
         # Live reload is dev-only; the `lilac build` command leaves it
         # off. When on, the snippet opens an SSE connection back to the
         # dev server and reloads the page on any "message" event.
-        parts = [named_templates, script_block]
+        parts = [default_templates, named_templates, script_block]
         parts << LiveReload::SCRIPT if @live_reload
         parts.flatten.compact.join("\n")
       end
@@ -747,6 +751,13 @@ module Lilac
 
       def render_named_template(template_name, body_html)
         %(<template data-template="#{escape_attr(template_name)}">#{body_html}</template>)
+      end
+
+      # Emit a <template> wrapping the component's default markup with
+      # `data-component="X"` so the runtime registry can pick it up as
+      # the source for data-use="X" injections.
+      def render_default_template(name, default_html)
+        %(<template><div data-component="#{escape_attr(name)}">#{default_html}</div></template>)
       end
 
       def render_script(ruby_source)
