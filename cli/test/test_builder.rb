@@ -245,6 +245,39 @@ class TestBuilder < Minitest::Test
     assert_includes bundle, 'class Counter < Lilac::Component'
   end
 
+  def test_delivery_bundle_compiled_emits_mrb_and_boot_module
+    mrbc = mrbc_or_skip
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>t</title></head><body>
+        <div data-use="counter"></div>
+      </body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc, delivery: :bundle)
+
+    # bundle.html should carry templates ONLY (no <script>, since compiled
+    # has no parser).
+    bundle = File.read(File.join(@output, "lilac.bundle.html"))
+    assert_includes bundle, '<template>'
+    assert_includes bundle, 'data-component="counter"'
+    refute_includes bundle, '<script type="text/ruby">'
+
+    # A bundle .mrb is generated and referenced from the boot module.
+    mrb_files = Dir.glob(File.join(@output, "*.mrb"))
+    assert_equal 1, mrb_files.length
+
+    out = read_output("index.html")
+    assert_includes out, '<link rel="lilac-bundle"'
+    assert_includes out, 'data-lilac-bootstrap'
+    assert_includes out, "loadBytecode"
+    assert_includes out, File.basename(mrb_files.first)
+  end
+
   def test_delivery_bundle_link_is_injected_into_head_when_present
     write_widget "counter", <<~GNT
       <template><div data-component="counter"></div></template>

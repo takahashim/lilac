@@ -312,6 +312,10 @@ module Lilac
           html = inject_bundle_link(html, @bundle_url) if @bundle_url
 
           extras = []
+          if @target == :compiled && @bundle_mrb_file
+            # bundle で出力した .mrb を loadBytecode する boot module を inject
+            extras << render_compiled_boot_module(@bundle_mrb_file, @package_dist_urls || [])
+          end
           extras << LiveReload::SCRIPT if @live_reload
           html = inject_before_body_close(html, extras.join("\n")) unless extras.empty?
         else
@@ -779,12 +783,19 @@ module Lilac
       # Pages reference it via <link rel="lilac-bundle">, and the runtime
       # registry fetches it before mount.
       #
+      # For :compiled target, scripts are NOT inlined into the bundle
+      # (the compiled wasm has no parser to evaluate text/ruby). Instead,
+      # all scripts are aggregated and compiled into a single .mrb whose
+      # filename is stored in @bundle_mrb_file for build_page to wire
+      # into the page's boot module.
+      #
       # Returns the path that should be used in the <link href=> (relative
       # to the dist root), or nil when there are no components.
       def write_bundle_file!(components)
         return nil if components.empty?
 
         parts = []
+        compiled_scripts = []
         components.each do |name, comp|
           parsed = template_ast_for(name, comp)
 
@@ -812,12 +823,26 @@ module Lilac
               ).strip
             end
           full_script = [generated, user_script].reject(&:empty?).join("\n\n")
-          parts << render_script(full_script)
+
+          if @target == :compiled
+            # Defer: scripts get aggregated into one .mrb below.
+            compiled_scripts << full_script
+          else
+            parts << render_script(full_script)
+          end
         end
 
         bundle_path = File.join(@output_dir, 'lilac.bundle.html')
         FileUtils.mkdir_p(@output_dir)
         File.write(bundle_path, parts.join("\n") + "\n")
+
+        # :compiled — compile aggregated scripts into a single .mrb that
+        # the page-level boot module loads via loadBytecode.
+        if @target == :compiled && !compiled_scripts.empty?
+          aggregated = (compiled_scripts + ['Lilac.start']).join("\n\n")
+          @bundle_mrb_file = bytecode_builder.build(aggregated, source_label: 'bundle')
+        end
+
         '/lilac.bundle.html'
       end
 
