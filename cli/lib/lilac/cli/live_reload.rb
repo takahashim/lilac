@@ -23,6 +23,98 @@ module Lilac
       # without this we'd see 503s after ~8 reloads within 30 s.
       KEEPALIVE_INTERVAL = 5
 
+      # Client snippet injected by the builder into every dev-server page.
+      # Subscribes to the dev server's SSE channel and handles two event
+      # types:
+      #
+      #   - default `message` event → successful rebuild, reload the page
+      #     (any in-page error overlay is implicitly discarded by the
+      #     reload, no explicit cleanup needed)
+      #   - `error` event → build failed; render an in-page overlay with
+      #     the error type + message so the dev sees the failure without
+      #     switching to the terminal
+      #
+      # The overlay is intentionally inline-styled and self-contained
+      # (`__lilac_err_overlay`), no dependency on user styles.
+      SCRIPT = <<~HTML
+        <script>
+          // lilac dev: live reload + error overlay via SSE
+          (function () {
+            const ES_URL = "/__lilac/livereload";
+            const OVERLAY_ID = "__lilac_err_overlay";
+
+            function renderOverlay(payload) {
+              document.getElementById(OVERLAY_ID)?.remove();
+              const root = document.createElement("div");
+              root.id = OVERLAY_ID;
+              root.setAttribute("style", [
+                "position:fixed", "inset:0", "z-index:2147483647",
+                "background:rgba(0,0,0,0.78)", "color:#fff",
+                "font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace",
+                "padding:32px", "overflow:auto",
+              ].join(";"));
+
+              const panel = document.createElement("div");
+              panel.setAttribute("style", [
+                "max-width:880px", "margin:0 auto",
+                "background:#1f1f23", "border:1px solid #ff5b6c",
+                "border-radius:8px", "padding:20px 24px",
+                "box-shadow:0 12px 40px rgba(0,0,0,0.45)",
+              ].join(";"));
+
+              const head = document.createElement("div");
+              head.setAttribute("style", "display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px");
+              const title = document.createElement("strong");
+              title.textContent = "lilac dev: build failed";
+              title.setAttribute("style", "color:#ff5b6c;font-size:15px");
+              const close = document.createElement("button");
+              close.type = "button";
+              close.textContent = "×";
+              close.setAttribute("aria-label", "Dismiss");
+              close.setAttribute("style", "background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1");
+              close.addEventListener("click", () => root.remove());
+              head.appendChild(title);
+              head.appendChild(close);
+              panel.appendChild(head);
+
+              if (payload && payload.type) {
+                const t = document.createElement("div");
+                t.textContent = payload.type;
+                t.setAttribute("style", "color:#9aa0a6;font-size:12px;margin-bottom:8px");
+                panel.appendChild(t);
+              }
+
+              const msg = document.createElement("pre");
+              msg.textContent = (payload && payload.message) || "(no message)";
+              msg.setAttribute("style", "white-space:pre-wrap;word-break:break-word;margin:0;color:#f5f5f5");
+              panel.appendChild(msg);
+
+              const hint = document.createElement("div");
+              hint.textContent = "Save the file to retry — this overlay will close automatically on a successful rebuild.";
+              hint.setAttribute("style", "color:#9aa0a6;font-size:12px;margin-top:14px");
+              panel.appendChild(hint);
+
+              root.appendChild(panel);
+              document.body.appendChild(root);
+            }
+
+            const es = new EventSource(ES_URL);
+            es.addEventListener("message", () => location.reload());
+            es.addEventListener("error", (ev) => {
+              // EventSource fires "error" on transport failure too — those
+              // have no `data` field. Distinguish from server-sent error
+              // events by presence of `ev.data`.
+              if (!ev.data) return;
+              try {
+                renderOverlay(JSON.parse(ev.data));
+              } catch (_e) {
+                renderOverlay({ type: "(parse failure)", message: ev.data });
+              }
+            });
+          })();
+        </script>
+      HTML
+
       def initialize
         @subscribers = []
         @mutex = Mutex.new
