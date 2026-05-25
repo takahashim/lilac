@@ -65,6 +65,7 @@ refinement** として位置付ける。
 | [0026](./0026-rename-plugin-to-package.md) | 「plug-in」用語を「package」に rename | gemspec / CLI / docs / tests / examples の機械的 rename | 完了 (2026-05-23) |
 | [0027](./0027-class-first-handler-api.md) | Package Handler を class-first API として整備 (class-first principle) | `runtime/mruby-lilac-directives/mrblib/` + `cli/lib/lilac/cli/` + `docs/lilac-package-spec.md` | 完了 (2026-05-24)、Phase C/F は trigger 待ちで保留 |
 | [0028](./0028-drop-npm-distribution-github-pages-cdn.md) | npm 配布を全廃、`lilac-full` を GitHub Pages から CDN 配信(ADR-25 完成) | `.github/workflows/release.yml` + `Makefile` + `pages/lilac-full/` | 着手 (2026-05-24)、初回 release tag 待ち |
+| [0029](./0029-data-component-data-use-split.md) | `<lilac-component>` 廃止、`data-component=` (定義) と `data-use=` (利用) で役割分離 | `runtime/mruby-lilac/mrblib/lilac_registry.rb` + `cli/lib/lilac/cli/build/builder.rb` + scaffold/examples/docs | 完了 (2026-05-25) |
 
 ## このドキュメントの位置付け
 
