@@ -753,11 +753,13 @@ module Lilac
         %(<template data-template="#{escape_attr(template_name)}">#{body_html}</template>)
       end
 
-      # Emit a <template> wrapping the component's default markup with
-      # `data-component="X"` so the runtime registry can pick it up as
-      # the source for data-use="X" injections.
-      def render_default_template(name, default_html)
-        %(<template><div data-component="#{escape_attr(name)}">#{default_html}</div></template>)
+      # Emit a <template> wrapping the component's default markup. The
+      # `default_html` already contains the outer `<div data-component="X">`
+      # element from the .lil source, so we don't add another wrapper —
+      # just surround it with <template> so the runtime registry can pick
+      # it up as the source for data-use="X" injections.
+      def render_default_template(_name, default_html)
+        %(<template>#{default_html}</template>)
       end
 
       def render_script(ruby_source)

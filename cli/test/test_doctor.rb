@@ -26,7 +26,7 @@ class TestDoctor < Minitest::Test
     FileUtils.mkdir_p(File.join(@tmp, 'components'))
     FileUtils.mkdir_p(File.join(@tmp, 'public', 'vendor', 'lilac-full', 'mruby-wasm-js'))
     File.write(File.join(@tmp, 'pages', 'index.html'),
-               '<html><body><lilac-component name="counter"></lilac-component></body></html>')
+               '<html><body><div data-use="counter"></div></body></html>')
     File.write(File.join(@tmp, 'components', 'counter.lil'), <<~GNT)
       <template><div data-component="counter"></div></template>
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
@@ -71,7 +71,7 @@ class TestDoctor < Minitest::Test
   def test_fails_when_page_references_unknown_widget
     scaffold_minimal_project
     File.write(File.join(@tmp, 'pages', 'other.html'),
-               '<html><body><lilac-component name="ghost"></lilac-component></body></html>')
+               '<html><body><div data-use="ghost"></div></body></html>')
 
     status, out = run_doctor
     refute_equal 0, status

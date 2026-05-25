@@ -30,7 +30,7 @@ class TestCommand < Minitest::Test
     GNT
 
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     # `--target full` keeps the test mrbc-free; `lilac build` defaults
@@ -47,7 +47,7 @@ class TestCommand < Minitest::Test
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     dist = File.join(@tmp, "dist")
@@ -69,7 +69,7 @@ class TestCommand < Minitest::Test
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     dist = File.join(@tmp, "dist")
@@ -100,12 +100,12 @@ class TestCommand < Minitest::Test
 
   def test_build_reports_unknown_component_via_stderr
     File.write(File.join(@tmp, "pages", "index.html"), <<~HTML)
-      <html><body><lilac-component name="missing"></lilac-component></body></html>
+      <html><body><div data-use="missing"></div></body></html>
     HTML
 
     status, _out, err = run_cmd("build", "--root", @tmp, "--target", "full")
     refute_equal 0, status
-    assert_match(/Unknown component: "missing"/, err)
+    assert_match(/Unknown component referenced by data-use="missing"/, err)
   end
 
   def test_unknown_subcommand_returns_nonzero_and_prints_help

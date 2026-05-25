@@ -57,7 +57,7 @@ class TestBuilder < Minitest::Test
 
     write_page "index", <<~HTML
       <html><body>
-        <lilac-component name="counter" />
+        <div data-use="counter"></div>
       </body></html>
     HTML
 
@@ -75,7 +75,7 @@ class TestBuilder < Minitest::Test
 
     write_page "index", <<~HTML
       <html><body>
-        <lilac-component name='counter'></lilac-component>
+        <div data-use="counter"></div>
       </body></html>
     HTML
 
@@ -121,7 +121,7 @@ class TestBuilder < Minitest::Test
     write_page "index", <<~HTML
       <html><body>
         <main>
-          <lilac-component name="counter"></lilac-component>
+          <div data-use="counter"></div>
         </main>
       </body></html>
     HTML
@@ -149,7 +149,7 @@ class TestBuilder < Minitest::Test
 
     write_page "index", <<~HTML
       <html><body>
-        <lilac-component name="todo-list"></lilac-component>
+        <div data-use="todo-list"></div>
       </body></html>
     HTML
 
@@ -177,8 +177,8 @@ class TestBuilder < Minitest::Test
 
     write_page "index", <<~HTML
       <html><body>
-        <lilac-component name="a"></lilac-component>
-        <lilac-component name="b"></lilac-component>
+        <div data-use="a"></div>
+        <div data-use="b"></div>
       </body></html>
     HTML
 
@@ -191,7 +191,7 @@ class TestBuilder < Minitest::Test
     assert_includes out, "class B < Lilac::Component"
   end
 
-  def test_repeated_component_inlines_template_each_time_but_script_once
+  def test_repeated_component_emits_one_template_definition_and_one_script
     write_widget "counter", <<~GNT
       <template><div data-component="counter">0</div></template>
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
@@ -199,15 +199,19 @@ class TestBuilder < Minitest::Test
 
     write_page "index", <<~HTML
       <html><body>
-        <lilac-component name="counter"></lilac-component>
-        <lilac-component name="counter"></lilac-component>
-        <lilac-component name="counter"></lilac-component>
+        <div data-use="counter"></div>
+        <div data-use="counter"></div>
+        <div data-use="counter"></div>
       </body></html>
     HTML
 
     build!
     out = read_output("index.html")
-    assert_equal 3, out.scan('data-component="counter"').length
+    # 3 use sites + 1 definition (inside the injected <template>) for the
+    # data-component string. Runtime expands the empty data-use= elements
+    # from the definition at mount time.
+    assert_equal 3, out.scan('data-use="counter"').length
+    assert_equal 1, out.scan('data-component="counter"').length
     assert_equal 1, out.scan("class Counter < Lilac::Component").length
   end
 
@@ -223,7 +227,7 @@ class TestBuilder < Minitest::Test
     GNT
 
     write_page "index", <<~HTML
-      <html><body><lilac-component name="used"></lilac-component></body></html>
+      <html><body><div data-use="used"></div></body></html>
     HTML
 
     build!
@@ -234,11 +238,11 @@ class TestBuilder < Minitest::Test
 
   def test_unknown_component_reference_raises
     write_page "index", <<~HTML
-      <html><body><lilac-component name="nope"></lilac-component></body></html>
+      <html><body><div data-use="nope"></div></body></html>
     HTML
 
     err = assert_raises(Lilac::CLI::Builder::Error) { build! }
-    assert_match(/Unknown component: "nope"/, err.message)
+    assert_match(/Unknown component referenced by data-use="nope"/, err.message)
   end
 
   def test_namespaced_component_name_via_double_dash
@@ -252,7 +256,7 @@ class TestBuilder < Minitest::Test
     GNT
 
     write_page "index", <<~HTML
-      <html><body><lilac-component name="admin--user-card"></lilac-component></body></html>
+      <html><body><div data-use="admin--user-card"></div></body></html>
     HTML
 
     build!
@@ -268,7 +272,7 @@ class TestBuilder < Minitest::Test
     GNT
 
     write_page "index", <<~HTML
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     Lilac::CLI::Builder.new(
@@ -295,7 +299,7 @@ class TestBuilder < Minitest::Test
     GNT
 
     write_page "index", <<~HTML
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     build!  # live_reload defaults to false
@@ -312,7 +316,7 @@ class TestBuilder < Minitest::Test
       <template><div data-component="x"></div></template>
       <script type="text/ruby">class X < Lilac::Component; end</script>
     GNT
-    write_page "index", '<html><body><lilac-component name="x"></lilac-component></body></html>'
+    write_page "index", '<html><body><div data-use="x"></div></body></html>'
 
     public_dir = File.join(@tmp, "public")
     FileUtils.mkdir_p(File.join(public_dir, "vendor", "mruby-wasm-js"))
@@ -337,7 +341,7 @@ class TestBuilder < Minitest::Test
       <template><div data-component="x"></div></template>
       <script type="text/ruby">class X < Lilac::Component; end</script>
     GNT
-    write_page "index", '<html><body><lilac-component name="x"></lilac-component></body></html>'
+    write_page "index", '<html><body><div data-use="x"></div></body></html>'
 
     result = Lilac::CLI::Builder.new(
       components_dir: @components,
@@ -355,7 +359,7 @@ class TestBuilder < Minitest::Test
       <template><div data-component="x"></div></template>
       <script type="text/ruby">class X < Lilac::Component; end</script>
     GNT
-    write_page "index", '<html><body><lilac-component name="x"></lilac-component></body></html>'
+    write_page "index", '<html><body><div data-use="x"></div></body></html>'
 
     public_dir = File.join(@tmp, "public")
     FileUtils.mkdir_p(public_dir)
@@ -379,7 +383,7 @@ class TestBuilder < Minitest::Test
       <template><div data-component="x"></div></template>
       <script type="text/ruby">class X < Lilac::Component; end</script>
     GNT
-    write_page "index", '<html><body><lilac-component name="x"></lilac-component></body></html>'
+    write_page "index", '<html><body><div data-use="x"></div></body></html>'
 
     public_dir = File.join(@tmp, "public")
     FileUtils.mkdir_p(File.join(public_dir, "vendor", "lilac-full"))
@@ -453,7 +457,7 @@ class TestBuilder < Minitest::Test
       <template><div data-component="x"></div></template>
       <script type="text/ruby">class X < Lilac::Component; end</script>
     GNT
-    write_page "index", '<html><body><lilac-component name="x"></lilac-component></body></html>'
+    write_page "index", '<html><body><div data-use="x"></div></body></html>'
 
     public_dir = File.join(@tmp, "public")
     FileUtils.mkdir_p(public_dir)
@@ -485,7 +489,7 @@ class TestBuilder < Minitest::Test
         end
       </script>
     GNT
-    write_page "index", '<html><body><lilac-component name="counter"></lilac-component></body></html>'
+    write_page "index", '<html><body><div data-use="counter"></div></body></html>'
 
     build!(codegen: :auto)
     out = read_output("index.html")
@@ -508,7 +512,7 @@ class TestBuilder < Minitest::Test
         end
       </script>
     GNT
-    write_page "index", '<html><body><lilac-component name="counter"></lilac-component></body></html>'
+    write_page "index", '<html><body><div data-use="counter"></div></body></html>'
 
     build!(codegen: :off)
     out = read_output("index.html")
@@ -532,7 +536,7 @@ class TestBuilder < Minitest::Test
         end
       </script>
     GNT
-    write_page "index", '<html><body><lilac-component name="counter"></lilac-component></body></html>'
+    write_page "index", '<html><body><div data-use="counter"></div></body></html>'
 
     build!(target: :compiled, mrbc_path: mrbc)
 
@@ -563,7 +567,7 @@ class TestBuilder < Minitest::Test
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
     write_page "index", <<~HTML
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     # Sandbox a fake package bytecode file. The bytes are arbitrary —
@@ -597,7 +601,7 @@ class TestBuilder < Minitest::Test
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
     write_page "index", <<~HTML
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     # Fake a gem-discovered package by stubbing `PackageDiscovery.run`.
@@ -643,7 +647,7 @@ class TestBuilder < Minitest::Test
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
     write_page "index", <<~HTML
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     bogus = File.join(Dir.mktmpdir("lilac-package-missing"), "nope.mrb")
@@ -659,7 +663,7 @@ class TestBuilder < Minitest::Test
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
     write_page "index", <<~HTML
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     pkg_src = File.join(Dir.mktmpdir("lilac-package-fixture-full"), "extras.mrb")
@@ -686,7 +690,7 @@ class TestBuilder < Minitest::Test
       <script type="text/ruby">class Counter < Lilac::Component; end</script>
     GNT
     write_page "index", <<~HTML
-      <html><body><lilac-component name="counter"></lilac-component></body></html>
+      <html><body><div data-use="counter"></div></body></html>
     HTML
 
     build!(target: :full)
@@ -903,7 +907,7 @@ class TestBuilder < Minitest::Test
     GNT
     write_page "index", <<~HTML
       <html><body>
-      <lilac-component name="x"></lilac-component>
+      <div data-use="x"></div>
       <script type="text/ruby">class PageY; end</script>
       </body></html>
     HTML

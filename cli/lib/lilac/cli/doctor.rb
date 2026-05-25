@@ -91,17 +91,17 @@ module Lilac
         results = []
         page_paths.each do |page_path|
           html = File.read(page_path)
-          html.scan(Builder::COMPONENT_PLACEHOLDER) do |dq, sq|
+          html.scan(Builder::DATA_USE_PATTERN) do |dq, sq|
             name = dq || sq
             unless component_names.include?(name)
               results << error(
-                "page #{relative(page_path)} references <lilac-component name=#{name.inspect}>, " \
+                "page #{relative(page_path)} references data-use=#{name.inspect}, " \
                 "but no components/#{name}.lil exists"
               )
             end
           end
         end
-        results.empty? ? [ok('all <lilac-component> references resolve')] : results
+        results.empty? ? [ok('all data-use= references resolve')] : results
       end
 
       def check_unused_components
@@ -109,7 +109,7 @@ module Lilac
 
         component_names = gnt_paths.map { |p| File.basename(p, '.lil') }.to_set
         referenced = page_paths.flat_map do |page_path|
-          File.read(page_path).scan(Builder::COMPONENT_PLACEHOLDER).map { |dq, sq| dq || sq }
+          File.read(page_path).scan(Builder::DATA_USE_PATTERN).map { |dq, sq| dq || sq }
         end.uniq.to_set
 
         unused = component_names - referenced
