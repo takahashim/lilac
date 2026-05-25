@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Lilac — CDN counter demo</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 480px;
+        margin: 2em auto;
+        padding: 0 1em;
+      }
+      .panel {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 1em 1.2em;
+        margin: 1em 0;
+      }
+      .panel h2 { margin-top: 0; font-size: 1em; color: #555; }
+      .row { display: flex; gap: 0.5em; align-items: center; }
+      button {
+        padding: 0.4em 0.9em;
+        border-radius: 6px;
+        border: 1px solid #b94f3f;
+        background: #b94f3f;
+        color: #fff;
+        cursor: pointer;
+      }
+      .num {
+        font: 700 1.1em ui-monospace, monospace;
+        min-width: 2em;
+        text-align: center;
+      }
+      .msg { color: #666; font-style: italic; min-height: 1.5em; }
+    </style>
+  </head>
+  <body>
+    <h1>Lilac Counter (CDN)</h1>
+    <p>
+      Loads Lilac from the GitHub Pages CDN — no build step, no local
+      files. Copy this HTML to any static host and it just works.
+    </p>
+
+    <div class="panel" data-component="Counter">
+      <h2>Counter</h2>
+      <div class="row">
+        <button data-on-click="decrement">-</button>
+        <span class="num" data-text="@count">0</span>
+        <button data-on-click="increment">+</button>
+        <button data-on-click="reset">reset</button>
+      </div>
+      <p class="msg" data-text="@message"></p>
+    </div>
+
+    <script type="text/ruby">
+class Counter < Lilac::Component
+  def setup
+    @count = signal(0)
+    @message = computed do
+      case @count.value
+      when 0
+        "zero"
+      when 1..Float::INFINITY
+        "positive"
+      else
+        "negative"
+      end
+    end
+  end
+
+  def increment(_ev) = @count.update { |n| n + 1 }
+  def decrement(_ev) = @count.update { |n| n - 1 }
+  def reset(_ev)     = @count.value = 0
+end
+
+Lilac.register "Counter", Counter
+    </script>
+
+    <script type="module">
+      import { boot } from "https://takahashim.github.io/lilac/v0.1.0.pre1/index.js";
+      await boot();
+    </script>
+  </body>
+</html>

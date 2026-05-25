@@ -8,6 +8,7 @@
 
 | ディレクトリ | 何を示すか | ビルド | いつ読むか |
 |---|---|---|---|
+| [`cdn-runtime-only/`](./cdn-runtime-only/) | GitHub Pages 上の Lilac CDN を `import` するだけで動く最小例。ローカルファイル参照なし、静的ホストにそのまま置ける | 不要 (HTML 直書き) | 「外部サイトに Lilac を載せたい」「CDN から配信したい」「セットアップなしで触りたい」 |
 | [`runtime-only/`](./runtime-only/) | ノービルドの **ランタイム canonical** パス。各 HTML が `<script type="text/ruby">` を inline で持ち、`../../build/lilac-full.wasm` を直接ロードする | 不要 (HTML 直書き) | 「ビルドツールなしで Lilac を試したい」「runtime の振る舞いを直接確認したい」「README の Quick start から辿ってきた」 |
 | [`7guis/`](./7guis/) | [7GUIs](https://eugenkiss.github.io/7guis/) ベンチを Lilac で実装した gallery。`lilac-cli` で `pages/*.html` と 1 つの shared `components/gallery-nav.lil` をビルドする | `bundle exec lilac build` | 「実プロジェクト構成の reference が欲しい」「`lilac-cli` のフローを見たい」「他フレームワークと書き味を比較したい」 |
 
