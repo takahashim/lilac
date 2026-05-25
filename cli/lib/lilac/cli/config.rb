@@ -48,11 +48,18 @@ module Lilac
       DEFAULT_DEV_TARGET   = :full
       TARGET_VALUES = %i[full compiled].freeze
 
+      # Delivery mode for component templates + scripts:
+      #   :inline — embed everything in each page's HTML (current default)
+      #   :bundle — emit a single lilac.bundle.html, page HTML references it
+      #             via <link rel="lilac-bundle">
+      DEFAULT_DELIVERY = :inline
+      DELIVERY_VALUES = %i[inline bundle].freeze
+
       attr_reader :root, :components_dir, :pages_dir, :output_dir, :public_dir,
                   :dev_host, :dev_port, :codegen,
                   :build_target, :dev_target, :mrbc_path,
                   :lilac_compiled_path, :mruby_wasm_js_path,
-                  :packages
+                  :packages, :delivery
 
       # Three-way merge: CLI opts > lilac.config.rb > built-in defaults.
       # `opts` keys mirror the keyword args of `initialize`; nil values
@@ -61,7 +68,7 @@ module Lilac
                     public_dir: nil, dev_host: nil, dev_port: nil, codegen: nil,
                     build_target: nil, dev_target: nil, mrbc_path: nil,
                     lilac_compiled_path: nil, mruby_wasm_js_path: nil,
-                    packages: nil)
+                    packages: nil, delivery: nil)
         resolved_root = File.expand_path(root || Dir.pwd)
         settings = ConfigLoader.load(resolved_root) || ConfigLoader::Settings.new
 
@@ -80,6 +87,7 @@ module Lilac
           lilac_compiled_path: lilac_compiled_path || settings.lilac_compiled_path,
           mruby_wasm_js_path:  mruby_wasm_js_path  || settings.mruby_wasm_js_path,
           packages:    packages    || settings.packages,
+          delivery:    delivery    || settings.delivery,
         )
       end
 
@@ -87,7 +95,7 @@ module Lilac
                      public_dir: nil, dev_host: nil, dev_port: nil, codegen: nil,
                      build_target: nil, dev_target: nil, mrbc_path: nil,
                      lilac_compiled_path: nil, mruby_wasm_js_path: nil,
-                     packages: nil)
+                     packages: nil, delivery: nil)
         # Use `|| Dir.pwd` rather than a default keyword so callers can
         # pass `root: opts[:root]` (often nil from un-set CLI flags)
         # without overriding the default to nil.
@@ -113,6 +121,7 @@ module Lilac
         # so relative paths Just Work. Nil from Config.load is
         # normalized to an empty array.
         @packages = (packages || []).map { |p| expand(p) }
+        @delivery = normalize_delivery(delivery || DEFAULT_DELIVERY)
       end
 
       private
@@ -135,6 +144,15 @@ module Lilac
         unless TARGET_VALUES.include?(sym)
           raise ArgumentError,
                 "#{kind} must be one of #{TARGET_VALUES.inspect}, got #{value.inspect}"
+        end
+        sym
+      end
+
+      def normalize_delivery(value)
+        sym = value.to_sym
+        unless DELIVERY_VALUES.include?(sym)
+          raise ArgumentError,
+                "delivery must be one of #{DELIVERY_VALUES.inspect}, got #{value.inspect}"
         end
         sym
       end

@@ -110,6 +110,7 @@ module Lilac
           mruby_wasm_js_path: config.mruby_wasm_js_path,
           packages: config.packages,
           project_root: config.root,
+          delivery: config.delivery,
         )
         result = builder.build
         public_suffix = result[:public_files].positive? ? " + #{result[:public_files]} static file(s)" : ""

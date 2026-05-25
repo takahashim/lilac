@@ -30,7 +30,8 @@ class TestBuilder < Minitest::Test
   def build!(codegen: :auto, target: :full, mrbc_path: nil,
              lilac_compiled_path: nil, mruby_wasm_js_path: nil,
              packages: [],
-             project_root: Dir.pwd)
+             project_root: Dir.pwd,
+             delivery: :inline)
     Lilac::CLI::Builder.new(
       components_dir: @components,
       pages_dir: @pages,
@@ -42,6 +43,7 @@ class TestBuilder < Minitest::Test
       mruby_wasm_js_path: mruby_wasm_js_path,
       packages: packages,
       project_root: project_root,
+      delivery: delivery,
     ).build
   end
 
@@ -213,6 +215,54 @@ class TestBuilder < Minitest::Test
     assert_equal 3, out.scan('data-use="counter"').length
     assert_equal 1, out.scan('data-component="counter"').length
     assert_equal 1, out.scan("class Counter < Lilac::Component").length
+  end
+
+  def test_delivery_bundle_emits_separate_bundle_file
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"><span data-text="@count">0</span></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+
+    write_page "index", <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>t</title></head><body>
+        <div data-use="counter"></div>
+      </body></html>
+    HTML
+
+    build!(delivery: :bundle)
+
+    # Page HTML carries only the <link>, not the template/script.
+    out = read_output("index.html")
+    assert_includes out, '<link rel="lilac-bundle" href="/lilac.bundle.html">'
+    refute_includes out, '<template>'
+    refute_includes out, '<script type="text/ruby">'
+
+    # Bundle file contains template + script.
+    bundle = File.read(File.join(@output, "lilac.bundle.html"))
+    assert_includes bundle, '<template>'
+    assert_includes bundle, 'data-component="counter"'
+    assert_includes bundle, 'class Counter < Lilac::Component'
+  end
+
+  def test_delivery_bundle_link_is_injected_into_head_when_present
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+
+    # Page has <head> — link should go inside </head>
+    write_page "index", <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>t</title></head><body>
+        <div data-use="counter"></div>
+      </body></html>
+    HTML
+
+    build!(delivery: :bundle)
+    out = read_output("index.html")
+    head_section = out[/<head>.*<\/head>/m]
+    assert_includes head_section.to_s, 'rel="lilac-bundle"'
   end
 
   def test_only_referenced_widgets_are_bundled

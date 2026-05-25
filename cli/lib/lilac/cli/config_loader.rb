@@ -52,6 +52,11 @@ module Lilac
         # the generated boot script `loadBytecode`s them before user
         # code. See decisions §25 / §26 + `docs/lilac-package-spec.md`.
         :packages,
+        # `delivery` — :inline (default) embeds component definitions
+        # in each page's HTML; :bundle emits a single lilac.bundle.html
+        # referenced from each page via <link rel="lilac-bundle">. See
+        # lilac-proposals.md for the bundle-fetch strategy.
+        :delivery,
         keyword_init: true,
       )
 

@@ -71,7 +71,8 @@ module Lilac
                      lilac_compiled_path: nil, mruby_wasm_js_path: nil,
                      packages: [],
                      project_root: Dir.pwd,
-                     disable_gem_discovery: false)
+                     disable_gem_discovery: false,
+                     delivery: :inline)
         @components_dir = components_dir
         @pages_dir = pages_dir
         @output_dir = output_dir
@@ -114,6 +115,12 @@ module Lilac
         # wasm doesn't satisfy lookups they're trying to isolate. Plumbed
         # through to both resolvers below.
         @disable_gem_discovery = disable_gem_discovery
+        # `:inline` (default) — inject component definitions into each
+        # page's HTML. `:bundle` — emit a single dist/lilac.bundle.html
+        # referenced from pages via `<link rel="lilac-bundle">`. Runtime
+        # registry fetches the bundle and injects templates + evals
+        # scripts before mount.
+        @delivery = delivery
       end
 
       def build
@@ -143,6 +150,12 @@ module Lilac
         # checks. Reset on each `build` so repeated invocations don't
         # accumulate state across builds.
         @build_linter = BuildLinter.new
+
+        # In :bundle delivery mode, emit a single dist/lilac.bundle.html
+        # containing all components' templates + scripts. Pages then
+        # reference it via <link rel="lilac-bundle">. Done once before
+        # page processing so build_page can inject the <link>.
+        @bundle_url = write_bundle_file!(components) if @delivery == :bundle
 
         pages.each do |page_path|
           build_page(page_path, components)
@@ -292,11 +305,22 @@ module Lilac
           used << name
         end
 
-        injection = build_injection(used.uniq, components,
-                                    page_inline_scripts: page_inline_scripts,
-                                    synthesized_names: synthesized_names,
-                                    page_path: page_path)
-        html = inject_before_body_close(html, injection) unless injection.empty?
+        if @delivery == :bundle
+          # bundle モード: ページには <link rel="lilac-bundle"> だけ inject。
+          # template + script は dist/lilac.bundle.html に集約済み (build メソッドで)。
+          # ただし live_reload と page-inline 由来の処理は引き続き必要。
+          html = inject_bundle_link(html, @bundle_url) if @bundle_url
+
+          extras = []
+          extras << LiveReload::SCRIPT if @live_reload
+          html = inject_before_body_close(html, extras.join("\n")) unless extras.empty?
+        else
+          injection = build_injection(used.uniq, components,
+                                      page_inline_scripts: page_inline_scripts,
+                                      synthesized_names: synthesized_names,
+                                      page_path: page_path)
+          html = inject_before_body_close(html, injection) unless injection.empty?
+        end
 
         File.write(output_path_for(page_path).tap { |p| FileUtils.mkdir_p(File.dirname(p)) }, html)
       end
@@ -748,6 +772,68 @@ module Lilac
         require 'json'
         manifest_path = File.join(@output_dir, 'lilac.packages.json')
         File.write(manifest_path, JSON.pretty_generate(packages: package_urls) + "\n")
+      end
+
+      # In :bundle delivery mode, emit all components' default templates,
+      # named templates, and Ruby scripts into a single dist/lilac.bundle.html.
+      # Pages reference it via <link rel="lilac-bundle">, and the runtime
+      # registry fetches it before mount.
+      #
+      # Returns the path that should be used in the <link href=> (relative
+      # to the dist root), or nil when there are no components.
+      def write_bundle_file!(components)
+        return nil if components.empty?
+
+        parts = []
+        components.each do |name, comp|
+          parsed = template_ast_for(name, comp)
+
+          # Default template
+          parts << "<template>#{parsed[:default_html]}</template>"
+
+          # Named templates
+          parsed[:named].each do |nt|
+            parts << render_named_template(nt.name, nt.html)
+          end
+
+          # Script (codegen + user code)
+          user_script = comp.script.strip
+          next if user_script.empty?
+
+          generated =
+            if @codegen == :off
+              ''
+            else
+              Codegen.generate(
+                component_name: name,
+                directives: parsed[:default_directives],
+                source_path: parsed[:source_path],
+                emit_include: false
+              ).strip
+            end
+          full_script = [generated, user_script].reject(&:empty?).join("\n\n")
+          parts << render_script(full_script)
+        end
+
+        bundle_path = File.join(@output_dir, 'lilac.bundle.html')
+        FileUtils.mkdir_p(@output_dir)
+        File.write(bundle_path, parts.join("\n") + "\n")
+        '/lilac.bundle.html'
+      end
+
+      # Injects <link rel="lilac-bundle" href="..."> into the page's <head>.
+      # If there's no <head> tag (handwritten minimal HTML), prepends the
+      # link before <body> instead.
+      def inject_bundle_link(html, url)
+        link = %(<link rel="lilac-bundle" href="#{escape_attr(url)}">)
+        if html =~ %r{</head>}i
+          html.sub(%r{</head>}i, "  #{link}\n</head>")
+        elsif html =~ %r{<body}i
+          html.sub(%r{<body}i, "#{link}\n<body")
+        else
+          # Last resort — no <head> or <body>, prepend.
+          "#{link}\n#{html}"
+        end
       end
 
       def render_named_template(template_name, body_html)
