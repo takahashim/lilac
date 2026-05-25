@@ -60,6 +60,12 @@ module Lilac
       # MO needs to be watching to mount them on the next microtask.
       install_observer
       prune_disconnected_components
+      # Collect component definitions from <template> elements + outer
+      # data-component= elements, then expand data-use= placeholders by
+      # injecting markup from the matching definition. See decisions
+      # on data-component / data-use semantics (lilac-proposals.md).
+      definitions = collect_definitions
+      expand_uses(definitions)
       mount_subtree(root_js)
       nil
     end
@@ -144,7 +150,8 @@ module Lilac
         node = stack.pop
         next if node.js_null?
         next if node[:nodeType].to_i != 1
-        if node.call(:hasAttribute, "data-component").js_bool
+        if node.call(:hasAttribute, "data-component").js_bool ||
+           node.call(:hasAttribute, "data-use").js_bool
           out << node
         end
         # Do not descend into a `data-each` element's children: those
@@ -170,6 +177,12 @@ module Lilac
       existing_attr = el_js.call(:getAttribute, COMPONENT_ID_ATTR)
       return nil if !existing_attr.js_null?
       name = el_js.call(:getAttribute, "data-component")
+      # data-use= elements identify their target via the `data-use` attribute
+      # after expand_uses has injected the markup. Both attributes are
+      # accepted here so the same instantiate path works for both.
+      if name.js_null?
+        name = el_js.call(:getAttribute, "data-use")
+      end
       return nil if name.js_null?
       klass = resolve_component_class(name.to_s)
       unless klass
@@ -184,6 +197,100 @@ module Lilac
       parent = nearest_ancestor_component(el_js)
       parent.add_child(instance) if parent
       instance
+    end
+
+    # Scan <template> elements (inside any depth of nesting) and outer
+     # data-component= elements to build a {name => element} table that
+    # `expand_uses` consults when injecting markup into data-use= elements.
+    # Duplicate names are reported via console.error; the first occurrence
+    # wins so the run can continue (build-time check catches the same case
+    # earlier when CLI is used).
+    def collect_definitions
+      definitions = {}
+      duplicates = []
+      document = JS.global[:document]
+
+      # <template> 内の data-component= 要素 (定義のみ)
+      templates = document.call(:querySelectorAll, "template")
+      tn = templates[:length].to_i
+      ti = 0
+      while ti < tn
+        tpl = templates[ti]
+        content = tpl[:content]
+        unless content.js_null?
+          inner = content.call(:querySelectorAll, "[data-component]")
+          in_len = inner[:length].to_i
+          ii = 0
+          while ii < in_len
+            el = inner[ii]
+            name = el.call(:getAttribute, "data-component").to_s
+            if definitions.key?(name)
+              duplicates << name
+            else
+              definitions[name] = el
+            end
+            ii += 1
+          end
+        end
+        ti += 1
+      end
+
+      # <template> 外の data-component= 要素 (定義 + 利用)
+      outside = document.call(:querySelectorAll, "[data-component]")
+      on = outside[:length].to_i
+      oi = 0
+      while oi < on
+        el = outside[oi]
+        name = el.call(:getAttribute, "data-component").to_s
+        if definitions.key?(name)
+          duplicates << name
+        else
+          definitions[name] = el
+        end
+        oi += 1
+      end
+
+      duplicates.uniq.each do |name|
+        JS.global[:console].call(
+          :error,
+          "[lilac] Duplicate component definition: #{name.inspect}. " \
+            "Each component name must be defined only once per page."
+        )
+      end
+
+      definitions
+    end
+
+    # For each data-use="X" element in the document, inject markup from
+    # the matching definition when the element is empty. Unknown names
+    # are reported via console.error. After expansion, data-use= elements
+    # are picked up by collect_components and mounted via the normal path.
+    def expand_uses(definitions)
+      document = JS.global[:document]
+      uses = document.call(:querySelectorAll, "[data-use]")
+      un = uses[:length].to_i
+      ui = 0
+      while ui < un
+        use_el = uses[ui]
+        name = use_el.call(:getAttribute, "data-use").to_s
+        template_el = definitions[name]
+        if template_el.nil?
+          JS.global[:console].call(
+            :error,
+            "[lilac] Unknown component referenced by data-use=#{name.inspect}. " \
+              "No matching data-component=#{name.inspect} found in this page."
+          )
+          ui += 1
+          next
+        end
+
+        # 空判定: innerHTML が whitespace のみなら template から markup 注入
+        inner_html = use_el[:innerHTML].to_s
+        if inner_html.strip.empty?
+          use_el[:innerHTML] = template_el[:innerHTML]
+        end
+        ui += 1
+      end
     end
 
     def nearest_ancestor_component(el_js)
