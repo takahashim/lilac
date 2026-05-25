@@ -997,7 +997,7 @@ class TestBuilder < Minitest::Test
     HTML
 
     err = assert_raises(Lilac::CLI::Builder::Error) { build!(target: :full) }
-    assert_match(/data-component="counter".+collides with components\/counter\.lil/, err.message)
+    assert_match(/Duplicate component definition "counter".+conflicts with components\/counter\.lil/, err.message)
   end
 
   def test_same_page_duplicate_page_inline_data_component_raises
@@ -1009,7 +1009,7 @@ class TestBuilder < Minitest::Test
     HTML
 
     err = assert_raises(Lilac::CLI::Builder::Error) { build!(target: :full) }
-    assert_match(/data-component="row".+is declared twice/, err.message)
+    assert_match(/Duplicate component definition "row".+also declared at line/, err.message)
   end
 
   def test_cross_page_divergent_page_inline_warns

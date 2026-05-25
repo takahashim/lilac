@@ -379,13 +379,12 @@ module Lilac
         targets.each do |elem|
           name = elem['data-component']
 
-          # R1: `.lil` and page-inline can't share a name. The .lil
-          # version would be silently shadowed otherwise — see
-          # proposal §A.R1.
+          # `.lil` and page-inline can't share a name — same-name
+          # `data-component=` is a definition collision (ADR-29).
           if lil_origin.include?(name)
             lil_path = components[name].path
-            raise Error, build_scope_error_message(
-              kind: :lil_vs_page_inline,
+            raise Error, duplicate_definition_message(
+              kind: :duplicate_with_lil,
               name: name,
               page_path: page_path,
               elem_line: elem.line,
@@ -393,12 +392,13 @@ module Lilac
             )
           end
 
-          # R2: same page can't declare the same page-inline component
-          # twice. Two `<X data-component="row">` siblings would race
-          # on which class body wins. See proposal §A.R2.
+          # Same page can't declare the same `data-component=` twice
+          # — same-name definition collision (ADR-29). Two
+          # `<X data-component="row">` siblings would race on which
+          # class body wins.
           if seen_in_page.key?(name)
-            raise Error, build_scope_error_message(
-              kind: :same_page_duplicate,
+            raise Error, duplicate_definition_message(
+              kind: :duplicate_in_page,
               name: name,
               page_path: page_path,
               elem_line: elem.line,
@@ -433,25 +433,26 @@ module Lilac
         [synthesized, doc.to_html, used_inline, synthesized_names]
       end
 
-      # Build a structured scope-violation error message. See proposals.md
-      # §A.R1〜R4 — the scope rule for `.lil` (project-global) vs page-
-      # inline `data-component` (page-local) vs page-inline script
-      # (page-local execution).
-      def build_scope_error_message(kind:, name:, page_path:, **detail)
+      # Build a structured definition-collision error message. ADR-29
+      # requires each component name to be defined only once per page;
+      # this method formats the user-facing message for each variant.
+      def duplicate_definition_message(kind:, name:, page_path:, **detail)
         page_rel = page_path ? File.basename(page_path) : '(page)'
         case kind
-        when :lil_vs_page_inline
+        when :duplicate_with_lil
           lil_rel = detail[:lil_path] ? File.basename(detail[:lil_path]) : "components/#{name}.lil"
-          "data-component=#{name.inspect} on #{page_rel}:#{detail[:elem_line]} " \
-            "collides with components/#{lil_rel} (project-global). " \
-            'Page-inline components are page-local, so the silent shadowing ' \
-            'would surprise. Rename one of them.'
-        when :same_page_duplicate
-          "data-component=#{name.inspect} on #{page_rel}:#{detail[:elem_line]} " \
-            "is declared twice in the same page (first at line #{detail[:previous_line]}). " \
-            'Page-inline component names must be unique within a page.'
+          "Duplicate component definition #{name.inspect}: " \
+            "page-inline data-component on #{page_rel}:#{detail[:elem_line]} " \
+            "conflicts with components/#{lil_rel}. " \
+            'Each component name must be defined only once per page. ' \
+            'Rename one of them.'
+        when :duplicate_in_page
+          "Duplicate component definition #{name.inspect}: " \
+            "data-component on #{page_rel}:#{detail[:elem_line]} " \
+            "is also declared at line #{detail[:previous_line]} of the same page. " \
+            'Each component name must be defined only once per page.'
         else
-          "scope violation: #{kind} (name=#{name.inspect}, page=#{page_rel})"
+          "Component definition collision: #{kind} (name=#{name.inspect}, page=#{page_rel})"
         end
       end
 
