@@ -307,11 +307,28 @@ module Lilac
 
         if @delivery == :bundle
           # bundle モード: ページには <link rel="lilac-bundle"> だけ inject。
-          # template + script は dist/lilac.bundle.html に集約済み (build メソッドで)。
-          # ただし live_reload と page-inline 由来の処理は引き続き必要。
+          # `.lil` 由来 components の template + script は dist/lilac.bundle.html に
+          # 集約済み (build メソッドで)。ただし以下は依然 page HTML に必要:
+          #   * page-inline で書かれた `<div data-component=X>` の synthesized
+          #     named templates (data-each row 等)
+          #   * page-inline `<script type="text/ruby">` 用の codegen
+          #     (Lilac::Bindings::X)
+          # → `used` を synthesized_names に絞って build_injection を呼び、
+          #    page-local な部分だけ inject する。
           html = inject_bundle_link(html, @bundle_url) if @bundle_url
 
           extras = []
+          page_local_names = used.uniq.select { |n| synthesized_names.include?(n) }
+          unless page_local_names.empty? && page_inline_scripts.empty?
+            page_injection = build_injection(
+              page_local_names, components,
+              page_inline_scripts: page_inline_scripts,
+              synthesized_names: synthesized_names,
+              page_path: page_path
+            )
+            extras << page_injection unless page_injection.empty?
+          end
+
           if @target == :compiled && @bundle_mrb_file
             # bundle で出力した .mrb を loadBytecode する boot module を inject
             extras << render_compiled_boot_module(@bundle_mrb_file, @package_dist_urls || [])
