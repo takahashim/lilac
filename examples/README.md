@@ -14,6 +14,8 @@
 
 `7guis/` は CLI のフロー全体(`pages/` + 共有コンポーネント + `public/` 静的 passthrough + `lilac dev` の watch / reload)を見せる位置付け。**`.lil` SFC は 1 ファイルだけ** — 全 8 ページで再利用する `gallery-nav.lil` のみ。残りの task widget は各 page に inline で書く形にして、「`.lil` は **複数ページで markup を共有したい** ときに切り出すもの」という方針を実例で示している。
 
+加えて、`7guis/lilac.config.rb` では **`c.delivery = :bundle`** を指定し、共有 `gallery-nav` の定義を全ページで個別 inline するのではなく、`dist/lilac.bundle.html` という 1 つのファイルに集約して `<link rel="lilac-bundle">` で参照する形を選んでいる。これにより各 page HTML が小さくなり、`gallery-nav.lil` 更新時のキャッシュ invalidate も bundle ファイル単位で済む。
+
 ## runtime-only/
 
 ```bash
