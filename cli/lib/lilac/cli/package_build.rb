@@ -2,8 +2,8 @@
 
 require 'fileutils'
 
-require_relative 'build_error'
-require_relative 'bytecode_builder'
+require_relative 'build/build_error'
+require_relative 'build/bytecode_builder'
 
 module Lilac
   module CLI

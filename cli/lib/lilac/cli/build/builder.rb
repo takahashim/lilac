@@ -6,7 +6,7 @@ require_relative 'sfc'
 require_relative 'template_ast'
 require_relative 'codegen'
 require_relative 'component_name'
-require_relative 'cross_ref_linter'
+require_relative '../cross_ref_linter'
 require_relative 'bytecode_builder'
 require_relative 'form_extension'
 

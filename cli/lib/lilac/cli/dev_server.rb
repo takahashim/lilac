@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 require "wsv"
-require_relative "builder"
-require_relative "build_error"
+require_relative "build/builder"
+require_relative "build/build_error"
 require_relative "live_reload"
 require_relative "watcher"
 

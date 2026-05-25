@@ -3,7 +3,7 @@
 require "optparse"
 require "fileutils"
 require_relative "config"
-require_relative "builder"
+require_relative "build/builder"
 require_relative "dev_server"
 require_relative "preview_server"
 require_relative "scaffold"

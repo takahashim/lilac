@@ -8,7 +8,7 @@
 # `require_relative` statements (the runtime mrbgem also has none —
 # mruby-config drives load order there). MRI load order is owned here.
 
-require_relative "cli/build_error" # lints.rb references Lilac::CLI::BuildError
+require_relative "cli/build/build_error" # lints.rb references Lilac::CLI::BuildError
 require_relative "directives/value"
 require_relative "directives/value_codegen" # build-time-only emit helpers (re-opens Value::Ivar / BareIdent)
 require_relative "directives/grammar"

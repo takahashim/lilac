@@ -138,13 +138,13 @@ module Lilac
       end
 
       # The gem ships from `cli/`. In the monorepo this file lives at
-      # `<repo>/cli/lib/lilac/cli/compiled_runtime_resolver.rb`, so
-      # `<repo>` is four levels up. When installed via rubygems the cli/
+      # `<repo>/cli/lib/lilac/cli/build/compiled_runtime_resolver.rb`, so
+      # `<repo>` is five levels up. When installed via rubygems the cli/
       # gem is unpacked alone — there is no enclosing repo, so the
       # candidate paths simply won't exist, which is fine: discovery
       # falls through to node_modules / explicit overrides.
       def monorepo_root
-        @monorepo_root ||= @monorepo_root_override || File.expand_path("../../../..", __dir__)
+        @monorepo_root ||= @monorepo_root_override || File.expand_path("../../../../..", __dir__)
       end
 
       def wasm_not_found_message

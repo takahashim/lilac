@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require_relative 'builder'
-require_relative 'bytecode_builder'
-require_relative 'compiled_runtime_resolver'
-require_relative 'sfc'
+require_relative 'build/builder'
+require_relative 'build/bytecode_builder'
+require_relative 'build/compiled_runtime_resolver'
+require_relative 'build/sfc'
 
 module Lilac
   module CLI

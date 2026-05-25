@@ -3,7 +3,7 @@
 require "set"
 require_relative "build_error"
 require_relative "component_name"
-require_relative "../directives" # Lilac::Directives::* (Value / Grammar / ClassParser / Lints)
+require_relative "../../directives" # Lilac::Directives::* (Value / Grammar / ClassParser / Lints)
 
 module Lilac
   module CLI
