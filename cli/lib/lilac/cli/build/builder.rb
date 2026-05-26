@@ -54,9 +54,10 @@ module Lilac
       #
       #   - `target:` — Command picks `config.build_target`, DevServer
       #     picks `config.dev_target`. Defaults to the build target.
-      #   - `delivery:` — DevServer pins `:inline` regardless of
-      #     `config.delivery` (pre-refactor behavior; `lilac dev` does
-      #     not honor `c.delivery = :bundle` today).
+      #   - `delivery:` — either caller can pin a value here; both
+      #     currently leave it unset so `config.delivery` wins (build
+      #     and dev share the same delivery path, matching what ships
+      #     to prod).
       #   - `live_reload:` — DevServer turns it on for SSE-driven page
       #     reload; `lilac build` leaves it off.
       def self.from_config(config, live_reload: false,

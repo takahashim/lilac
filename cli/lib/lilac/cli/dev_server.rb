@@ -59,15 +59,14 @@ module Lilac
         # flow under live reload so the dev experience matches what
         # ships in prod.
         #
-        # `delivery: :inline` pins the dev path to per-page injection
-        # regardless of `config.delivery` — preserves pre-refactor
-        # behavior. TODO: revisit whether `lilac dev` should honor
-        # `c.delivery = :bundle`.
+        # `delivery:` is left unset so `Builder.from_config` reads
+        # `config.delivery` — projects that opt into `c.delivery = :bundle`
+        # in lilac.config.rb get the bundle path under live reload too,
+        # which is the same shape that ships to prod.
         Builder.from_config(
           @config,
           live_reload: true,
           target: @config.dev_target,
-          delivery: :inline,
         ).build
       end
 
