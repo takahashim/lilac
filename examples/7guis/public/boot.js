@@ -36,6 +36,35 @@ if (!document.querySelector("[data-lilac-bootstrap]")) {
     setStatus("booting…");
     const { createVM } = await import("/vendor/lilac-full/mruby-wasm-js/index.js");
     const vm = await createVM({ wasm: "/vendor/lilac-full/lilac-full.wasm" });
+
+    // Fetch any <link rel="lilac-bundle"> resources before eval'ing
+    // page scripts, so the bundle's templates land in the DOM and its
+    // <script type="text/ruby"> get included in the eval loop below.
+    for (const link of document.querySelectorAll('link[rel="lilac-bundle"]')) {
+      const href = link.getAttribute("href");
+      if (!href) continue;
+      try {
+        const res = await fetch(href);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        // Append <template> + <script type="text/ruby"> to document.body
+        // so the registry's collect_definitions + this script's eval
+        // loop find them.
+        for (const tpl of doc.querySelectorAll("template")) {
+          document.body.appendChild(tpl.cloneNode(true));
+        }
+        for (const s of doc.querySelectorAll('script[type="text/ruby"]')) {
+          const newScript = document.createElement("script");
+          newScript.setAttribute("type", "text/ruby");
+          newScript.textContent = s.textContent;
+          document.body.appendChild(newScript);
+        }
+      } catch (err) {
+        console.error(`[lilac] failed to load bundle ${href}:`, err);
+      }
+    }
+
     document.querySelectorAll('script[type="text/ruby"]')
       .forEach((s) => vm.eval(s.textContent));
     // Boot at the tail of the eval loop — the framework owns boot
