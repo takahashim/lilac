@@ -113,17 +113,30 @@ module Lilac
                                page_inline_scripts: page_inline_scripts,
                                synthesized_names: synthesized_names)
           else
-            injection = build_injection(used.uniq, components,
-                                        page_inline_scripts: page_inline_scripts,
-                                        synthesized_names: synthesized_names,
-                                        page_path: page_path)
-            injection.empty? ? html : HtmlEmitter.inject_before_body_close(html, injection.html)
+            inject_inline_page(html, page_path, used, components,
+                               page_inline_scripts: page_inline_scripts,
+                               synthesized_names: synthesized_names)
           end
 
         File.write(output_path_for(page_path).tap { |p| FileUtils.mkdir_p(File.dirname(p)) }, html)
       end
 
       private
+
+      # :inline delivery: build the per-page template/script injection
+      # and splice it (plus optional live-reload client) before </body>.
+      def inject_inline_page(html, page_path, used, components,
+                             page_inline_scripts:, synthesized_names:)
+        injection = build_injection(used.uniq, components,
+                                    page_inline_scripts: page_inline_scripts,
+                                    synthesized_names: synthesized_names,
+                                    page_path: page_path)
+
+        extras = []
+        extras << injection.html unless injection.empty?
+        extras << LiveReload::SCRIPT if @ctx.live_reload
+        extras.empty? ? html : HtmlEmitter.inject_before_body_close(html, extras.join("\n"))
+      end
 
       # Splice :bundle-delivery extras into a page: the
       # `<link rel="lilac-bundle">` reference, any page-local injection
@@ -311,12 +324,12 @@ module Lilac
         bundle_scripts = compose_bundle_scripts(scripts, page_inline_scripts)
         script_block, page_local_mrb = render_script_block(bundle_scripts, page_path)
 
-        # Live reload is dev-only; the `lilac build` command leaves it
-        # off. When on, the snippet opens an SSE connection back to the
-        # dev server and reloads the page on any "message" event.
-        parts = [default_templates, named_templates, script_block]
-        parts << LiveReload::SCRIPT if @ctx.live_reload
-        Injection.new(html: parts.flatten.compact.join("\n"), page_local_mrb: page_local_mrb)
+        # Live-reload client script is appended by the caller (the
+        # `inject_inline_page` / `inject_bundle_page` entry points)
+        # so we don't end up emitting it twice in :bundle mode where
+        # build_injection is called as a sub-step.
+        parts = [default_templates, named_templates, script_block].flatten.compact
+        Injection.new(html: parts.join("\n"), page_local_mrb: page_local_mrb)
       end
 
       # Emit one `<template><div data-component="X">...</div></template>`

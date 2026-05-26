@@ -495,6 +495,37 @@ class TestBuilder < Minitest::Test
     assert_includes out, "__lilac_err_overlay"
   end
 
+  def test_live_reload_with_bundle_delivery_emits_one_script
+    # Regression: pre-fix, build_injection AND inject_bundle_page both
+    # appended LiveReload::SCRIPT, so bundle mode with page-inline
+    # content emitted two SSE listeners that fought for the page.
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+
+    write_page "index", <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>t</title></head><body>
+        <div data-use="counter"></div>
+        <script type="text/ruby">PAGE_LOCAL_MARKER = 1</script>
+      </body></html>
+    HTML
+
+    Lilac::CLI::Builder.new(
+      components_dir: @components,
+      pages_dir: @pages,
+      output_dir: @output,
+      live_reload: true,
+      delivery: :bundle,
+    ).build
+
+    out = read_output("index.html")
+    # The SSE-subscribe call appears exactly once per page.
+    assert_equal 1, out.scan("new EventSource").length,
+                 "live-reload client script must be emitted exactly once"
+  end
+
   def test_live_reload_default_off
     write_widget "counter", <<~GNT
       <template><div data-component="counter"></div></template>
