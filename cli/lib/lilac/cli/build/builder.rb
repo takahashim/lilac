@@ -317,6 +317,11 @@ module Lilac
           #    page-local な部分だけ inject する。
           html = inject_bundle_link(html, @bundle_url) if @bundle_url
 
+          # Per-page state for the :compiled boot module: reset before
+          # build_injection so a previous page's @page_local_mrb_file
+          # doesn't leak in when this page has no page-inline scripts.
+          @page_local_mrb_file = nil
+
           extras = []
           page_local_names = used.uniq.select { |n| synthesized_names.include?(n) }
           unless page_local_names.empty? && page_inline_scripts.empty?
@@ -329,9 +334,23 @@ module Lilac
             extras << page_injection unless page_injection.empty?
           end
 
-          if @target == :compiled && @bundle_mrb_file
-            # bundle で出力した .mrb を loadBytecode する boot module を inject
-            extras << render_compiled_boot_module(@bundle_mrb_file, @package_dist_urls || [])
+          if @target == :compiled
+            # Chain bundle .mrb (no Lilac.start) + page-local .mrb (with
+            # Lilac.start) into a single boot module so one VM loads
+            # both. When there's no page-inline .mrb, fall back to the
+            # standalone `Lilac.start` .mrb so the chain still ends with
+            # Lilac.start. Page with no bundle AND no page-inline (= no
+            # components used) gets no boot module at all.
+            mrbs = []
+            mrbs << @bundle_mrb_file if @bundle_mrb_file
+            if @page_local_mrb_file
+              mrbs << @page_local_mrb_file
+            elsif @bundle_mrb_file && @start_only_mrb_file
+              mrbs << @start_only_mrb_file
+            end
+            unless mrbs.empty?
+              extras << render_compiled_boot_module(mrbs, @package_dist_urls || [])
+            end
           end
           extras << LiveReload::SCRIPT if @live_reload
           html = inject_before_body_close(html, extras.join("\n")) unless extras.empty?
@@ -616,7 +635,15 @@ module Lilac
             # the URLs.
             label = page_path ? "page #{File.basename(page_path)}" : 'page bundle'
             mrb_file = bytecode_builder.build(ruby_source, source_label: label)
-            render_compiled_boot_module(mrb_file, @package_dist_urls || [])
+            if @delivery == :bundle
+              # In :bundle delivery, the page-local .mrb is chained into
+              # the same boot module as the bundle .mrb by build_page.
+              # Stash the filename here; emit no <script> from this scope.
+              @page_local_mrb_file = mrb_file
+              nil
+            else
+              render_compiled_boot_module(mrb_file, @package_dist_urls || [])
+            end
           else
             render_script(ruby_source)
           end
@@ -692,27 +719,29 @@ module Lilac
       # eval of arbitrary Ruby source is unsupported. Instead the
       # builder appends `Lilac.start` to the bundle in `bundle_scripts`
       # so it runs as part of `loadBytecode` (decisions §20.6 caveat).
-      def render_compiled_boot_module(mrb_filename, package_urls = [])
+      def render_compiled_boot_module(mrb_filenames, package_urls = [])
+        # Accept either a single filename or an array (used by the
+        # :bundle delivery path to chain bundle.mrb + page-inline.mrb in
+        # one VM).
+        mrb_filenames = Array(mrb_filenames)
+
         # Package `.mrb` bundles load BEFORE the user bytecode so any
         # `Scanner.register("ClassName")` calls (and the Handler classes
         # they refer to) are ready by the time component mount runs.
         # Mirrors the load ordering in `npm/lilac-compiled/index.js`'s
         # boot helper.
-        # The heredoc below uses 2-space indent (squiggly heredoc strips
-        # the common leading whitespace). Package load lines slot in
-        # before `const bytecode = ...` at the same depth.
         package_loads = package_urls.map do |url|
           "vm.loadBytecode(new Uint8Array(await (await fetch(#{url.inspect})).arrayBuffer()));"
-        end.join("\n  ")
-        package_block = package_loads.empty? ? '' : "#{package_loads}\n  "
+        end
+        bytecode_loads = mrb_filenames.map do |filename|
+          %(vm.loadBytecode(new Uint8Array(await (await fetch("./#{filename}")).arrayBuffer())));
+        end
+        all_loads = (package_loads + bytecode_loads).join("\n  ")
         <<~HTML.strip
           <script type="module" data-lilac-bootstrap>
             import { createVM } from "./vendor/lilac-compiled/mruby-wasm-js/index.js";
             const vm = await createVM({ wasm: "./vendor/lilac-compiled/lilac.wasm" });
-            #{package_block}const bytecode = new Uint8Array(
-              await (await fetch("./#{mrb_filename}")).arrayBuffer()
-            );
-            vm.loadBytecode(bytecode);
+            #{all_loads}
           </script>
         HTML
       end
@@ -853,11 +882,24 @@ module Lilac
         FileUtils.mkdir_p(@output_dir)
         File.write(bundle_path, parts.join("\n") + "\n")
 
-        # :compiled — compile aggregated scripts into a single .mrb that
-        # the page-level boot module loads via loadBytecode.
+        # :compiled — compile aggregated scripts into a .mrb that the
+        # page boot module loads via loadBytecode. `Lilac.start` is NOT
+        # appended to the bundle: when a page has its own page-inline
+        # .mrb chained after the bundle, that one terminates with
+        # `Lilac.start`; when a page has only the bundle, we emit a
+        # tiny start-only .mrb (below) so the chain still ends with
+        # `Lilac.start` running once after both class definitions and
+        # any page-local scripts are loaded.
         if @target == :compiled && !compiled_scripts.empty?
-          aggregated = (compiled_scripts + ['Lilac.start']).join("\n\n")
-          @bundle_mrb_file = bytecode_builder.build(aggregated, source_label: 'bundle')
+          @bundle_mrb_file = bytecode_builder.build(
+            compiled_scripts.join("\n\n"), source_label: 'bundle'
+          )
+          # Standalone `Lilac.start` .mrb, shared by all pages that have
+          # no page-inline scripts. content-hashed so cache reuses it
+          # across pages.
+          @start_only_mrb_file = bytecode_builder.build(
+            'Lilac.start', source_label: 'bundle-start'
+          )
         end
 
         '/lilac.bundle.html'

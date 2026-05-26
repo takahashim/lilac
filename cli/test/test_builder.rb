@@ -267,9 +267,11 @@ class TestBuilder < Minitest::Test
     assert_includes bundle, 'data-component="counter"'
     refute_includes bundle, '<script type="text/ruby">'
 
-    # A bundle .mrb is generated and referenced from the boot module.
+    # Two .mrb files: one with the bundle scripts (no Lilac.start) and
+    # a standalone `Lilac.start` chained after when no page-inline
+    # scripts are present.
     mrb_files = Dir.glob(File.join(@output, "*.mrb"))
-    assert_equal 1, mrb_files.length
+    assert_equal 2, mrb_files.length
 
     out = read_output("index.html")
     assert_includes out, '<link rel="lilac-bundle"'
@@ -631,7 +633,7 @@ class TestBuilder < Minitest::Test
     # Inline boot module imports the bridge directly (no dependency on
     # the npm package's boot helper — see render_compiled_boot_module).
     assert_includes out, 'import { createVM } from "./vendor/lilac-compiled/mruby-wasm-js/index.js"'
-    assert_includes out, 'vm.loadBytecode(bytecode)'
+    assert_includes out, 'vm.loadBytecode(new Uint8Array(await (await fetch'
     # The fetch URL must reference a content-hashed .mrb sibling.
     assert_match(/fetch\("\.\/app\.[0-9a-f]{8}\.mrb"\)/, out)
 
@@ -916,7 +918,7 @@ class TestBuilder < Minitest::Test
     # The boot module talks to the bridge directly (no dependency on
     # the npm package's `index.js` boot helper).
     assert_includes out, 'import { createVM } from "./vendor/lilac-compiled/mruby-wasm-js/index.js"'
-    assert_includes out, 'vm.loadBytecode(bytecode)'
+    assert_includes out, 'vm.loadBytecode(new Uint8Array(await (await fetch'
     refute_includes out, 'vendor/lilac-compiled/index.js',
                     "compiled boot must not import the npm helper's index.js"
     refute_includes out, "loadIrep",
