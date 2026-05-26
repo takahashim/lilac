@@ -277,28 +277,6 @@ serve: lilac-full mrbgem
 	@echo "Examples (7GUIs gallery): cd examples/7guis && bundle exec lilac dev"
 	@wsv .
 
-# ── Example vendor sync (dev-only) ──────────────────────────────────────
-# `examples/*/public/vendor/lilac-full/` carries a snapshot of
-# `build/lilac-full.wasm` + `mrbgem/mruby-wasm-js/js/` for the `:full`
-# target. Both directories are gitignore'd (vendor copies, not source
-# of truth), so each developer has to repopulate them after a fresh
-# clone or after running `make clean`.
-#
-# Run `make examples-vendor-full` whenever you rebuild lilac-full and
-# want the example apps to pick up the new wasm. This stays out of
-# `lilac build` itself — the CLI builder doesn't know about example
-# layouts and shouldn't reach into `public/vendor/` of arbitrary
-# downstream projects (that's the user's responsibility, mirrored by
-# `lilac-wasm-bin` gem for production users).
-.PHONY: examples-vendor-full
-examples-vendor-full: lilac-full mrbgem
-	@for vendor in examples/*/public/vendor/lilac-full; do \
-	  example_dir=$$(dirname $$(dirname $$(dirname $$vendor))); \
-	  echo "Syncing vendor for $$example_dir"; \
-	  mkdir -p "$$vendor/mruby-wasm-js"; \
-	  cp $(BUILD_WASM_LILAC_FULL) "$$vendor/lilac-full.wasm"; \
-	  cp mrbgem/mruby-wasm-js/js/* "$$vendor/mruby-wasm-js/" 2>/dev/null || true; \
-	done
 
 # ── GitHub Pages release staging ────────────────────────────────────────
 # Stages a self-contained CDN delivery tree under dist-pages/v$VERSION/

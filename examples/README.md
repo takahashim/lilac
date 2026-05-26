@@ -37,22 +37,22 @@ Booker / Timer / CRUD)を実装済み。残り 2 つ(Circle Drawer / Cells)は
 
 ```bash
 cd examples/7guis
-bundle install                    # path: ../../cli の lilac-cli を解決
-# 初回 + wasm 更新時: wasm と JS bridge を public/vendor/ に sync (gitignore 対象)
-make -C ../.. examples-vendor-full
+bundle install                    # path: ../../cli + ../../wasm-bin を解決
 # 開発
 bundle exec lilac dev             # http://127.0.0.1:5173
 # 本番ビルド
-bundle exec lilac build           # → dist/
+bundle exec lilac build           # → dist/ (vendor/lilac-full/ も自動生成)
 ```
 
-`examples-vendor-full` target は `examples/*/public/vendor/lilac-full/` を持つ
-全 example に対して `build/lilac-full.wasm` と `mrbgem/mruby-wasm-js/js/` の
-最新コピーを同期する。`make clean` した後や lilac の wasm を rebuild した
-後に走らせる。`lilac-cli` の build フローには **意図的に組み込まない** —
-ビルダーは monorepo 固有のレイアウトを知らないので、責務分離として
-Makefile 側に閉じ込めている (production user は `lilac-wasm-bin` gem を
-経由する将来の経路を使う想定)。
+wasm と JS bridge は **`lilac-wasm-bin` gem 経由で自動 vendor** される。
+monorepo 内では `gem "lilac-wasm-bin", path: "../../wasm-bin"` を Gemfile
+に書いているので、gem が `<repo>/build/lilac-full.wasm` と
+`<repo>/mrbgem/mruby-wasm-js/js/` を fallback として参照し、`lilac build`
+時に自動で `dist/vendor/lilac-full/` を生成する。手動 `cp` 不要。
+
+リポジトリ外で `lilac new` した production 用途では `gem "lilac-wasm-bin", "~> 0.1"`
+が同じ役割を担う (published gem の `data/` に wasm が同梱)。どちらの構成
+でも builder 側の挙動は同じ。
 
 `Gemfile` は `gem "lilac-cli", path: "../../cli"` で sibling の CLI を直接
 参照する。repo 外で reference にするときは `gem "lilac-cli", "~> 0.1"`

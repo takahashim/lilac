@@ -2,7 +2,4 @@
 /.bundle/
 /vendor/bundle/
 Gemfile.lock
-# wasm + JS bridge are vendored at build time from the repo root.
-# See README.md "Setup".
-/public/vendor/lilac-full/
 .DS_Store

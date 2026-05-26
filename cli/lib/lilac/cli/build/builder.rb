@@ -170,6 +170,10 @@ module Lilac
         # produced — pages without any Ruby script don't reference the
         # bootstrap module.
         auto_vendor_compiled_runtime! if @target == :compiled && Dir.glob(File.join(@output_dir, '*.mrb')).any?
+        # :full vendor — symmetric to :compiled. Gated by `lilac-wasm-bin`
+        # availability (silent no-op when the gem isn't loadable, e.g.
+        # tests with `disable_gem_discovery: true`).
+        auto_vendor_full_runtime! if @target == :full
 
         { pages: pages.length, components: components.length, public_files: public_files }
       end
@@ -678,6 +682,41 @@ module Lilac
           project_root: @project_root,
           disable_gem_discovery: @disable_gem_discovery
         )
+      end
+
+      # :full target: vendor lilac-full.wasm + bridge into
+      # `dist/vendor/lilac-full/` so the scaffold-generated page
+      # (`import { createVM } from "/vendor/lilac-full/..."`) finds its
+      # runtime assets after `lilac build`.
+      #
+      # Resolution is `lilac-wasm-bin` gem only — the gem itself walks
+      # up to the monorepo `build/` directory as a fallback when used
+      # with `path:`, so contributors get the same auto-sync as
+      # production users. Silently no-ops when the gem isn't loadable
+      # (gem missing, `@disable_gem_discovery: true` for tests).
+      def auto_vendor_full_runtime!
+        return if @disable_gem_discovery
+
+        begin
+          require "lilac/wasm/bin"
+        rescue LoadError
+          return
+        end
+
+        wasm_src = ::Lilac::Wasm::Bin.lilac_full_wasm
+        bridge_src = ::Lilac::Wasm::Bin.mruby_wasm_js_dir
+        return unless wasm_src && bridge_src
+
+        vendor_dir = File.join(@output_dir, 'vendor', 'lilac-full')
+        bridge_out = File.join(vendor_dir, 'mruby-wasm-js')
+        FileUtils.mkdir_p(bridge_out)
+
+        FileUtils.cp(wasm_src, File.join(vendor_dir, 'lilac-full.wasm'))
+        Dir.glob(File.join(bridge_src, '*')).each do |entry|
+          next if File.directory?(entry)
+
+          FileUtils.cp(entry, File.join(bridge_out, File.basename(entry)))
+        end
       end
 
       # Emits `dist/vendor/lilac-compiled/{lilac.wasm,mruby-wasm-js/...}`

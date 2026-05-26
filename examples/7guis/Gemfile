@@ -7,3 +7,12 @@ source "https://rubygems.org"
 # without a release. Outside the monorepo, replace with:
 #   gem "lilac-cli", "~> 0.1"
 gem "lilac-cli", path: "../../cli"
+
+# `lilac-wasm-bin` provides the wasm runtime + bridge. The lilac-cli
+# builder auto-vendors them into `dist/vendor/...` for both :full and
+# :compiled targets. Within the monorepo the gem walks up to
+# `<repo>/build/` and `<repo>/mrbgem/mruby-wasm-js/` as a fallback, so
+# contributors get auto-sync without the gem's published `data/` being
+# populated. Outside the monorepo, replace with:
+#   gem "lilac-wasm-bin", "~> 0.1"
+gem "lilac-wasm-bin", path: "../../wasm-bin"

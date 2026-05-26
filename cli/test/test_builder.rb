@@ -433,6 +433,10 @@ class TestBuilder < Minitest::Test
       pages_dir: @pages,
       output_dir: @output,
       public_dir: File.join(@tmp, "public-not-here"),
+      # `auto_vendor_full_runtime!` would create `dist/vendor/lilac-full/`
+      # when `lilac-wasm-bin` is available. Disable here so the test
+      # stays focused on the public_dir-absent behavior.
+      disable_gem_discovery: true,
     ).build
 
     assert_equal 0, result[:public_files]
