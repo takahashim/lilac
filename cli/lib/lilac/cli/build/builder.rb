@@ -9,6 +9,7 @@ require_relative 'form_extension'
 require_relative 'html_emitter'
 require_relative 'template_ast_cache'
 require_relative 'build_context'
+require_relative 'bundle_asset_writer'
 require_relative 'page_compiler'
 require_relative '../lint/build_linter'
 require_relative '../package_discovery'
@@ -25,13 +26,6 @@ module Lilac
     # this class assembles.
     class Builder
       class Error < StandardError; end
-
-      # Build-level artifacts produced by `write_bundle_file!` for the
-      # :bundle delivery mode. `url` is what gets stamped into each
-      # page's `<link rel="lilac-bundle">`; the two `.mrb` filenames are
-      # only populated when `@target == :compiled` (otherwise scripts go
-      # into the bundle.html itself as <script type="text/ruby">).
-      BundleAssets = Struct.new(:url, :bundle_mrb, :start_only_mrb, keyword_init: true)
 
       # Filenames that must not land in the build output even when they
       # exist under `public/`. Add to this list as new conventions are
@@ -165,7 +159,17 @@ module Lilac
         # containing all components' templates + scripts. Pages then
         # reference it via <link rel="lilac-bundle">. Done once before
         # page processing so PageCompiler can inject the <link>.
-        bundle_assets = @delivery == :bundle ? write_bundle_file!(components, template_cache) : nil
+        bundle_assets =
+          if @delivery == :bundle
+            BundleAssetWriter.new(
+              components: components,
+              template_cache: template_cache,
+              target: @target,
+              codegen: @codegen,
+              output_dir: @output_dir,
+              bytecode_builder: bytecode_builder
+            ).write!
+          end
 
         context = BuildContext.new(
           components: components,
@@ -403,88 +407,6 @@ module Lilac
         File.write(manifest_path, JSON.pretty_generate(packages: package_urls) + "\n")
       end
 
-      # In :bundle delivery mode, emit all components' default templates,
-      # named templates, and Ruby scripts into a single
-      # dist/lilac.bundle.html. Pages reference it via
-      # <link rel="lilac-bundle">, and the runtime registry / boot module
-      # fetches it before mount.
-      #
-      # For :compiled target, scripts are NOT inlined into the bundle
-      # (the compiled wasm has no parser to evaluate text/ruby). Instead,
-      # all scripts are aggregated and compiled into a single .mrb whose
-      # filename rides on `BundleAssets.bundle_mrb` for PageCompiler to
-      # wire into the page's boot module.
-      #
-      # Returns a `BundleAssets` (or nil when there are no components).
-      def write_bundle_file!(components, template_cache)
-        return nil if components.empty?
-
-        parts = []
-        compiled_scripts = []
-        components.each do |name, comp|
-          parsed = template_cache.fetch(name, comp)
-
-          # Default template
-          parts << "<template>#{parsed[:default_html]}</template>"
-
-          # Named templates
-          parsed[:named].each do |nt|
-            parts << HtmlEmitter.render_named_template(nt.name, nt.html)
-          end
-
-          # Script (codegen + user code)
-          user_script = comp.script.strip
-          next if user_script.empty?
-
-          generated =
-            if @codegen == :off
-              ''
-            else
-              Codegen.generate(
-                component_name: name,
-                directives: parsed[:default_directives],
-                source_path: parsed[:source_path],
-                emit_include: false
-              ).strip
-            end
-          full_script = [generated, user_script].reject(&:empty?).join("\n\n")
-
-          if @target == :compiled
-            # Defer: scripts get aggregated into one .mrb below.
-            compiled_scripts << full_script
-          else
-            parts << HtmlEmitter.render_script(full_script)
-          end
-        end
-
-        bundle_path = File.join(@output_dir, 'lilac.bundle.html')
-        FileUtils.mkdir_p(@output_dir)
-        File.write(bundle_path, parts.join("\n") + "\n")
-
-        bundle_mrb = nil
-        start_only_mrb = nil
-        # :compiled — compile aggregated scripts into a .mrb that the
-        # page boot module loads via loadBytecode. `Lilac.start` is NOT
-        # appended to the bundle: when a page has its own page-inline
-        # .mrb chained after the bundle, that one terminates with
-        # `Lilac.start`; when a page has only the bundle, we emit a
-        # tiny start-only .mrb (below) so the chain still ends with
-        # `Lilac.start` running once after both class definitions and
-        # any page-local scripts are loaded.
-        if @target == :compiled && !compiled_scripts.empty?
-          bundle_mrb = bytecode_builder.build(
-            compiled_scripts.join("\n\n"), source_label: 'bundle'
-          )
-          # Standalone `Lilac.start` .mrb, shared by all pages that have
-          # no page-inline scripts. content-hashed so cache reuses it
-          # across pages.
-          start_only_mrb = bytecode_builder.build(
-            'Lilac.start', source_label: 'bundle-start'
-          )
-        end
-
-        BundleAssets.new(url: '/lilac.bundle.html', bundle_mrb: bundle_mrb, start_only_mrb: start_only_mrb)
-      end
     end
   end
 end

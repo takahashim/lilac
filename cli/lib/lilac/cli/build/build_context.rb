@@ -10,7 +10,7 @@ module Lilac
     #
     # Fields:
     #   - `components`        — { name => SFC::Component }, .lil + synthesized
-    #   - `bundle_assets`     — Builder::BundleAssets or nil (:inline mode)
+    #   - `bundle_assets`     — BundleAssetWriter::BundleAssets or nil (:inline mode)
     #   - `package_dist_urls` — Array<String> page-relative URLs for `.mrb` packages
     #   - `template_cache`    — shared TemplateASTCache (parse once, reuse)
     #   - `build_linter`      — BuildLinter accumulating cross-page diagnostics
