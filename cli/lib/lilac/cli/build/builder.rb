@@ -10,6 +10,7 @@ require_relative 'html_emitter'
 require_relative 'template_ast_cache'
 require_relative 'build_context'
 require_relative 'bundle_asset_writer'
+require_relative 'vendor_writer'
 require_relative 'page_compiler'
 require_relative '../lint/build_linter'
 require_relative '../package_discovery'
@@ -279,28 +280,15 @@ module Lilac
       # production users. Silently no-ops when the gem isn't loadable
       # (gem missing, `@disable_gem_discovery: true` for tests).
       def auto_vendor_full_runtime!
-        return if @disable_gem_discovery
-
-        begin
-          require "lilac/wasm/bin"
-        rescue LoadError
-          return
-        end
-
-        wasm_src = ::Lilac::Wasm::Bin.lilac_full_wasm
-        bridge_src = ::Lilac::Wasm::Bin.mruby_wasm_js_dir
+        wasm_src, bridge_src = resolve_full_runtime_sources
         return unless wasm_src && bridge_src
 
-        vendor_dir = File.join(@output_dir, 'vendor', 'lilac-full')
-        bridge_out = File.join(vendor_dir, 'mruby-wasm-js')
-        FileUtils.mkdir_p(bridge_out)
-
-        FileUtils.cp(wasm_src, File.join(vendor_dir, 'lilac-full.wasm'))
-        Dir.glob(File.join(bridge_src, '*')).each do |entry|
-          next if File.directory?(entry)
-
-          FileUtils.cp(entry, File.join(bridge_out, File.basename(entry)))
-        end
+        VendorWriter.copy!(
+          wasm_src: wasm_src,
+          bridge_src: bridge_src,
+          vendor_dir: File.join(@output_dir, 'vendor', 'lilac-full'),
+          wasm_name: 'lilac-full.wasm'
+        )
       end
 
       # Emits `dist/vendor/lilac-compiled/{lilac.wasm,mruby-wasm-js/...}`
@@ -314,19 +302,30 @@ module Lilac
       # with an actionable message — the caller (the build command) lets
       # it propagate.
       def auto_vendor_compiled_runtime!
-        vendor_dir = File.join(@output_dir, 'vendor', 'lilac-compiled')
-        bridge_out = File.join(vendor_dir, 'mruby-wasm-js')
-        FileUtils.mkdir_p(bridge_out)
+        VendorWriter.copy!(
+          wasm_src: compiled_runtime_resolver.resolve_wasm!,
+          bridge_src: compiled_runtime_resolver.resolve_bridge!,
+          vendor_dir: File.join(@output_dir, 'vendor', 'lilac-compiled'),
+          wasm_name: 'lilac.wasm'
+        )
+      end
 
-        wasm_src = compiled_runtime_resolver.resolve_wasm!
-        FileUtils.cp(wasm_src, File.join(vendor_dir, 'lilac.wasm'))
+      # Soft-resolve the :full runtime via `lilac-wasm-bin`. Returns
+      # `[wasm, bridge]` or `[nil, nil]` when the gem isn't loadable
+      # (or `disable_gem_discovery` is set for tests) — vendor caller
+      # treats nil as "skip, nothing to do" rather than an error,
+      # mirroring how the user runs `lilac build --target full` without
+      # the gem when they vendor manually.
+      def resolve_full_runtime_sources
+        return [nil, nil] if @disable_gem_discovery
 
-        bridge_src = compiled_runtime_resolver.resolve_bridge!
-        Dir.glob(File.join(bridge_src, '*')).each do |entry|
-          next if File.directory?(entry)
-
-          FileUtils.cp(entry, File.join(bridge_out, File.basename(entry)))
+        begin
+          require "lilac/wasm/bin"
+        rescue LoadError
+          return [nil, nil]
         end
+
+        [::Lilac::Wasm::Bin.lilac_full_wasm, ::Lilac::Wasm::Bin.mruby_wasm_js_dir]
       end
 
       # Stage package `.mrb` files under `dist/packages/` and return the
