@@ -98,21 +98,7 @@ module Lilac
         # populates the same dist directory.
         clean_output_dir!(config.output_dir, project_root: config.root) unless opts[:clean] == false
 
-        builder = Builder.new(
-          components_dir: config.components_dir,
-          pages_dir: config.pages_dir,
-          output_dir: config.output_dir,
-          public_dir: config.public_dir,
-          codegen: config.codegen,
-          target: config.build_target,
-          mrbc_path: config.mrbc_path,
-          lilac_compiled_path: config.lilac_compiled_path,
-          mruby_wasm_js_path: config.mruby_wasm_js_path,
-          packages: config.packages,
-          project_root: config.root,
-          delivery: config.delivery,
-        )
-        result = builder.build
+        result = Builder.from_config(config).build
         public_suffix = result[:public_files].positive? ? " + #{result[:public_files]} static file(s)" : ""
         @out.puts "Built #{result[:pages]} page(s) from #{result[:components]} component(s)#{public_suffix} → #{relative(config.output_dir)} (target: #{config.build_target})"
         0

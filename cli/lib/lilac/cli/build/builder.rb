@@ -83,6 +83,37 @@ module Lilac
         compiled: %w[vendor/lilac-full].freeze
       }.freeze
 
+      # Construct a Builder from a resolved `Config`. Centralises the
+      # Config-attr → Builder-kwarg mapping so callers in `Command` and
+      # `DevServer` don't drift out of sync. Overridable kwargs cover
+      # the per-caller differences:
+      #
+      #   - `target:` — Command picks `config.build_target`, DevServer
+      #     picks `config.dev_target`. Defaults to the build target.
+      #   - `delivery:` — DevServer pins `:inline` regardless of
+      #     `config.delivery` (pre-refactor behavior; `lilac dev` does
+      #     not honor `c.delivery = :bundle` today).
+      #   - `live_reload:` — DevServer turns it on for SSE-driven page
+      #     reload; `lilac build` leaves it off.
+      def self.from_config(config, live_reload: false,
+                           target: nil, delivery: nil)
+        new(
+          components_dir: config.components_dir,
+          pages_dir: config.pages_dir,
+          output_dir: config.output_dir,
+          public_dir: config.public_dir,
+          codegen: config.codegen,
+          target: target || config.build_target,
+          mrbc_path: config.mrbc_path,
+          lilac_compiled_path: config.lilac_compiled_path,
+          mruby_wasm_js_path: config.mruby_wasm_js_path,
+          packages: config.packages,
+          project_root: config.root,
+          delivery: delivery || config.delivery,
+          live_reload: live_reload
+        )
+      end
+
       def initialize(components_dir:, pages_dir:, output_dir:, public_dir: nil,
                      live_reload: false, codegen: :auto,
                      target: :full, mrbc_path: nil,

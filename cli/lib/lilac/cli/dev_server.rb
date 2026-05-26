@@ -53,24 +53,21 @@ module Lilac
       private
 
       def rebuild!
-        Builder.new(
-          components_dir: @config.components_dir,
-          pages_dir: @config.pages_dir,
-          output_dir: @config.output_dir,
-          public_dir: @config.public_dir,
+        # `dev_target` (not `build_target`) is intentional — `lilac dev`
+        # follows the dev path: `:full` skips mrbc for fast reloads,
+        # `:compiled` exercises the production mrbc + lilac-compiled
+        # flow under live reload so the dev experience matches what
+        # ships in prod.
+        #
+        # `delivery: :inline` pins the dev path to per-page injection
+        # regardless of `config.delivery` — preserves pre-refactor
+        # behavior. TODO: revisit whether `lilac dev` should honor
+        # `c.delivery = :bundle`.
+        Builder.from_config(
+          @config,
           live_reload: true,
-          codegen: @config.codegen,
-          # `dev_target` (not `build_target`) is intentional — `lilac dev`
-          # follows the dev path: `:full` skips mrbc for fast reloads,
-          # `:compiled` exercises the production mrbc + lilac-compiled
-          # flow under live reload so the dev experience matches what
-          # ships in prod.
           target: @config.dev_target,
-          mrbc_path: @config.mrbc_path,
-          lilac_compiled_path: @config.lilac_compiled_path,
-          mruby_wasm_js_path: @config.mruby_wasm_js_path,
-          packages: @config.packages,
-          project_root: @config.root,
+          delivery: :inline,
         ).build
       end
 
