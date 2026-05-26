@@ -13,11 +13,11 @@ class TestCrossRefLinter < Minitest::Test
 
   def lint(script:, directives:, component: "Counter", file: "x.lil", refs_map: {})
     io = StringIO.new
-    count = Lilac::CLI::CrossRefLinter.lint(
+    result = Lilac::CLI::CrossRefLinter.lint(
       script_text: script, directives: directives, refs_map: refs_map,
       component_name: component, file: file, out: io,
     )
-    [count, io.string]
+    [result.total, io.string]
   end
 
   # ---- declared signal: no warning ------------------------------

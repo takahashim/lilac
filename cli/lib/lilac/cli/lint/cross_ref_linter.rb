@@ -27,7 +27,8 @@ module Lilac
 
       # Aggregate counts returned from `lint`. `errors` tracks fatal
       # violations (build should fail); `warnings` tracks non-fatal
-      # ones. `total` is the "any diagnostic count" sum.
+      # ones. `total` is the "any diagnostic count" sum used by callers
+      # that don't need to distinguish severity.
       Result = Struct.new(:warnings, :errors, keyword_init: true) do
         def total
           warnings + errors
@@ -35,24 +36,6 @@ module Lilac
 
         def errors?
           errors.positive?
-        end
-
-        # ---- back-compat shims (tests-only) ----
-        # Pre-Result, `lint` returned an Integer. The Integer-coercion
-        # below lets `assert_equal 0, result` keep working. New call
-        # sites should use `.total` / `.errors` / `.warnings` directly;
-        # remove these shims once tests migrate.
-        def to_int
-          total
-        end
-        alias_method :to_i, :to_int
-
-        def coerce(other)
-          [other, total]
-        end
-
-        def ==(other)
-          other.is_a?(Result) ? super : total == other
         end
       end
 
