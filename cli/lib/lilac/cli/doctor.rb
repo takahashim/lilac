@@ -3,6 +3,7 @@
 require_relative 'build/builder'
 require_relative 'build/bytecode_builder'
 require_relative 'build/compiled_runtime_resolver'
+require_relative 'build/page_compiler'
 require_relative 'build/sfc'
 
 module Lilac
@@ -91,7 +92,7 @@ module Lilac
         results = []
         page_paths.each do |page_path|
           html = File.read(page_path)
-          html.scan(Builder::DATA_USE_PATTERN) do |dq, sq|
+          html.scan(PageCompiler::DATA_USE_PATTERN) do |dq, sq|
             name = dq || sq
             unless component_names.include?(name)
               results << error(
@@ -109,7 +110,7 @@ module Lilac
 
         component_names = gnt_paths.map { |p| File.basename(p, '.lil') }.to_set
         referenced = page_paths.flat_map do |page_path|
-          File.read(page_path).scan(Builder::DATA_USE_PATTERN).map { |dq, sq| dq || sq }
+          File.read(page_path).scan(PageCompiler::DATA_USE_PATTERN).map { |dq, sq| dq || sq }
         end.uniq.to_set
 
         unused = component_names - referenced
