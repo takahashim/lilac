@@ -280,6 +280,124 @@ class TestBuilder < Minitest::Test
     assert_includes out, File.basename(mrb_files.first)
   end
 
+  def test_delivery_bundle_compiled_with_page_inline_chains_bundle_and_page_local_mrbs
+    mrbc = mrbc_or_skip
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    # Page mixes a `.lil` component reference (data-use=counter) with a
+    # page-inline `<script type="text/ruby">`. With :compiled × :bundle
+    # this triggers the most complex code path: bundle.mrb (Counter
+    # codegen, no Lilac.start) chained with a page-local .mrb that
+    # carries the inline script + the trailing `Lilac.start`.
+    write_page "index", <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>t</title></head><body>
+        <div data-use="counter"></div>
+        <script type="text/ruby">PAGE_LOCAL_MARKER = 42</script>
+      </body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc, delivery: :bundle)
+
+    out = read_output("index.html")
+
+    # Exactly one bootstrap module: a stale design would emit one for the
+    # bundle and another for the page-inline script, racing two VMs.
+    bootstrap_modules = out.scan(/<script type="module" data-lilac-bootstrap>/)
+    assert_equal 1, bootstrap_modules.length
+
+    # Two loadBytecode calls in that module: bundle.mrb + page-local .mrb.
+    # The standalone start-only .mrb must NOT be in the chain — page-local
+    # already ends with `Lilac.start`.
+    loads = out.scan(/vm\.loadBytecode\(new Uint8Array\(await \(await fetch\("\.\/([^"]+\.mrb)"\)/)
+    assert_equal 2, loads.length
+
+    # Three .mrb files written: bundle, start-only, page-local. start-only
+    # is unreferenced from this page's chain but is emitted unconditionally
+    # by write_bundle_file! so multi-page builds (some with page-inline,
+    # some without) share it.
+    mrb_files = Dir.glob(File.join(@output, "*.mrb"))
+    assert_equal 3, mrb_files.length
+
+    referenced = loads.flatten
+    assert_equal 2, referenced.uniq.length
+    referenced.each { |fname| assert File.exist?(File.join(@output, fname)), "boot references missing #{fname}" }
+  end
+
+  def test_delivery_bundle_compiled_without_page_inline_uses_start_only_chain
+    mrbc = mrbc_or_skip
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    write_page "index", <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>t</title></head><body>
+        <div data-use="counter"></div>
+      </body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc, delivery: :bundle)
+
+    out = read_output("index.html")
+    bootstrap_modules = out.scan(/<script type="module" data-lilac-bootstrap>/)
+    assert_equal 1, bootstrap_modules.length
+
+    # Chain has exactly 2 loads: bundle.mrb + start-only.mrb. (No page-inline,
+    # so no page-local .mrb is created.)
+    loads = out.scan(/vm\.loadBytecode\(new Uint8Array\(await \(await fetch\("\.\/([^"]+\.mrb)"\)/)
+    assert_equal 2, loads.length
+
+    # Only the bundle + start-only .mrb are written.
+    mrb_files = Dir.glob(File.join(@output, "*.mrb"))
+    assert_equal 2, mrb_files.length
+  end
+
+  def test_delivery_bundle_compiled_mixed_pages_chain_independently
+    mrbc = mrbc_or_skip
+    write_widget "counter", <<~GNT
+      <template><div data-component="counter"></div></template>
+      <script type="text/ruby">class Counter < Lilac::Component; end</script>
+    GNT
+    # Page A has page-inline → its chain should be [bundle, page-local-A].
+    write_page "a", <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>a</title></head><body>
+        <div data-use="counter"></div>
+        <script type="text/ruby">PAGE_A_MARKER = 1</script>
+      </body></html>
+    HTML
+    # Page B has no page-inline → its chain should be [bundle, start-only].
+    write_page "b", <<~HTML
+      <!DOCTYPE html>
+      <html><head><title>b</title></head><body>
+        <div data-use="counter"></div>
+      </body></html>
+    HTML
+
+    build!(target: :compiled, mrbc_path: mrbc, delivery: :bundle)
+
+    out_a = read_output("a.html")
+    out_b = read_output("b.html")
+
+    a_loads = out_a.scan(/vm\.loadBytecode\(new Uint8Array\(await \(await fetch\("\.\/([^"]+\.mrb)"\)/).flatten
+    b_loads = out_b.scan(/vm\.loadBytecode\(new Uint8Array\(await \(await fetch\("\.\/([^"]+\.mrb)"\)/).flatten
+
+    assert_equal 2, a_loads.length
+    assert_equal 2, b_loads.length
+
+    # Both pages should share the same bundle.mrb in their FIRST slot.
+    assert_equal a_loads.first, b_loads.first, 'bundle.mrb should be shared between pages'
+
+    # The trailing .mrb differs: page A loads its page-local, page B loads
+    # start-only. Cannot tell them apart by filename alone (content-hashed,
+    # both named `app.<hash>.mrb`), but the two chains' trailing slots
+    # must NOT be the same file.
+    refute_equal a_loads.last, b_loads.last, 'page-inline page must chain page-local, not start-only'
+  end
+
   def test_delivery_bundle_link_is_injected_into_head_when_present
     write_widget "counter", <<~GNT
       <template><div data-component="counter"></div></template>
