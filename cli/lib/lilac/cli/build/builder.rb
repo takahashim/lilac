@@ -776,11 +776,37 @@ module Lilac
           %(vm.loadBytecode(new Uint8Array(await (await fetch("./#{filename}")).arrayBuffer())));
         end
         all_loads = (package_loads + bytecode_loads).join("\n  ")
+
+        # :bundle delivery: the compiled wasm has no parser, so unlike
+        # the :full boot helper we can't `vm.eval` bundle scripts —
+        # those land in the chained .mrb above. But we still need to
+        # pull the bundle's <template> elements into the live document
+        # before `Lilac.start` runs (which is in the page-local /
+        # start-only .mrb). Fetch + DOMParser the bundle and append
+        # each <template>; scripts inside the bundle are intentionally
+        # ignored (they don't exist for :compiled bundles).
+        bundle_block =
+          if @delivery == :bundle
+            <<~JS.chomp.gsub(/^/, '  ')
+              for (const link of document.querySelectorAll('link[rel="lilac-bundle"]')) {
+                const res = await fetch(link.getAttribute("href"));
+                const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+                for (const tpl of doc.querySelectorAll("template")) {
+                  document.body.appendChild(tpl.cloneNode(true));
+                }
+              }
+            JS
+          end
+
+        body_parts = []
+        body_parts << bundle_block if bundle_block
+        body_parts << "  #{all_loads}" unless all_loads.empty?
+
         <<~HTML.strip
           <script type="module" data-lilac-bootstrap>
             import { createVM } from "./vendor/lilac-compiled/mruby-wasm-js/index.js";
             const vm = await createVM({ wasm: "./vendor/lilac-compiled/lilac.wasm" });
-            #{all_loads}
+          #{body_parts.join("\n")}
           </script>
         HTML
       end
