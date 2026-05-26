@@ -4,10 +4,8 @@ require "fileutils"
 require "pathname"
 require "set"
 require_relative "sfc"
-require_relative "codegen"
-require_relative "component_name"
+require_relative "component_scripts_assembler"
 require_relative "html_emitter"
-require_relative "../lint/cross_ref_linter"
 require_relative "../live_reload"
 
 module Lilac
@@ -48,6 +46,10 @@ module Lilac
 
       def initialize(context)
         @ctx = context
+        @scripts_assembler = ComponentScriptsAssembler.new(
+          template_cache: context.template_cache,
+          codegen: context.codegen
+        )
       end
 
       def compile(page_path)
@@ -298,131 +300,16 @@ module Lilac
       def build_injection(used_names, components,
                           page_inline_scripts: [], synthesized_names: nil, page_path: nil)
         synthesized_names ||= Set.new
-        # The page-level inline Ruby is the canonical class definitions
-        # for every synthesized component. Pass it as the lint context so
-        # the cross-ref linter can resolve `@signal` / `def method` etc.
-        # The user_script slot on each synthesized component stays empty
-        # so the bundle doesn't end up with the inline scripts twice.
-        synth_lint_script = page_inline_scripts.join("\n\n")
 
-        # Default templates: emit one <template><div data-component="X">...</div></template>
-        # per used component (skipping synthesized in-memory components,
-        # which already have their markup written inline on the page).
-        # The runtime registry consults these templates to fill empty
-        # data-use="X" elements at mount time.
-        default_templates = used_names.reject { |n| synthesized_names.include?(n) }.map do |name|
-          parsed = @ctx.template_cache.fetch(name, components[name])
-          HtmlEmitter.render_default_template(parsed[:default_html])
-        end
-
-        named_templates = used_names.flat_map do |name|
-          parsed = @ctx.template_cache.fetch(name, components[name])
-          parsed[:named].map { |nt| HtmlEmitter.render_named_template(nt.name, nt.html) }
-        end
-
-        scripts = used_names.map do |name|
-          comp = components[name]
-          parsed = @ctx.template_cache.fetch(name, comp)
-          user_script = comp.script.strip
-          # For synthesized in-memory components the script slot is
-          # empty (the actual class definitions live in the page's
-          # inline `<script type="text/ruby">` blocks). Feed those into
-          # the linter so `@count` / method-name lookups can resolve.
-          lint_script = synthesized_names.include?(name) ? synth_lint_script : user_script
-          # Cross-reference lint runs before codegen so any warnings
-          # appear ahead of generated source in build output, matching
-          # the user's mental order ("first the diagnostics, then the
-          # result"). Non-fatal — warnings go to stderr and the build
-          # carries on.
-          lint_result = CrossRefLinter.lint(
-            script_text: lint_script,
-            directives: parsed[:default_directives],
-            refs_map: parsed[:default_refs_map],
-            component_name: ComponentName.new(name).ruby_class,
-            file: parsed[:source_path] ? File.basename(parsed[:source_path]) : '(template)'
-          )
-          if lint_result.errors?
-            raise Builder::Error, "build failed: #{lint_result.errors} lint error(s) in template; see warnings above."
-          end
-
-          generated =
-            if @ctx.codegen == :off
-              # Runtime scanner mode: emit no bind_template_hook,
-              # leaving the runtime to interpret data-* at mount.
-              ''
-            else
-              # Both targets rely on Component#bind_template_hook to
-              # look up `Lilac::Bindings::<Class>` by name. The explicit
-              # `<Class>.include(...)` line is dropped — it would
-              # either NameError (codegen runs before the class def)
-              # or run too late (after the user's `Lilac.start`, which
-              # already triggered bind_template_hook on mount).
-              Codegen.generate(
-                component_name: name,
-                directives: parsed[:default_directives],
-                source_path: parsed[:source_path],
-                emit_include: false
-              ).strip
-            end
-          # Generated FIRST so that `Lilac::Bindings::<Class>` is
-          # defined before the user script's `Lilac.start` mounts
-          # components and calls `bind_template_hook`. The component
-          # base's `lookup_codegen_bindings` resolves and includes the
-          # module on demand at that point.
-          parts = [generated, user_script]
-          parts.reject(&:empty?).join("\n\n")
-        end.reject(&:empty?)
-
-        # Page-inline `<script type="text/ruby">` blocks join the bundle
-        # only on the compiled target — they're emitted last so any
-        # `Lilac.start` written there runs after the component class
-        # definitions. On :full they remain in the dist HTML body and
-        # the runtime parser picks them up via `vm.evalScript`, so
-        # duplicating them into the injected block would re-execute
-        # them.
-        #
-        # `Lilac.start` placement differs by target (decisions §20.6
-        # corrected: the compiled wasm has no parser, so post-load
-        # `vm.eval("Lilac.start")` is not available):
-        # - target=:compiled — append `Lilac.start` to the bundle so it
-        #   executes as part of `loadBytecode`. The inline boot module
-        #   does NOT call `vm.eval` (would require mruby-compiler /
-        #   mruby-eval, both excluded from the compiled wasm)
-        # - target=:full — do nothing here; the Pattern A boot helper
-        #   (scaffold `boot.js`, lilac-full's GitHub Pages CDN `boot`, …)
-        #   runs `vm.eval("Lilac.start")` at the tail of its eval loop
-        bundle_scripts =
-          if @ctx.target == :compiled
-            user_scripts = scripts + page_inline_scripts.reject { |s| s.strip.empty? }
-            user_scripts.empty? ? [] : user_scripts + ['Lilac.start']
-          else
-            scripts
-          end
-        ruby_source = bundle_scripts.join("\n\n")
-        page_local_mrb = nil
-        script_block =
-          if bundle_scripts.empty?
-            nil
-          elsif @ctx.target == :compiled
-            # Compile the aggregated Ruby to `.mrb` bytecode and emit a
-            # module script that fetches the bytecode + boots the
-            # lilac-compiled wasm. The `data-lilac-bootstrap` attribute
-            # marks the tag so a future asset-pipeline pass can rewrite
-            # the URLs.
-            label = page_path ? "page #{File.basename(page_path)}" : 'page bundle'
-            mrb_file = @ctx.bytecode_builder.build(ruby_source, source_label: label)
-            if @ctx.delivery == :bundle
-              # In :bundle delivery, the page-local .mrb is chained into
-              # the same boot module as the bundle .mrb by the caller —
-              # we don't emit a <script> here, just hand back the file.
-              page_local_mrb = mrb_file
-              nil
-            else
-              render_compiled_boot_module(mrb_file, @ctx.package_dist_urls || [])
-            end
-          else
-            HtmlEmitter.render_script(ruby_source)
-          end
+        default_templates = render_default_templates(used_names, components, synthesized_names)
+        named_templates = render_named_templates(used_names, components)
+        scripts = @scripts_assembler.assemble(
+          used_names, components,
+          synthesized_names: synthesized_names,
+          page_inline_scripts: page_inline_scripts
+        )
+        bundle_scripts = compose_bundle_scripts(scripts, page_inline_scripts)
+        script_block, page_local_mrb = render_script_block(bundle_scripts, page_path)
 
         # Live reload is dev-only; the `lilac build` command leaves it
         # off. When on, the snippet opens an SSE connection back to the
@@ -430,6 +317,80 @@ module Lilac
         parts = [default_templates, named_templates, script_block]
         parts << LiveReload::SCRIPT if @ctx.live_reload
         Injection.new(html: parts.flatten.compact.join("\n"), page_local_mrb: page_local_mrb)
+      end
+
+      # Emit one `<template><div data-component="X">...</div></template>`
+      # per used component, skipping synthesized in-memory components
+      # (their markup is already written inline on the page). The
+      # runtime registry consults these templates to fill empty
+      # `data-use="X"` elements at mount time.
+      def render_default_templates(used_names, components, synthesized_names)
+        used_names.reject { |n| synthesized_names.include?(n) }.map do |name|
+          parsed = @ctx.template_cache.fetch(name, components[name])
+          HtmlEmitter.render_default_template(parsed[:default_html])
+        end
+      end
+
+      def render_named_templates(used_names, components)
+        used_names.flat_map do |name|
+          parsed = @ctx.template_cache.fetch(name, components[name])
+          parsed[:named].map { |nt| HtmlEmitter.render_named_template(nt.name, nt.html) }
+        end
+      end
+
+      # Combine assembled component scripts with the page-inline ones
+      # in a target-aware way. Page-inline `<script type="text/ruby">`
+      # blocks join the bundle only on the compiled target — they're
+      # emitted last so any `Lilac.start` written there runs after the
+      # component class definitions. On :full they remain in the dist
+      # HTML body and the runtime parser picks them up via
+      # `vm.evalScript`, so duplicating them into the injected block
+      # would re-execute them.
+      #
+      # `Lilac.start` placement differs by target (decisions §20.6
+      # corrected: the compiled wasm has no parser, so post-load
+      # `vm.eval("Lilac.start")` is not available):
+      # - target=:compiled — append `Lilac.start` to the bundle so it
+      #   executes as part of `loadBytecode`.
+      # - target=:full — do nothing here; the Pattern A boot helper
+      #   (scaffold `boot.js`, lilac-full's CDN `boot`, …) runs
+      #   `vm.eval("Lilac.start")` at the tail of its eval loop.
+      def compose_bundle_scripts(scripts, page_inline_scripts)
+        return scripts unless @ctx.target == :compiled
+
+        user_scripts = scripts + page_inline_scripts.reject { |s| s.strip.empty? }
+        user_scripts.empty? ? [] : user_scripts + ['Lilac.start']
+      end
+
+      # Returns `[script_block_html, page_local_mrb]`. Either element
+      # may be nil:
+      #   - no scripts at all → both nil
+      #   - :full → script_block is `<script type="text/ruby">…</script>`, mrb is nil
+      #   - :compiled × :inline → script_block is the inline boot
+      #     module that loads + boots the .mrb; mrb is nil
+      #   - :compiled × :bundle → script_block is nil (caller chains
+      #     the page-local mrb into the shared bundle boot module);
+      #     page_local_mrb is the .mrb filename to chain.
+      def render_script_block(bundle_scripts, page_path)
+        return [nil, nil] if bundle_scripts.empty?
+
+        ruby_source = bundle_scripts.join("\n\n")
+        return [HtmlEmitter.render_script(ruby_source), nil] unless @ctx.target == :compiled
+
+        # :compiled — compile the aggregated Ruby to `.mrb` bytecode.
+        # The `data-lilac-bootstrap` attribute on the emitted module
+        # script marks the tag so a future asset-pipeline pass can
+        # rewrite the URLs.
+        label = page_path ? "page #{File.basename(page_path)}" : 'page bundle'
+        mrb_file = @ctx.bytecode_builder.build(ruby_source, source_label: label)
+
+        if @ctx.delivery == :bundle
+          # The page-local .mrb is chained into the same boot module
+          # as the bundle .mrb by the caller — emit no <script> here.
+          [nil, mrb_file]
+        else
+          [render_compiled_boot_module(mrb_file, @ctx.package_dist_urls || []), nil]
+        end
       end
 
       # Emits the module script that loads `.mrb` bytecode and boots
