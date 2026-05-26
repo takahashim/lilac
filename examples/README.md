@@ -38,17 +38,21 @@ Booker / Timer / CRUD)を実装済み。残り 2 つ(Circle Drawer / Cells)は
 ```bash
 cd examples/7guis
 bundle install                    # path: ../../cli の lilac-cli を解決
-# 初回だけ: wasm と JS bridge を public/vendor/ に同期 (gitignore 対象)
-make -C ../.. lilac-full
-mkdir -p public/vendor
-mkdir -p public/vendor/lilac-full
-cp ../../build/lilac-full.wasm public/vendor/lilac-full/
-cp -R ../../mrbgem/mruby-wasm-js/js public/vendor/lilac-full/mruby-wasm-js
+# 初回 + wasm 更新時: wasm と JS bridge を public/vendor/ に sync (gitignore 対象)
+make -C ../.. examples-vendor-full
 # 開発
 bundle exec lilac dev             # http://127.0.0.1:5173
 # 本番ビルド
 bundle exec lilac build           # → dist/
 ```
+
+`examples-vendor-full` target は `examples/*/public/vendor/lilac-full/` を持つ
+全 example に対して `build/lilac-full.wasm` と `mrbgem/mruby-wasm-js/js/` の
+最新コピーを同期する。`make clean` した後や lilac の wasm を rebuild した
+後に走らせる。`lilac-cli` の build フローには **意図的に組み込まない** —
+ビルダーは monorepo 固有のレイアウトを知らないので、責務分離として
+Makefile 側に閉じ込めている (production user は `lilac-wasm-bin` gem を
+経由する将来の経路を使う想定)。
 
 `Gemfile` は `gem "lilac-cli", path: "../../cli"` で sibling の CLI を直接
 参照する。repo 外で reference にするときは `gem "lilac-cli", "~> 0.1"`
