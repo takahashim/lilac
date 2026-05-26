@@ -10,10 +10,10 @@ require_relative 'html_emitter'
 require_relative 'template_ast_cache'
 require_relative 'build_context'
 require_relative 'bundle_asset_writer'
+require_relative 'package_stager'
 require_relative 'vendor_writer'
 require_relative 'page_compiler'
 require_relative '../lint/build_linter'
-require_relative '../package_discovery'
 
 module Lilac
   module CLI
@@ -148,14 +148,15 @@ module Lilac
         build_linter = BuildLinter.new
         # Resolve and stage package `.mrb` files once for the build —
         # the URLs are stable across pages so each page's boot module
-        # can reference the same set.
-        package_dist_urls = stage_packages!
-        # `:full` target doesn't generate its own boot module (user's
-        # scaffold-provided `<script type="module">` owns boot), so we
-        # surface the package list as a `lilac.packages.json` manifest
-        # the user-side boot can fetch. `:compiled` doesn't need this —
-        # the generated `data-lilac-bootstrap` module inlines the URLs.
-        write_packages_manifest!(package_dist_urls) if @target == :full
+        # can reference the same set. PackageStager owns both the
+        # discovered + explicit input channels and the :full-only
+        # `lilac.packages.json` manifest emission.
+        package_dist_urls = PackageStager.new(
+          packages: @packages,
+          target: @target,
+          output_dir: @output_dir,
+          bytecode_builder: bytecode_builder
+        ).run!
 
         # In :bundle delivery mode, emit a single dist/lilac.bundle.html
         # containing all components' templates + scripts. Pages then
@@ -327,84 +328,6 @@ module Lilac
         end
 
         [::Lilac::Wasm::Bin.lilac_full_wasm, ::Lilac::Wasm::Bin.mruby_wasm_js_dir]
-      end
-
-      # Stage package `.mrb` files under `dist/packages/` and return the
-      # page-relative URLs the boot script should `fetch`. Two input
-      # channels merge here (decisions §25 / §26):
-      #
-      #   1. **Bundler auto-discovery** — `PackageDiscovery.run` finds
-      #      gems whose gemspec declares `metadata["lilac_package"] = "true"`.
-      #      Each gem's `mrblib/*.rb` is compiled locally to `.mrb` so the
-      #      mruby version matches the vendored core wasm.
-      #   2. **Explicit `c.packages = [...paths]`** — pre-compiled `.mrb`
-      #      files. Useful for advanced overrides (custom package not in
-      #      a gem, vendored fork, etc.).
-      #
-      # Both `:full` and `:compiled` targets benefit from packages —
-      # `:compiled` injects loadBytecode into the generated boot module
-      # directly, `:full` writes a `lilac.packages.json` manifest that
-      # the user's hand-rolled (scaffold) boot script reads to load each
-      # package ahead of `evalScript`.
-      def stage_packages!
-        return [] if @packages.empty? && discovered_packages.empty?
-
-        dest_dir = File.join(@output_dir, 'packages')
-        FileUtils.mkdir_p(dest_dir)
-
-        urls = []
-        # Auto-discovered gem-based packages first. Compile each gem's
-        # mrblib source set to a single `.mrb` named after the gem so
-        # filename collisions with explicit override paths are easy to
-        # spot.
-        discovered_packages.each do |discovered|
-          bytes = compile_package_source(discovered.mrblib_files, source_label: discovered.name)
-          filename = "#{discovered.name}.mrb"
-          File.binwrite(File.join(dest_dir, filename), bytes)
-          urls << "./packages/#{filename}"
-        end
-        # Explicit override paths next — already-compiled `.mrb` files
-        # the user pointed at directly via `c.packages`.
-        @packages.each do |src|
-          raise Error, "Lilac package `.mrb` not found: #{src}" unless File.file?(src)
-
-          basename = File.basename(src)
-          FileUtils.cp(src, File.join(dest_dir, basename))
-          urls << "./packages/#{basename}"
-        end
-        urls.uniq
-      end
-
-      # Cached `PackageDiscovery` result so multi-page builds discover
-      # once. Empty list outside a Bundler context.
-      def discovered_packages
-        @discovered_packages ||= PackageDiscovery.run
-      end
-
-      # Compile concatenated mrblib source to bytecode via the existing
-      # `BytecodeBuilder` backend chain (binary mrbc → wasm-driven mrbc
-      # → $PATH). Mirrors `lilac package-build`'s aggregation rule:
-      # alphabetical concat separated by newlines.
-      def compile_package_source(mrblib_files, source_label:)
-        source = mrblib_files.map { |f| File.read(f) }.join("\n")
-        bytecode_builder.compile_to_bytes(source, source_label: "package #{source_label}")
-      end
-
-      # Write `dist/lilac.packages.json` so a scaffold-style boot script
-      # can fetch the manifest and `loadBytecode` each entry before
-      # evaluating `<script type="text/ruby">` blocks. Format:
-      #
-      #   { "packages": ["./packages/lilac-extras.mrb", ...] }
-      #
-      # The manifest is only written when at least one package was
-      # staged, so absence of the file means "no packages" — boot
-      # scripts can fetch with a graceful 404 fallback.
-      def write_packages_manifest!(package_urls)
-        return if package_urls.empty?
-
-        require 'json'
-        manifest_path = File.join(@output_dir, 'lilac.packages.json')
-        File.write(manifest_path, JSON.pretty_generate(packages: package_urls) + "\n")
       end
 
     end
