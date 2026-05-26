@@ -64,6 +64,16 @@ export async function boot(opts = {}) {
 
   const vm = await createVM({ wasm: opts.wasm || DEFAULT_WASM_URL });
 
+  // Bundle delivery (`<link rel="lilac-bundle">`): fetch each bundle,
+  // append its <template> elements to document.body so the registry's
+  // `collect_definitions` picks them up, and `vm.eval` its
+  // <script type="text/ruby"> entries. Done before the per-page script
+  // eval below so bundle-defined classes are available when the page's
+  // own Ruby runs. mruby-eval (`Kernel#eval`) is not exposed from
+  // `Lilac::Registry`, so the boot helper owns this step.
+  await waitForDocumentReady();
+  await loadLilacBundles(vm);
+
   if (opts.bytecode !== undefined) {
     const bytes =
       opts.bytecode instanceof Uint8Array
@@ -76,7 +86,6 @@ export async function boot(opts = {}) {
     }
     vm.eval(opts.source);
   } else {
-    await waitForDocumentReady();
     const selector = opts.scriptSelector || DEFAULT_SCRIPT_SELECTOR;
     const node = resolveScriptNode(opts.script, selector);
     if (node) {
@@ -95,6 +104,34 @@ export async function boot(opts = {}) {
     await opts.onReady(vm);
   }
   return vm;
+}
+
+// Fetch every `<link rel="lilac-bundle">` resource, parse it as HTML,
+// then append its <template> + <script type="text/ruby"> contents to
+// the live document so the registry / VM can consume them. Errors are
+// reported via console.error and skipped — individual bundle failures
+// don't abort the whole boot.
+async function loadLilacBundles(vm) {
+  const links = document.querySelectorAll('link[rel="lilac-bundle"]');
+  for (const link of links) {
+    const href = link.getAttribute("href");
+    if (!href) continue;
+    try {
+      const res = await fetch(href);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+
+      for (const tpl of doc.querySelectorAll("template")) {
+        document.body.appendChild(tpl.cloneNode(true));
+      }
+      for (const s of doc.querySelectorAll('script[type="text/ruby"]')) {
+        vm.eval(s.textContent || "");
+      }
+    } catch (err) {
+      console.error(`[lilac] failed to load bundle ${href}:`, err);
+    }
+  }
 }
 
 function resolveScriptNode(scriptOpt, fallbackSelector) {
