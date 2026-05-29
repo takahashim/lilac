@@ -243,17 +243,22 @@ module Lilac
       #   - nested `data-component` subtrees (other components run their
       #     own Scanner pass)
       def collect_subtree(node_js, item:, records:, extensions_only: false, except: [])
-        rec = build_record(node_js, item, extensions_only: extensions_only, except: except)
-        records << rec if rec
-        return if rec && rec[:directives].any? { |k, _, _| k == :each }
+        # A nested `data-component` (anything but the host's OWN root)
+        # runs its own Scanner pass when it mounts, so ALL its directives
+        # — including ones on its root element (e.g. a data-each row
+        # component with `data-class="{ on: @is_selected }"` where
+        # `@is_selected` is a `computed` from the child's `setup`) — must
+        # bind in the child's scope, not the parent/iteration scope where
+        # the ivar is nil. Build NO record here and don't descend; just
+        # pre-resolve `data-prop-*` against our scope so the child mounts
+        # with resolved literals. Mirrors collect_children's guard.
         if node_js != @host.root.to_js && node_js.call(:hasAttribute, "data-component").js_bool
-          # Pre-resolve `data-prop-*` expressions on the nested data-component
-          # element before it mounts. The child component's Props.build will
-          # then see static literal attribute values that already incorporate
-          # the parent's `it` / `@ivar` context.
           resolve_props(node_js, item) unless extensions_only
           return
         end
+        rec = build_record(node_js, item, extensions_only: extensions_only, except: except)
+        records << rec if rec
+        return if rec && rec[:directives].any? { |k, _, _| k == :each }
         collect_children(node_js, item: item, records: records,
                          extensions_only: extensions_only, except: except)
       end
