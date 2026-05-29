@@ -10,6 +10,12 @@
 // The goal is to prove Vite-style dev/prod parity: same `.lil` source,
 // same DOM result regardless of target. Any discrepancy fails fast with
 // the offending step + a side-by-side dump.
+//
+// Run with (the wasm uses the new EH proposal → exnref, which Node only
+// loads behind a flag; point the env at freshly-built wasm):
+//   LILAC_FULL_WASM=$PWD/build/lilac-full.wasm \
+//   LILAC_COMPILED_WASM=$PWD/build/lilac-compiled.wasm \
+//     node --experimental-wasm-exnref test/parity-runner.mjs
 
 import { readFile, mkdtemp, cp, readdir, rm } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -46,29 +52,29 @@ let EXTRAS_MRB = null;
 // Step = { label, run(doc) => void }
 const SCENARIOS = {
   counter: {
-    component_selector: '[data-component="counter"]',
+    component_selector: '[data-use="counter"]',
     steps: [
       { label: "initial mount" },
       { label: "click inc",     run: (doc) => doc.querySelector('[data-ref="inc"]').click() },
       { label: "click inc x3",  run: (doc) => { for (let i=0; i<3; i++) doc.querySelector('[data-ref="inc"]').click(); } },
       { label: "click dec x2",  run: (doc) => { for (let i=0; i<2; i++) doc.querySelector('[data-ref="dec"]').click(); } },
     ],
-    snapshot: (doc) => doc.querySelector('[data-component="counter"]').outerHTML,
+    snapshot: (doc) => doc.querySelector('[data-use="counter"]').outerHTML,
   },
 
   toggle: {
-    component_selector: '[data-component="toggle"]',
+    component_selector: '[data-use="toggle"]',
     steps: [
       { label: "initial mount (flag=false)" },
       { label: "click toggle (true)",  run: (doc) => doc.querySelector('[data-ref="toggle_btn"]').click() },
       { label: "click toggle (false)", run: (doc) => doc.querySelector('[data-ref="toggle_btn"]').click() },
       { label: "click toggle (true)",  run: (doc) => doc.querySelector('[data-ref="toggle_btn"]').click() },
     ],
-    snapshot: (doc) => doc.querySelector('[data-component="toggle"]').outerHTML,
+    snapshot: (doc) => doc.querySelector('[data-use="toggle"]').outerHTML,
   },
 
   form: {
-    component_selector: '[data-component="login-form"]',
+    component_selector: '[data-use="login-form"]',
     steps: [
       { label: "initial mount (empty inputs)" },
       {
@@ -98,11 +104,11 @@ const SCENARIOS = {
       },
       { label: "click submit (missing)", run: (doc) => doc.querySelector('[data-ref="submit"]').click() },
     ],
-    snapshot: (doc) => doc.querySelector('[data-component="login-form"]').outerHTML,
+    snapshot: (doc) => doc.querySelector('[data-use="login-form"]').outerHTML,
   },
 
   extras: {
-    component_selector: '[data-component="tooltip-widget"]',
+    component_selector: '[data-use="tooltip-widget"]',
     // The compiled wasm has no extras gem linked — runtime package load
     // is the only path. Full wasm still ships extras, so loading the
     // .mrb only on compiled keeps both paths exercised symmetrically.
@@ -113,11 +119,11 @@ const SCENARIOS = {
       { label: "click toggle (second hint)", run: (doc) => doc.querySelector('[data-ref="toggle"]').click() },
       { label: "click toggle (first hint)",  run: (doc) => doc.querySelector('[data-ref="toggle"]').click() },
     ],
-    snapshot: (doc) => doc.querySelector('[data-component="tooltip-widget"]').outerHTML,
+    snapshot: (doc) => doc.querySelector('[data-use="tooltip-widget"]').outerHTML,
   },
 
   list: {
-    component_selector: '[data-component="tag-list"]',
+    component_selector: '[data-use="tag-list"]',
     steps: [
       { label: "initial mount (3 items)" },
       { label: "click add (4 items)",          run: (doc) => doc.querySelector('[data-ref="add"]').click() },
@@ -128,7 +134,7 @@ const SCENARIOS = {
     ],
     snapshot: (doc) => {
       // Normalise generated lil-N ref attrs which differ across paths.
-      const html = doc.querySelector('[data-component="tag-list"]').outerHTML;
+      const html = doc.querySelector('[data-use="tag-list"]').outerHTML;
       return html.replace(/data-ref="lil\d+"/g, 'data-ref="lilN"');
     },
   },
