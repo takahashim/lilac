@@ -1,4 +1,4 @@
-Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" do
+Spec.describe "Lilac::Component#bind_template_hook" do
   Spec.assert "default no-op: components without an override mount cleanly" do
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"></div>'
@@ -31,9 +31,8 @@ Spec.describe "Lilac::Component#bind_template_hook (directive codegen target)" d
   end
 
   Spec.assert "bind_template_hook supplied via included module is invoked" do
-    # Mirrors how lilac-cli's codegen wires generated bindings:
-    # a separate `Lilac::Bindings::<ClassName>` module defines
-    # `bind_template_hook` and is included into the user class.
+    # A module that defines `bind_template_hook` and is included into
+    # the component class overrides the default scanner delegation.
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="C"><span data-ref="label">orig</span></div>'
     klass = Class.new(Lilac::Component)

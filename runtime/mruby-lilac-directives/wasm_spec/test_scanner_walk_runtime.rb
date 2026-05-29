@@ -66,11 +66,11 @@ Spec.describe "Scanner walk boundaries (runtime)" do
     Lilac.flush_async!
   end
 
-  Spec.assert "CLI codegen path (Bindings module) is unaffected by runtime scanner" do
-    # When a Lilac::Bindings::X module overrides bind_template_hook,
-    # the override wins (Ruby method lookup) and the default runtime
-    # scanner never runs. Confirms the canonical scanner doesn't
-    # double-bind for .lil-built components.
+  Spec.assert "an included bind_template_hook override wins over the runtime scanner" do
+    # When a component includes a module that overrides
+    # bind_template_hook, the override wins (Ruby method lookup) and the
+    # default runtime scanner never runs. Confirms the canonical scanner
+    # doesn't double-bind for components that wire bindings imperatively.
     body = JS.global[:document][:body]
     body[:innerHTML] = '<div data-component="coexist-rt"><span data-ref="t" data-text="@msg">x</span></div>'
 

@@ -95,7 +95,6 @@ class SpecRunner
     "runtime/mruby-lilac-form/wasm_spec/test_form_cross_field.rb",
     "runtime/mruby-lilac-form/wasm_spec/test_form_phase_a.rb",
     "runtime/mruby-lilac-form/wasm_spec/test_form_validators.rb",
-    "runtime/mruby-lilac-directives/wasm_spec/test_codegen_parity_runtime.rb",
     "runtime/mruby-lilac-directives/wasm_spec/test_directive_attr_runtime.rb",
     "runtime/mruby-lilac-directives/wasm_spec/test_directive_bare_ident_runtime.rb",
     "runtime/mruby-lilac-directives/wasm_spec/test_directive_bind_runtime.rb",
