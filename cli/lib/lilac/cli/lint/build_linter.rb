@@ -20,10 +20,10 @@ module Lilac
       end
 
       # R4: page-inline script classes that collide with `.lil`-derived
-      # class names (project-global) are flagged before codegen so the
-      # user sees a structured error instead of a downstream Codegen /
-      # mrbc failure. Raises `Lilac::CLI::Builder::Error` to match the
-      # error surface other build-time scope violations use.
+      # class names (project-global) are flagged here so the user sees a
+      # structured error instead of a downstream mrbc failure. Raises
+      # `Lilac::CLI::Builder::Error` to match the error surface other
+      # build-time scope violations use.
       def check_class_name_collisions!(page_inline_scripts, components, synthesized_names, page_path)
         return if page_inline_scripts.empty?
 

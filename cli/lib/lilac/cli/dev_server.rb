@@ -81,7 +81,7 @@ module Lilac
         @out.puts "lilac dev: reloaded #{@live_reload.subscriber_count} client(s)"
       rescue Builder::Error, SFC::ParseError, BuildError => e
         # BuildError covers BytecodeBuilder::Error (mrbc invocation
-        # failures) as well as Codegen / Lints errors. Keeps the dev
+        # failures) as well as Lints errors. Keeps the dev
         # loop alive — the watcher stays armed for the next save. The
         # client-side overlay (injected with LIVE_RELOAD_SCRIPT) renders
         # the error in-page so the developer doesn't have to switch to

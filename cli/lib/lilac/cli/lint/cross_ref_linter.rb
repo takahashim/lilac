@@ -204,7 +204,7 @@ module Lilac
             begin
               Lilac::Directives::ClassParser.parse(directive.value)
             rescue Lilac::Directives::ClassParser::Error
-              # Codegen will surface the parse error as a build error;
+              # The runtime scanner surfaces the parse error at mount;
               # we silently skip lint here so the user sees one clear
               # message instead of two competing ones.
               []

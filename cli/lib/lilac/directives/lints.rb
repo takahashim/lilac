@@ -2,10 +2,9 @@
 
 module Lilac
   module Directives
-    # Build-time validation of directive composition rules. Called by
-    # Codegen.run after directive collection but before code emission so
-    # violations surface as a build error rather than a runtime failure
-    # on the user's page.
+    # Build-time validation of directive composition rules. Called after
+    # directive collection so violations surface as a build error rather
+    # than a runtime failure on the user's page.
     #
     # Duplicate pair (build-time / runtime). See decisions §17. The
     # build-time half raises on every violation; the runtime half
@@ -97,14 +96,9 @@ module Lilac
       # signals can race over the class — fail at build time and tell
       # the user to drop the data-class entry.
       #
-      # Note: re-parses the data-class hash literal even though
-      # `Codegen#emit_class` will parse it again moments later. The
-      # double work is intentional — compatibility checks must stay
-      # decoupled from codegen so they can run independently (e.g. a
-      # future `--lint-only` flag, or surfacing all violations in one
-      # pass instead of stopping at the first emit failure). The
-      # substring guard above keeps the cost zero for the common case
-      # (no `lil-hidden` anywhere in the value).
+      # Note: parses the data-class hash literal purely for this check.
+      # The substring guard above keeps the cost zero for the common
+      # case (no `lil-hidden` anywhere in the value).
       def self.check_gn_hidden_conflict(dirs, file)
         return unless dirs.any? { |d| %i[show hide].include?(d.kind) }
 
@@ -116,8 +110,8 @@ module Lilac
           begin
             ClassParser.parse(class_dir.value)
           rescue ClassParser::Error
-            # Malformed data-class — let emit_class raise the parse
-            # error with its own location-tagged message instead.
+            # Malformed data-class — the runtime scanner surfaces the
+            # parse error at mount; skip the conflict check here.
             return
           end
         return unless pairs.any? { |key, _| key == "lil-hidden" }

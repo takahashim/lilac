@@ -10,12 +10,12 @@ module Lilac
     # element tree, and:
     #
     #   1. Collects every `data-*` directive into a flat list of
-    #      `Directive` records (in document order).
+    #      `Directive` records (in document order) for the lint layer.
     #   2. Assigns a synthetic `data-ref="lilN"` to any element bearing
-    #      a binding directive but no explicit `data-ref`, so codegen
-    #      can address the element by stable name.
-    #   3. Builds `refs_map` keyed by ref name, recording the element
-    #      tag and original source line for later applicability checks.
+    #      a binding directive but no explicit `data-ref`, so the
+    #      runtime scanner can resolve it positionally at mount.
+    #   3. Builds `refs_map` keyed by ref name, recording each ref's
+    #      source line for duplicate / reserved-name lint checks.
     #
     # SFC's regex-based template extraction (`SFC.parse`) preserves the
     # template body byte-for-byte. TemplateAST does NOT preserve byte
