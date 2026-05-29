@@ -236,7 +236,7 @@ test-node: test-wasm
 test-wasm: check-pair-diff lilac-full node_modules
 	MRUBY_WASM_PATH=$(BUILD_WASM_LILAC_FULL) \
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
-	  node test/runner.mjs
+	  node --experimental-wasm-exnref test/runner.mjs
 
 # Ruby-side CLI gem tests. The gem owns its own Gemfile / Rakefile
 # under `cli/` (standard Ruby monorepo layout — see README), so the
