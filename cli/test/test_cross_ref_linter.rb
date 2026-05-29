@@ -199,7 +199,7 @@ class TestCrossRefLinter < Minitest::Test
     _, out = lint(
       script: "",
       directives: [],
-      refs_map: { "p" => { tag: "p", line: 4 }, "class" => { tag: "span", line: 5 } },
+      refs_map: { "p" => 4, "class" => 5 },
     )
     assert_includes out, "data-ref \"p\" collides"
     assert_includes out, "data-ref \"class\" collides"
@@ -211,7 +211,7 @@ class TestCrossRefLinter < Minitest::Test
     count, = lint(
       script: "",
       directives: [],
-      refs_map: { "message" => { tag: "p", line: 2 }, "submit_btn" => { tag: "button", line: 3 } },
+      refs_map: { "message" => 2, "submit_btn" => 3 },
     )
     assert_equal 0, count
   end

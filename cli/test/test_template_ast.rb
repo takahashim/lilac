@@ -119,11 +119,9 @@ class TestTemplateAST < Minitest::Test
     assert_empty result.refs_map
   end
 
-  def test_refs_map_contains_tag_and_line
+  def test_refs_map_records_line_per_ref
     result = parse(%(<button data-on-click="m">x</button>))
-    info = result.refs_map["lil0"]
-    assert_equal "button", info[:tag]
-    assert_kind_of Integer, info[:line]
+    assert_kind_of Integer, result.refs_map["lil0"]
   end
 
   def test_nested_template_directives_walked

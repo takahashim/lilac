@@ -76,7 +76,6 @@ class TestPackageDiscovery < Minitest::Test
       results = Lilac::CLI::PackageDiscovery.run
       assert_equal 1, results.length
       assert_equal "lilac-foo", results.first.name
-      assert_equal "0.1.0", results.first.version
       assert_equal 2, results.first.mrblib_files.length
       # Alphabetical so concatenation is deterministic.
       basenames = results.first.mrblib_files.map { |p| File.basename(p) }

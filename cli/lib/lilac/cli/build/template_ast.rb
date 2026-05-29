@@ -184,7 +184,7 @@ module Lilac
                 scope_id: scopes.current_each_ref,
               )
             end
-            refs_map[ref_id] ||= { tag: elem.name, line: elem.line }
+            refs_map[ref_id] ||= elem.line
           elsif (explicit = elem["data-ref"]) && !explicit.empty?
             # Ref declared on an element without any other directive
             # (e.g. `<input data-ref="email">` used only by user-side

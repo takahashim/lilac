@@ -148,10 +148,10 @@ module Lilac
 
       def lint_reserved_ref_names
         warnings = 0
-        @refs_map.each do |name, info|
+        @refs_map.each do |name, line|
           next unless RESERVED_REF_NAMES.include?(name)
 
-          emit_reserved_ref_warning(name, info[:line])
+          emit_reserved_ref_warning(name, line)
           warnings += 1
         end
         warnings

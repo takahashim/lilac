@@ -26,7 +26,7 @@ module Lilac
       # Returns a Hash with:
       #   :default_html        — concatenated body HTML of the default templates
       #   :default_directives  — Array<Directive> for top-level binding emission
-      #   :default_refs_map    — Hash { ref_name => { line:, ... } } for lint
+      #   :default_refs_map    — Hash { ref_name => line } for lint
       #   :named               — Array<RenderedTemplate> (user-defined)
       #   :source_path         — Path to the `.lil` (or in-memory page)
       def fetch(name, component)

@@ -830,7 +830,6 @@ class TestBuilder < Minitest::Test
     File.write(File.join(pkg_dir, "fake.rb"), "X = 1")
     discovered = Lilac::CLI::PackageDiscovery::Discovered.new(
       name: "lilac-fake",
-      version: "0.0.1",
       mrblib_files: [File.join(pkg_dir, "fake.rb")],
     )
 

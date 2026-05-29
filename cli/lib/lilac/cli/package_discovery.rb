@@ -21,7 +21,7 @@ module Lilac
       # `lilac-*.gemspec`.
       METADATA_KEY = "lilac_package"
 
-      Discovered = Struct.new(:name, :version, :mrblib_files, keyword_init: true)
+      Discovered = Struct.new(:name, :mrblib_files, keyword_init: true)
 
       def self.run
         new.run
@@ -38,7 +38,7 @@ module Lilac
           files = mrblib_files_for(spec)
           next if files.empty?
 
-          Discovered.new(name: spec.name, version: spec.version.to_s, mrblib_files: files)
+          Discovered.new(name: spec.name, mrblib_files: files)
         end
       end
 
