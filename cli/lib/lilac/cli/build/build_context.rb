@@ -16,7 +16,6 @@ module Lilac
     #   - `build_linter`      — BuildLinter accumulating cross-page diagnostics
     #   - `bytecode_builder`  — BytecodeBuilder for compiled-target `.mrb` emission
     #   - `target`            — :full | :compiled
-    #   - `codegen`           — :auto | :off
     #   - `delivery`          — :inline | :bundle
     #   - `live_reload`       — boolean (dev path injects SSE client script)
     #   - `output_dir`        — absolute dist path (relative refs in boot module need this)
@@ -24,7 +23,7 @@ module Lilac
     BuildContext = Struct.new(
       :components, :bundle_assets, :package_dist_urls,
       :template_cache, :build_linter, :bytecode_builder,
-      :target, :codegen, :delivery, :live_reload,
+      :target, :delivery, :live_reload,
       :output_dir, :pages_dir,
       keyword_init: true
     )

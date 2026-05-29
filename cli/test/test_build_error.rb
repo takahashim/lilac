@@ -51,10 +51,6 @@ class TestBuildError < Minitest::Test
   end
 
   def test_subclasses_inherit_formatter
-    codegen_err = Lilac::CLI::Codegen::Error.new("oops", at: loc("a.lil", 1))
-    assert_includes codegen_err.message, "lilac: build error in a.lil:1"
-    assert_includes codegen_err.message, "  oops"
-
     lints_err = Lilac::Directives::Lints::Error.new("clash", at: loc("b.lil", 2))
     assert_includes lints_err.message, "lilac: build error in b.lil:2"
     assert_includes lints_err.message, "  clash"

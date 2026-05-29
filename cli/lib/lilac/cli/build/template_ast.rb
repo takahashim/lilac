@@ -98,11 +98,11 @@ module Lilac
         # records when it appears alone, to keep the dist HTML and the
         # linter input unchanged for the common case.
         [/\Adata-component\z/,   :component,   false],
-        # Form directives (mruby-lilac-form gem). data-form is detected
-        # so scope validation can see it; emit_form is a no-op (the
-        # runtime resolves scope via ancestor walk). data-field /
-        # data-button get full codegen via emit_field / emit_button.
+        # Form directives (mruby-lilac-form gem). Collected so scope
+        # validation / lint can see them; the runtime form scanner wires
+        # the actual behavior at mount (resolves scope via ancestor walk).
         [/\Adata-form\z/,        :form,        false],
+        [/\Adata-field\z/,       :field,       false],
         [/\Adata-button\z/,      :button,      false],
         [/\Adata-on-(.+)\z/,     :on,          true],
         [/\Adata-attr-(.+)\z/,   :attr,        true],
@@ -324,13 +324,13 @@ module Lilac
       # it wraps. When the element itself is an input/textarea/select, that
       # ref is its own (already allocated above). When it's a container,
       # find the first nested form control via CSS selector and allocate a
-      # synthetic ref (with `data-ref="lilN"` injected on it) so codegen
-      # can address it directly.
+      # synthetic ref (with `data-ref="lilN"` injected on it) so the
+      # runtime scanner can address it directly.
       def find_or_allocate_form_control_ref(elem, current_ref_scope, own_ref:)
         if FORM_CONTROL_TAGS.include?(elem.name)
           # `<input data-field="X">` — the data-field element IS the
           # form control, so its ref_id (just allocated by
-          # assign_or_reuse_ref) is what the codegen should bind to.
+          # assign_or_reuse_ref) is what the runtime scanner binds to.
           return own_ref
         end
         control = elem.css(FORM_CONTROL_TAGS.join(", ")).first
@@ -439,10 +439,10 @@ module Lilac
       end
 
       def register_ref!(ref, line, current_ref_scope)
-        # `lilN` is reserved for codegen positional slots — see decisions §19.
+        # `lilN` is reserved for runtime positional ref slots — see ADR-0019.
         if ref.match?(/^lil\d+$/)
           raise Error.new(
-            "data-ref=#{ref.inspect}: the `lilN` namespace is reserved for codegen-internal directive slots.",
+            "data-ref=#{ref.inspect}: the `lilN` namespace is reserved for runtime-internal directive slots.",
             at: SourceLocation.new(file: source_file, line: line),
             suggestion: "Use a domain name like `email` / `list` instead.",
           )

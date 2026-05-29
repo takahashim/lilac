@@ -10,9 +10,7 @@
 
 require_relative "cli/build/build_error" # lints.rb references Lilac::CLI::BuildError
 require_relative "directives/value"
-require_relative "directives/value_codegen" # build-time-only emit helpers (re-opens Value::Ivar / BareIdent)
 require_relative "directives/grammar"
-require_relative "directives/grammar_extra" # build-time-only predicates (class_name?, ref_ident?)
 require_relative "directives/class_parser"
 require_relative "directives/collision_rules" # COLLISION_PAIRS SSOT, consumed by lints.rb
 require_relative "directives/lints"

@@ -1,4 +1,4 @@
-# 17. directive binding は codegen が canonical / scanner gem は grammar reference
+# 17. (axis A superseded by ADR-0031) directive binding は codegen が canonical / scanner gem は grammar reference
 
 決定日: 2026-05-19
 

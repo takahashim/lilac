@@ -27,7 +27,7 @@ class TestBuilder < Minitest::Test
     File.write(File.join(@pages, "#{name}.html"), source)
   end
 
-  def build!(codegen: :auto, target: :full, mrbc_path: nil,
+  def build!(target: :full, mrbc_path: nil,
              lilac_compiled_path: nil, mruby_wasm_js_path: nil,
              packages: [],
              project_root: Dir.pwd,
@@ -36,7 +36,6 @@ class TestBuilder < Minitest::Test
       components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
-      codegen: codegen,
       target: target,
       mrbc_path: mrbc_path,
       lilac_compiled_path: lilac_compiled_path,
@@ -712,15 +711,13 @@ class TestBuilder < Minitest::Test
     assert_equal 2, result[:public_files]
   end
 
-  # ---- codegen flag --------------------------------------------------
+  # ---- scanner-canonical output --------------------------------------
 
-  # NOTE: scanner-canonical — the builder no longer emits codegen
-  # bindings; `bind_template_hook` / `Lilac::Bindings::<Class>` are never
-  # generated (the runtime scanner wires directives at mount). The former
-  # `test_codegen_auto_emits_bind_template_hook` was removed because that
-  # behavior no longer exists; `test_codegen_off_skips_bind_template_hook`
-  # below documents the (now-universal) no-codegen output.
-  def test_codegen_off_skips_bind_template_hook
+  # The builder never emits codegen bindings; `bind_template_hook` /
+  # `Lilac::Bindings::<Class>` are never generated. The runtime scanner
+  # wires directives at mount, so the declarative `data-*` attributes
+  # stay in the dist HTML for it to find.
+  def test_builder_emits_no_codegen_bindings
     write_widget "counter", <<~GNT
       <template>
         <div data-component="counter">
@@ -735,10 +732,10 @@ class TestBuilder < Minitest::Test
     GNT
     write_page "index", '<html><body><div data-use="counter"></div></body></html>'
 
-    build!(codegen: :off)
+    build!
     out = read_output("index.html")
     refute_includes out, "bind_template_hook",
-                    "codegen :off must not emit bind_template_hook; runtime takes over"
+                    "scanner-canonical must not emit bind_template_hook; runtime takes over"
     refute_includes out, "Lilac::Bindings::Counter"
     # The declarative directive itself stays in the HTML so the runtime
     # scanner can find and wire it at mount time.

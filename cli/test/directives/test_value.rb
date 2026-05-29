@@ -68,46 +68,6 @@ class TestValue < Minitest::Test
     assert_nil Lilac::Directives::Value.parse("1bad")
   end
 
-  # ---- polymorphic codegen helpers -------------------------------
-
-  def test_ivar_reactive_read_appends_dot_value
-    v = Lilac::Directives::Value.parse("@count")
-    assert_equal "@count.value", v.reactive_read
-  end
-
-  def test_ivar_bind_source_is_raw_signal
-    v = Lilac::Directives::Value.parse("@count")
-    assert_equal "@count", v.bind_source
-  end
-
-  def test_bare_ident_reactive_read_uses_item_field_lookup
-    v = Lilac::Directives::Value.parse("title")
-    assert_equal "Lilac::ItemField.read(it, :title)", v.reactive_read
-  end
-
-  def test_bare_ident_bind_source_wraps_in_computed
-    v = Lilac::Directives::Value.parse("title")
-    assert_equal "computed { Lilac::ItemField.read(it, :title) }", v.bind_source
-  end
-
-  # ---- signal_ref (data-bind codegen) ----------------------------
-
-  def test_ivar_signal_ref_returns_raw_signal_without_value_unwrap
-    # bind_input wants the Signal object itself (it calls .value
-    # inside its own effect), so signal_ref skips the .value suffix
-    # that reactive_read appends.
-    v = Lilac::Directives::Value.parse("@qty")
-    assert_equal "@qty", v.signal_ref
-  end
-
-  def test_bare_ident_signal_ref_reads_item_field
-    # Inside a data-each bind_list block, `Lilac::ItemField.read(it, :qty)`
-    # resolves to the per-row Signal stored on the item (Hash-aware
-    # lookup matches the runtime scanner path).
-    v = Lilac::Directives::Value.parse("qty")
-    assert_equal "Lilac::ItemField.read(it, :qty)", v.signal_ref
-  end
-
   # ---- inspect / interpolation -----------------------------------
 
   def test_inspect_returns_quoted_raw_for_error_messages

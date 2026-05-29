@@ -28,34 +28,6 @@ class TestGrammar < Minitest::Test
     refute Lilac::Directives::Grammar.method_ident?("@thing")
   end
 
-  # ---- class_name? -----------------------------------------------
-
-  def test_class_name_single_segment
-    assert Lilac::Directives::Grammar.class_name?("Counter")
-    assert Lilac::Directives::Grammar.class_name?("UserCard")
-  end
-
-  def test_class_name_namespaced
-    assert Lilac::Directives::Grammar.class_name?("Admin::UserCard")
-    assert Lilac::Directives::Grammar.class_name?("Top::Mid::Leaf")
-  end
-
-  def test_class_name_rejects_lowercase_start
-    refute Lilac::Directives::Grammar.class_name?("counter")
-  end
-
-  def test_class_name_rejects_single_colon
-    refute Lilac::Directives::Grammar.class_name?("Admin:UserCard")
-  end
-
-  # ---- ref_ident? ------------------------------------------------
-
-  def test_ref_ident_lowercase_only
-    assert Lilac::Directives::Grammar.ref_ident?("canvas")
-    assert Lilac::Directives::Grammar.ref_ident?("submit_button")
-    refute Lilac::Directives::Grammar.ref_ident?("Canvas")
-  end
-
   # ---- kebab_name? -----------------------------------------------
 
   def test_kebab_name_accepts_letter_only

@@ -3,9 +3,7 @@
 require 'fileutils'
 require 'pathname'
 require_relative 'sfc'
-require_relative 'codegen'
 require_relative 'bytecode_builder'
-require_relative 'form_extension'
 require_relative 'html_emitter'
 require_relative 'template_ast_cache'
 require_relative 'build_context'
@@ -67,7 +65,6 @@ module Lilac
           pages_dir: config.pages_dir,
           output_dir: config.output_dir,
           public_dir: config.public_dir,
-          codegen: config.codegen,
           target: target || config.build_target,
           mrbc_path: config.mrbc_path,
           lilac_compiled_path: config.lilac_compiled_path,
@@ -80,7 +77,7 @@ module Lilac
       end
 
       def initialize(components_dir:, pages_dir:, output_dir:, public_dir: nil,
-                     live_reload: false, codegen: :auto,
+                     live_reload: false,
                      target: :full, mrbc_path: nil,
                      lilac_compiled_path: nil, mruby_wasm_js_path: nil,
                      packages: [],
@@ -96,12 +93,6 @@ module Lilac
         # creating the directory.
         @public_dir = public_dir
         @live_reload = live_reload
-        # `:auto` (default) — emit Lilac::Bindings::<Class>#bind_template_hook
-        # pre-compiled bindings; `:off` — skip codegen and let the
-        # runtime scanner interpret data-* directives at mount time
-        # (parity-test mode, validates the runtime path against the
-        # same .lil source).
-        @codegen = codegen
         # `:full` — dist HTML loads inline Ruby via lilac-full wasm
         # (vm.evalScript). `:compiled` — Ruby is pre-compiled to
         # `.mrb` bytecode via `mrbc` and loaded by lilac-compiled wasm
@@ -181,7 +172,6 @@ module Lilac
           build_linter: build_linter,
           bytecode_builder: bytecode_builder,
           target: @target,
-          codegen: @codegen,
           delivery: @delivery,
           live_reload: @live_reload,
           output_dir: @output_dir,

@@ -14,8 +14,7 @@ module Lilac
     # callers that don't have a location on hand can still raise, but
     # the formatted shape only kicks in when `at:` is provided.
     #
-    # Subclassed by `Codegen::Error` and `Lilac::Directives::Lints::Error`
-    # so existing `assert_raises(Codegen::Error)` calls keep matching.
+    # Subclassed by `Lilac::Directives::Lints::Error`.
     class BuildError < StandardError
       attr_reader :at, :snippet, :suggestion
 

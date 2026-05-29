@@ -53,7 +53,7 @@ refinement** として位置付ける。
 | [0014](./0014-props-p2-prop-semantics-extension.md) | Props P2: `prop` の意味拡張(ivar 宣言 + accessor + 値式) | `lilac-props-spec.md` | 完了 |
 | [0015](./0015-lilac-full-bundle-size-optimization.md) | lilac-full の bundle size 最適化(browser-only + explicit allow-list + -Oz) | `build_config/lilac-full.rb`, `Makefile` | 完了 (2026-05-19、-25.3% raw / -23.0% brotli) |
 | [0016](./0016-drop-it-path-and-bare-ident-scope.md) | `it.path` 全廃 + value-binding bare-ident scope + data-prop-* auto-fill | `lilac-directive-spec.md` §3 / §5 / §6.2、`lilac-props-spec.md` §7.5 / §7.6 | 完了 (2026-05-19) |
-| [0017](./0017-codegen-canonical-scanner-grammar-only.md) | directive binding は codegen が canonical / scanner gem は grammar reference | `cli/lib/lilac/directives/` ↔ `runtime/mruby-lilac-directives/mrblib/` | 完了 (2026-05-19)、ADR-27 Phase L でファイル名 rename |
+| [0017](./0017-codegen-canonical-scanner-grammar-only.md) | directive binding は codegen が canonical / scanner gem は grammar reference | `cli/lib/lilac/directives/` ↔ `runtime/mruby-lilac-directives/mrblib/` | axis A は **ADR-0031 で覆し**(scanner canonical へ)、axis B (grammar SSOT) は継続 |
 | [0018](./0018-lilac-build-compiled-single-command.md) | `lilac build --target compiled` 単一コマンド deploy | `cli/lib/lilac/cli/builder.rb` + `compiled_runtime_resolver.rb` | 完了 (2026-05-20)、ADR-19 / ADR-25 で内部実装更新 |
 | [0019](./0019-codegen-positional-lil-ref.md) | Codegen positional `lilN`(`data-ref` 注入の廃止) | `cli/lib/lilac/cli/template_ast.rb` + `runtime/mruby-lilac/mrblib/lilac_ref.rb` | 完了 (2026-05-20) |
 | [0020](./0020-component-scope-rule-and-lilac-start.md) | Component scope rule の確定 と `Lilac.start` 自動化 | `cli/lib/lilac/cli/builder.rb` + `script_analyzer.rb` + `runtime/mruby-lilac/mrblib/lilac_registry.rb` | 完了 (2026-05-20) |
@@ -67,6 +67,7 @@ refinement** として位置付ける。
 | [0028](./0028-drop-npm-distribution-github-pages-cdn.md) | npm 配布を全廃、`lilac-full` を GitHub Pages から CDN 配信(ADR-25 完成) | `.github/workflows/release.yml` + `Makefile` + `pages/lilac-full/` | 着手 (2026-05-24)、初回 release tag 待ち |
 | [0029](./0029-data-component-data-use-split.md) | `<lilac-component>` 廃止、`data-component=` (定義) と `data-use=` (利用) で役割分離 | `runtime/mruby-lilac/mrblib/lilac_registry.rb` + `cli/lib/lilac/cli/build/builder.rb` + scaffold/examples/docs | 完了 (2026-05-25) |
 | [0030](./0030-bundle-delivery-via-lilac-bundle-link.md) | `c.delivery = :bundle` で `.lil` を 1 ファイルに集約、ページは `<link rel="lilac-bundle">` で参照 | `cli/lib/lilac/cli/build/bundle_asset_writer.rb` + `cli/lib/lilac/cli/build/page_compiler.rb` + `examples/7guis/public/boot.js` + `pages/lilac-full/index.js` | 完了 (2026-05-26) |
+| [0031](./0031-scanner-canonical-binding.md) | directive binding の canonical を scanner に統一(ADR-0017 axis A を覆す)、CLI codegen 層を削除 | `cli/lib/lilac/cli/build/template_ast.rb` + `component_scripts_assembler.rb` + `config.rb`(codegen.rb / form_extension.rb / value_codegen.rb / grammar_extra.rb 削除) | 完了 (2026-05-29、実機 perf scanner 277ms < codegen 324ms / 300 rows) |
 
 ## このドキュメントの位置付け
 
