@@ -31,14 +31,6 @@ class TestComponentName < Minitest::Test
     assert_raises(ArgumentError) { Lilac::CLI::ComponentName.new("foo---bar") }
   end
 
-  # ---- each_template_name ---------------------------------------
-
-  def test_each_template_name_uses_kebab_form
-    assert_equal "lil-each-counter-lil0", Lilac::CLI::ComponentName.new("counter").each_template_name("lil0")
-    assert_equal "lil-each-admin--user-card-lil3",
-                 Lilac::CLI::ComponentName.new("admin--user-card").each_template_name("lil3")
-  end
-
   # ---- value-object behaviour -----------------------------------
 
   def test_to_s_returns_the_kebab_form

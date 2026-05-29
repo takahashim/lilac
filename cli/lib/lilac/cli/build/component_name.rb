@@ -8,7 +8,6 @@ module Lilac
     #
     #   name = ComponentName.new("admin--user-card")
     #   name.ruby_class                 # => "Admin::UserCard"
-    #   name.each_template_name("lil0")   # => "lil-each-admin--user-card-lil0"
     #   name.to_s                       # => "admin--user-card"
     #
     # `--` separates namespace segments, `-` separates words within a
@@ -25,13 +24,6 @@ module Lilac
 
       def ruby_class
         @ruby_class
-      end
-
-      # Per-component synthetic template name for a data-each body.
-      # Builder injects the matching `<template data-template="...">`
-      # and the runtime resolves it via `bind_list ..., template: ...`.
-      def each_template_name(ref_id)
-        "lil-each-#{@kebab}-#{ref_id}"
       end
 
       def to_s

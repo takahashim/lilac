@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative "template_ast"
-require_relative "component_name"
 
 module Lilac
   module CLI
@@ -15,12 +14,9 @@ module Lilac
     # `PageCompiler` (per-page injection). Both read through `fetch`;
     # writes happen lazily on miss.
     class TemplateASTCache
-      # A template ready to be injected as `<template data-template="X">`
-      # into the page. Both user-defined named templates (from
-      # `<template data-template="...">` in `.lil` source) and synthetic
-      # data-each iteration bodies extracted by TemplateAST end up as
-      # this single shape — the page-injection logic doesn't need to
-      # know which side they came from.
+      # A user-defined named template (from `<template data-template="...">`
+      # in `.lil` source) ready to be injected as `<template
+      # data-template="X">` into the page.
       RenderedTemplate = Struct.new(:name, :html, keyword_init: true)
 
       def initialize
@@ -31,24 +27,15 @@ module Lilac
       #   :default_html        — concatenated body HTML of the default templates
       #   :default_directives  — Array<Directive> for top-level binding emission
       #   :default_refs_map    — Hash { ref_name => { line:, ... } } for lint
-      #   :named               — Array<RenderedTemplate> (user + synthetic)
+      #   :named               — Array<RenderedTemplate> (user-defined)
       #   :source_path         — Path to the `.lil` (or in-memory page)
-      #
-      # `data-each` iteration bodies extracted by TemplateAST are folded
-      # into `:named` as synthetic templates using
-      # `ComponentName#each_template_name` so they ride the same
-      # `<template data-template>` injection path as user-defined named
-      # templates and the runtime can resolve them via
-      # `bind_list ..., template: "lil-each-<component>-<ref>"`.
       def fetch(name, component)
-        @cache[name] ||= parse(name, component)
+        @cache[name] ||= parse(component)
       end
 
       private
 
-      def parse(name, component)
-        component_name = ComponentName.new(name)
-
+      def parse(component)
         default_results = component.default_templates.map do |t|
           TemplateAST.new(t.body, source_path: component.path).parse
         end
@@ -58,18 +45,11 @@ module Lilac
           RenderedTemplate.new(name: t.name, html: result.html)
         end
 
-        synthetic = default_results.flat_map(&:synthetic_templates).map do |st|
-          RenderedTemplate.new(
-            name: component_name.each_template_name(st.ref_id),
-            html: st.html
-          )
-        end
-
         {
           default_html: default_results.map(&:html).join.strip,
           default_directives: default_results.flat_map(&:directives),
           default_refs_map: default_results.map(&:refs_map).reduce({}, :merge),
-          named: named + synthetic,
+          named: named,
           source_path: component.path
         }
       end

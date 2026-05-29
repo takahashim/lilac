@@ -210,8 +210,8 @@ async function loadCompiled(createVM, distDir, packageMrbPaths = []) {
   if (!mrbFile) throw new Error(`no .mrb in ${distDir}/dist`);
   const bytecode = new Uint8Array(await readFile(join(distDir, "dist", mrbFile)));
   const vm = await createVM({ wasm: `file://${COMPILED_WASM}` });
-  // Pre-load package bytecode before user code so `register_directive`
-  // calls / class definitions are ready before component mount.
+  // Pre-load package bytecode before user code so package handler
+  // registrations / class definitions are ready before component mount.
   // Mirrors the production boot scripts the lilac-cli emits.
   for (const pkgPath of packageMrbPaths) {
     const pkgBytes = new Uint8Array(await readFile(pkgPath));

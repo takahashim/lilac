@@ -24,22 +24,15 @@ module Lilac
     # round-tripped through Nokogiri::HTML5.
     #
     # Directive values are NOT validated against the value grammar here
-    # — that lives in the per-directive Codegen emitters. Directive
-    # attributes are left in the output HTML so `data-component` /
-    # `data-ref` continue to flow through to the runtime.
+    # — directive attributes are left in the output HTML so the runtime
+    # scanner sees `data-component` / `data-ref` and the directives it
+    # binds at mount time.
     class TemplateAST
       # Subclass of BuildError so callers can `rescue BuildError` to
       # catch every build-time failure uniformly, regardless of source.
       class Error < BuildError; end
 
-      # One iteration body extracted from a `data-each` element. The
-      # Builder later turns each entry into a
-      # `<template data-template="lil-each-<component>-<ref>">` injected
-      # before `</body>`, which the runtime `bind_list ..., template: ...`
-      # clones per iteration item.
-      SyntheticBody = Struct.new(:ref_id, :html, keyword_init: true)
-
-      Result = Struct.new(:html, :directives, :refs_map, :synthetic_templates, keyword_init: true)
+      Result = Struct.new(:html, :directives, :refs_map, keyword_init: true)
 
       # Maps an attribute-name regex to its directive kind. Order matters:
       # the more specific X-family patterns (`data-on-X` etc.) must be
@@ -48,34 +41,6 @@ module Lilac
       #
       # `class_` trailing underscore avoids shadowing Ruby's reserved
       # `class` keyword in pattern-match contexts; symbol-side only.
-      # Package extension registry. Entries shaped like DIRECTIVE_PATTERNS
-      # rows but registered at runtime by feature gems (form, future).
-      # Built-in DIRECTIVE_PATTERNS is consulted first so extensions
-      # cannot shadow core directives.
-      EXTENSIONS = []
-
-      # Per-element side-effect callbacks fired during walk. Used by
-      # form to track `<form>` ancestor scopes (so data-field /
-      # data-button know which form they belong to). Each entry is
-      # { tag:, on_enter:, on_exit: } — both callbacks are optional and
-      # receive (element, scope_hash) where scope_hash is a mutable
-      # per-walk Hash extensions can stash state in.
-      ELEMENT_HOOKS = []
-
-      class << self
-        def register_directive(pattern:, kind:, captures_name: false)
-          EXTENSIONS << [pattern, kind, captures_name]
-        end
-
-        def register_element_hook(tag:, on_enter: nil, on_exit: nil)
-          ELEMENT_HOOKS << { tag: tag.to_s.downcase, on_enter: on_enter, on_exit: on_exit }
-        end
-
-        def element_hooks_for(tag)
-          tag_lower = tag.to_s.downcase
-          ELEMENT_HOOKS.select { |h| h[:tag] == tag_lower }
-        end
-      end
 
       DIRECTIVE_PATTERNS = [
         [/\Adata-text\z/,        :text,        false],
@@ -172,21 +137,19 @@ module Lilac
         fragment = Nokogiri::HTML5.fragment(@body_html)
         directives = []
         refs_map = {}
-        synthetic_templates = []
         # `at_root: true` for the outermost walk — when the first
         # element child of the fragment carries `data-component`, it's
         # the component's own root (this AST run IS that component),
         # so its directives + body belong to this component. Any deeper
         # `data-component` element is a different component; we treat
         # those subtrees opaquely so their directives don't leak into
-        # the current component's bind_template_hook.
-        walk(fragment, directives, refs_map, synthetic_templates, WalkScopes.new, at_root: true)
+        # the current component's scope.
+        walk(fragment, directives, refs_map, WalkScopes.new, at_root: true)
 
         Result.new(
           html: fragment.to_html,
           directives: directives,
           refs_map: refs_map,
-          synthetic_templates: synthetic_templates,
         )
       end
 
@@ -204,14 +167,7 @@ module Lilac
       #   - form_scopes: form name Symbols opened by `<form>` elements,
       #     used to resolve `data-field` / `data-button` to their enclosing
       #     form (mirrors runtime `Scanner#resolve_form_for`).
-      #
-      # `synthetic_templates` accumulates extracted iteration bodies in
-      # post-order: when we leave a `data-each` element, its children's
-      # serialized HTML is captured and the children are unlinked from
-      # the main fragment. Post-order guarantees that nested iterations
-      # have already been extracted (with their children also cleared)
-      # before the outer extraction snapshots its body.
-      def walk(node, directives, refs_map, synthetic_templates, scopes, at_root: false)
+      def walk(node, directives, refs_map, scopes, at_root: false)
         # `to_a` so the iteration is stable even when `unlink` mutates
         # the parent's child list during the extraction step below.
         node.element_children.to_a.each do |elem|
@@ -309,13 +265,11 @@ module Lilac
             # scanner-canonical: keep the data-each row IN-PLACE. The
             # runtime scanner's `dispatch_each` snapshots the live
             # innerHTML, empties the container, and clones per item — so
-            # the builder must NOT extract the row into a synthetic
-            # `<template data-template>` (that path was codegen-only and
-            # left the container empty, which the scanner can't recover).
-            # We still recurse to collect directives for lint scoping.
-            walk(elem, directives, refs_map, synthetic_templates, child_scopes.push_each(ref_id))
+            # the builder must NOT extract the row. We still recurse to
+            # collect directives for lint scoping.
+            walk(elem, directives, refs_map, child_scopes.push_each(ref_id))
           else
-            walk(elem, directives, refs_map, synthetic_templates, child_scopes)
+            walk(elem, directives, refs_map, child_scopes)
           end
         end
       end
@@ -354,16 +308,6 @@ module Lilac
         end
       end
 
-      # Capture the data-each element's body HTML (text + element
-      # children) into a synthetic template entry, then strip the body
-      # from the main fragment so the dist HTML renders an empty
-      # container that bind_list populates per item at runtime.
-      def extract_each_body(elem, ref_id, synthetic_templates)
-        body_html = elem.children.map(&:to_html).join
-        synthetic_templates << SyntheticBody.new(ref_id: ref_id, html: body_html)
-        elem.children.unlink
-      end
-
       # HTML attribute names are case-insensitive — normalise to
       # lowercase keys so lookups like `attrs["type"]` work regardless
       # of how the user typed the attribute name in the source.
@@ -374,14 +318,11 @@ module Lilac
       end
 
       # Returns Array<[kind, name, value]> for every directive on `elem`.
-      # `name` is nil for non-X-family directives. Built-in patterns are
-      # checked first, then extension-registered ones — extensions never
-      # shadow core directives.
+      # `name` is nil for non-X-family directives.
       def extract_directives(elem)
         result = []
         elem.attributes.each do |attr_name, attr|
-          match_row = DIRECTIVE_PATTERNS.find { |pattern, _, _| pattern.match(attr_name) } ||
-                      EXTENSIONS.find { |pattern, _, _| pattern.match(attr_name) }
+          match_row = DIRECTIVE_PATTERNS.find { |pattern, _, _| pattern.match(attr_name) }
           next unless match_row
 
           pattern, kind, captures_name = match_row

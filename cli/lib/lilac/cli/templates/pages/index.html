@@ -27,7 +27,7 @@
     // If `lilac.config.rb` declares Lilac package gems via Bundler,
     // `lilac build` stages them under `dist/packages/` and writes a
     // `lilac.packages.json` manifest. Load each before evaluating the
-    // page's text/ruby scripts so `register_directive` calls / class
+    // page's text/ruby scripts so package handler registrations / class
     // definitions are ready before component mount (decisions §25/§26).
     try {
       const res = await fetch("/lilac.packages.json");
