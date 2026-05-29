@@ -2,10 +2,10 @@
 
 require "test_helper"
 
-# Phase C: TemplateAST handling of form-related directives —
-# <form> synthesis (bare form gets a :form directive), form scope
-# stack tracking (data-field / data-button carry their enclosing form's
-# name), form-control discovery + ref allocation for data-field containers.
+# TemplateAST collection of form-related directives. Scanner-canonical:
+# the CLI only collects :form / :field / :button records (for the lint
+# layer) — the runtime form gem resolves scope + binds controls at mount,
+# so the CLI no longer tracks form scope or allocates input refs.
 class TestTemplateASTForm < Minitest::Test
   def parse(html)
     Lilac::CLI::TemplateAST.new(html).parse
@@ -22,79 +22,39 @@ class TestTemplateASTForm < Minitest::Test
     f = find(result.directives, :form)
     refute_nil f, "expected a :form directive on the bare <form>"
     assert_equal "form", f.element_tag
-    assert_equal "", f.value  # synthetic marker for bare form
-    assert_equal :default, f.form_scope
+    assert_equal "", f.value # synthetic marker for bare form
   end
 
   def test_named_form_carries_data_form_value
     result = parse(%(<form data-form="signup"><input data-field="email" type="email"></form>))
     f = find(result.directives, :form)
     assert_equal "signup", f.value
-    assert_equal :signup, f.form_scope
   end
 
-  # ---- form_scope on data-field / data-button ---------------------
+  # ---- data-field / data-button collection ------------------------
 
-  def test_data_field_inherits_default_scope_from_bare_form
+  def test_data_field_collected_with_its_value
     result = parse(%(<form><div data-field="email"><input></div></form>))
     field = find(result.directives, :field)
-    assert_equal :default, field.form_scope
+    refute_nil field
+    assert_equal "email", field.value
   end
 
-  def test_data_field_inherits_named_scope_from_form
-    result = parse(%(<form data-form="signup"><div data-field="email"><input></div></form>))
-    field = find(result.directives, :field)
-    assert_equal :signup, field.form_scope
-  end
-
-  def test_data_button_inherits_form_scope
+  def test_data_button_collected_with_its_value
     result = parse(%(<form data-form="login"><button data-button="submit">Login</button></form>))
     button = find(result.directives, :button)
-    assert_equal :login, button.form_scope
+    refute_nil button
+    assert_equal "submit", button.value
   end
 
-  def test_data_field_without_form_ancestor_defaults_to_default_scope
-    # No enclosing <form> — scope still resolves to :default (component's
-    # implicit default form).
+  def test_data_field_without_form_ancestor_still_collected
     result = parse(%(<div data-field="query"><input></div>))
     field = find(result.directives, :field)
-    assert_equal :default, field.form_scope
+    refute_nil field
+    assert_equal "query", field.value
   end
 
-  # ---- field_input_ref allocation ----------------------------------
-
-  def test_field_on_container_div_allocates_separate_input_ref
-    result = parse(%(<form><div data-field="email"><input></div></form>))
-    field = find(result.directives, :field)
-    refute_nil field.field_input_ref
-    refute_equal field.ref_id, field.field_input_ref, "input should have its own ref"
-    # The HTML should now have a synthetic data-ref on the input.
-    assert_match(/<input[^>]*data-ref="#{field.field_input_ref}"/, result.html)
-  end
-
-  def test_field_on_input_directly_uses_own_ref
-    result = parse(%(<form><input data-field="email" type="email"></form>))
-    field = find(result.directives, :field)
-    assert_equal field.ref_id, field.field_input_ref,
-                 "data-field on <input> should reuse the input's own ref"
-  end
-
-  def test_field_supports_textarea_and_select_form_controls
-    result = parse(%(<form><div data-field="bio"><textarea></textarea></div></form>))
-    field = find(result.directives, :field)
-    refute_nil field.field_input_ref
-
-    result = parse(%(<form><div data-field="region"><select><option>A</option></select></div></form>))
-    field = find(result.directives, :field)
-    refute_nil field.field_input_ref
-  end
-
-  # ---- sibling form scopes (form stack pops correctly) -----------
-
-  def test_sibling_forms_assign_distinct_scopes
-    # HTML5 disallows nested <form>, so the realistic multi-scope case
-    # is sibling forms within the same component. Each field carries
-    # its enclosing form's scope name.
+  def test_sibling_forms_collect_independent_field_directives
     html = <<~HTML
       <div>
         <form data-form="login">
@@ -106,9 +66,7 @@ class TestTemplateASTForm < Minitest::Test
       </div>
     HTML
     result = parse(html)
-    fields = result.directives.select { |d| d.kind == :field }
-    by_value = fields.each_with_object({}) { |f, h| h[f.value] = f.form_scope }
-    assert_equal :login,  by_value["username"]
-    assert_equal :signup, by_value["email"]
+    values = result.directives.select { |d| d.kind == :field }.map(&:value).sort
+    assert_equal %w[email username], values
   end
 end

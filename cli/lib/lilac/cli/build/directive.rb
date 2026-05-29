@@ -13,42 +13,22 @@ module Lilac
     # non-X-family directives `name` is `nil`.
     #
     # `value` is the raw attribute value string (e.g. `"@count"` /
-    # `"increment"` / `"{ active: @s }"`). Grammar validation happens
-    # per-directive at codegen time; TemplateAST only collects the raw
-    # string.
+    # `"increment"` / `"{ active: @s }"`). TemplateAST only collects the
+    # raw string; grammar validation lives in the lint layer.
     #
     # `ref_id` is the synthetic or explicit ref name assigned by
-    # `TemplateAST` so codegen can address the element via
-    # `refs.<ref_id>` (or `t.refs.<ref_id>` inside a data-each block).
+    # `TemplateAST`, used by the lint layer to group directives sharing
+    # an element and to detect duplicate `data-ref` declarations.
     #
     # `line` is the source line in the template body (1-based,
     # Nokogiri's `node.line`), used for error reporting.
     #
     # `element_tag` is the HTML element name (e.g. "div", "button"),
-    # consumed by Lilac::Directives::Lints to enforce applicability rules
-    # (e.g. `data-value` requires a form control).
-    # `scope_id` is the `ref_id` of the enclosing `data-each` element,
-    # or `nil` for directives at the component's top level. Codegen
-    # uses it to route the directive into either `bind_template_hook`
-    # (top-level) or `bind_template_hook__each_<ref_id>` (iteration
-    # body), and to address refs as `refs.X` vs `t.refs.X`.
+    # consumed by Lilac::Directives::Lints to enforce applicability rules.
     #
-    # `element_attrs` is the snapshot of all HTML attributes on the
-    # source element, keyed by lowercase name. Shared by reference
-    # across every Directive on the same element so the cost is one
-    # Hash per element rather than per directive. Used by
-    # Lilac::Directives::Lints for checks that need attributes beyond
-    # the tag name (e.g. `data-value` requires that an `<input>`'s
-    # `type` be text-style).
-    # Form-directive-specific fields (filled only for :form / :field /
-    # :button kinds, nil otherwise):
-    # - `form_scope`: Symbol name of the enclosing <form>'s scope
-    #   (data-form attr value, or :default for bare <form>, or :default
-    #   when no <form> ancestor exists in the component subtree).
-    # - `field_input_ref`: for :field kind, the ref_id of the input /
-    #   textarea / select element bound to the field. Equals `ref_id` when
-    #   the data-field is on the form control itself; otherwise points at
-    #   a separately-allocated ref on the inner control.
+    # `scope_id` is the `ref_id` of the enclosing `data-each` element,
+    # or `nil` for directives at the component's top level. The lint
+    # layer uses it to scope duplicate-ref detection per iteration body.
     Directive = Struct.new(
       :kind,
       :name,
@@ -57,9 +37,6 @@ module Lilac
       :line,
       :element_tag,
       :scope_id,
-      :element_attrs,
-      :form_scope,
-      :field_input_ref,
       keyword_init: true,
     ) do
       # Pair the directive's line with the source file (which the

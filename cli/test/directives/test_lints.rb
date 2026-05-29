@@ -3,11 +3,10 @@
 require "test_helper"
 
 class TestLints < Minitest::Test
-  def dir(kind, ref_id: "lil0", line: 1, tag: "div", value: "@x", name: nil, scope_id: nil, element_attrs: nil)
+  def dir(kind, ref_id: "lil0", line: 1, tag: "div", value: "@x", name: nil, scope_id: nil)
     Lilac::CLI::Directive.new(
       kind: kind, name: name, value: value, ref_id: ref_id,
       line: line, element_tag: tag, scope_id: scope_id,
-      element_attrs: element_attrs,
     )
   end
 
