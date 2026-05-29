@@ -598,3 +598,93 @@ Phase 2 (案 A) — 需要次第:
 未判断 (proposal 段階)。本実装は router / async package 化が落ち着いた
 後に検討。**Phase 1 (案 B) は実装規模が小さく、独立した価値があるため、
 package が複数増えた段階で着手するのが妥当**。
+
+## Dommy への JS 実行統合 — JS 依存テストの wasmtime-rb 移行
+
+### 動機
+
+Lilac のテストは現在 2 つの host で走る:
+
+| runner | host | DOM | 役割 |
+|---|---|---|---|
+| `make test-wasm-rb` | wasmtime-rb | **Dommy**(Ruby 製 DOM polyfill) | 速い内ループ。`spec_runner.rb` の `PURE_SPECS` |
+| `make test-node` | Node/V8 | happy-dom | CI。V8 でしか出ない bug(real JS callback / GC timing) |
+
+調査で判明した現状(2026-05-29 時点):
+
+- `runtime/*/wasm_spec/` の **71 ファイルは全て両 runner で走る**(PURE_SPECS = 全ファイル、除外ゼロ)。「Dommy が JS 不足で動かせない wasm_spec」は存在しない。
+- Dommy は JS 非実行のため、async 系を **Ruby スタブで代替**している:`spec_runner.rb` の `drain_async!`、MutationObserver / Promise / setTimeout の擬似進行。`Lilac#flush_async!`(`runtime/mruby-lilac/mrblib/lilac.rb:95`)の `JS.eval_javascript("new Promise(r => setTimeout(r, N)).await")` もスタブ排水される。
+- **Node 専用**なのは wasm_spec ではなく、JS ホスト統合テスト 2 本:
+  - `test/parity-runner.mjs`(:full×:compiled DOM 一致)
+  - `test/bundle-runtime.mjs`(ADR-0030 の boot 時 `fetch`→`<template>` 注入→mount)
+
+  これらは mruby-wasm-js JS ブリッジ(`createVM`)+ `fetch` + `DOMParser` を必要とするため wasmtime-rb 経路に存在しない。
+
+`dommy-js-quickjs`(Dommy に quickjs ベースの JS 実行を統合)が入ると、この棲み分けを縮められる。
+
+### 提案
+
+2 フェーズで JS 依存テストを wasmtime-rb 経路に寄せる。
+
+**Phase 1 — async 忠実度の引き上げ(スタブ撤去)**
+Dommy の async を Ruby スタブから **本物の quickjs イベントループ**に置換:
+- `JS.eval_javascript` が実 JS を評価(`flush_async!` の Promise/setTimeout 排水が本物に)
+- MutationObserver コールバックが real microtask で発火(data-each 行挿入・dynamic mount の検出が V8 と同じ順序)
+- `spec_runner.rb` の `drain_async!` を「real event-loop drain」に縮退
+
+効果:既存 71 spec が **より忠実**に走り、V8 でしか出なかった JS callback / microtask 順序 bug を Dommy でも捕捉。脆い手動 drain ロジックを削減。
+
+**Phase 2 — JS ホスト統合テストの Dommy 版**
+Dommy+quickjs が `fetch`(ローカル file 解決)と `DOMParser` を提供すれば、parity / bundle の **契約を Ruby spec として再表現**できる:
+- bundle boot(`<link rel="lilac-bundle">` → fetch → template 注入 → mount/react)を wasmtime-rb 上で実行 → ADR-0030 の runtime テストが Node 非依存に
+- :full×:compiled DOM 一致(parity)も同様に Dommy 化可能
+
+注意:現行 `.mjs` ファイルがそのまま動くのではなく、JS ブリッジ(`createVM`)経由のドライブ部を wasmtime-rb ホスト向けに書き直す(wasm のホストは wasmtime-rb、DOM は Dommy、JS 評価は quickjs)。
+
+### 利点
+
+- **単一 runner で大半をカバー** — Node なし CI でも bundle/parity 契約を回せる
+- **スタブ保守コスト減** — `drain_async!` 等の擬似進行を実イベントループで置換
+- **忠実度向上** — async/MutationObserver が V8 相当の挙動に
+- 内ループ(`make test-wasm-rb`)で JS 統合テストまで回せる
+
+### 現状の workaround
+
+現状維持(Node 経路を保持)。bundle/parity は `make test-node` 依存の
+ままにし、async は Ruby スタブで近似する。動作はするが、(a) JS 統合契約が
+Node 必須、(b) スタブと実 JS の乖離リスクが残る。
+
+### 実装的課題
+
+- **Dommy 側**:DOM mutation → quickjs microtask queue の配線、`fetch`
+  (file/ローカル)・`DOMParser` の提供、timer(setTimeout/rAF)を quickjs
+  イベントループに統合
+- **spec_runner.rb**:`drain_async!` を real-loop drain に置換、JS 統合 spec
+  用の DOM/fetch セットアップ
+- **設計判断**:quickjs を mruby-wasm-js ブリッジ経由で通すか、Dommy 独自
+  interop に閉じるか(前者ならブリッジ bug も Dommy で踏める)
+- **テスト移植**:`bundle-runtime.mjs` / `parity-runner.mjs` の契約を Ruby
+  spec 化(`fetch`/`DOMParser` 前提部分の置換)
+
+### 残る Node 経路の価値(JS 実行でも埋まらない差分)
+
+- **V8 固有 GC**(`FinalizationRegistry` timing)— quickjs ≠ V8。GC 依存の
+  挙動確認用に最小限の Node smoke は残すのが妥当
+- **mruby-wasm-js JS ブリッジ自体**の bug — Dommy が wasmtime-rb interop を
+  使う限り Node でしか踏まない(quickjs をブリッジ経由にすれば別)
+
+### 関連する確定判断
+
+- [ADR-0030](./adr/0030-bundle-delivery-via-lilac-bundle-link.md) — bundle boot
+  の runtime 契約。Phase 2 でこれを Dommy 化する対象
+- [ADR-0029](./adr/0029-data-component-data-use-split.md) — data-use 展開。
+  runtime spec は既に Dommy/Node 両方で green(`test_component_data_use.rb`)
+- `Makefile` の `test-node` コメント(V8 固有 bug 捕捉の根拠)— 本提案が
+  縮める対象だが、GC 差分のため完全置換はしない
+
+### ステータス
+
+実装プロトタイプ中(`dommy` + `dommy-js-quickjs` で JS 実行を整備中)。
+本節は「JS 実行が入った後にどのテストを wasmtime-rb 経路へ寄せるか」の
+計画。Phase 1(async 忠実度)は既存 spec の置換のみで影響範囲が局所的、
+Phase 2(統合テスト移植)は fetch/DOMParser 提供が前提なので Phase 1 の後。
