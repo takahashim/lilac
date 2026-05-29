@@ -47,8 +47,7 @@ module Lilac
       def initialize(context)
         @ctx = context
         @scripts_assembler = ComponentScriptsAssembler.new(
-          template_cache: context.template_cache,
-          codegen: context.codegen
+          template_cache: context.template_cache
         )
       end
 
@@ -276,12 +275,13 @@ module Lilac
           @ctx.build_linter.record_inline_signature(name, body_html, page_path)
           used_inline << name
 
-          # Empty out `data-each` containers in the dist DOM. TemplateAST
-          # already moves their bodies into synthetic `<template
-          # data-template>` blocks for `bind_list` to clone at runtime;
-          # leaving the static row in the live container would render it
-          # as a phantom alongside the dynamically-instantiated ones.
-          elem.css('[data-each]').each { |each_el| each_el.children.unlink }
+          # scanner-canonical: leave `data-each` rows IN-PLACE. The
+          # runtime scanner's `dispatch_each` snapshots the live
+          # innerHTML, empties the container, then clones per item — so
+          # the brief static row is replaced at mount (no phantom), the
+          # same way the no-build path works. (Previously we emptied the
+          # container here because codegen extracted the row into a
+          # synthetic `<template data-template>`.)
         end
 
         [synthesized, doc.to_html, used_inline, synthesized_names]

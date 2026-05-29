@@ -168,7 +168,6 @@ module Lilac
               components: components,
               template_cache: template_cache,
               target: @target,
-              codegen: @codegen,
               output_dir: @output_dir,
               bytecode_builder: bytecode_builder
             ).write!

@@ -714,29 +714,12 @@ class TestBuilder < Minitest::Test
 
   # ---- codegen flag --------------------------------------------------
 
-  def test_codegen_auto_emits_bind_template_hook
-    write_widget "counter", <<~GNT
-      <template>
-        <div data-component="counter">
-          <span data-text="@count">0</span>
-        </div>
-      </template>
-      <script type="text/ruby">
-        class Counter < Lilac::Component
-          def setup; @count = signal(0); end
-        end
-      </script>
-    GNT
-    write_page "index", '<html><body><div data-use="counter"></div></body></html>'
-
-    build!(codegen: :auto)
-    out = read_output("index.html")
-    assert_includes out, "bind_template_hook",
-                    "codegen :auto should emit the bind_template_hook override"
-    assert_includes out, "module Counter",
-                    "codegen :auto should declare the Lilac::Bindings::Counter module"
-  end
-
+  # NOTE: scanner-canonical — the builder no longer emits codegen
+  # bindings; `bind_template_hook` / `Lilac::Bindings::<Class>` are never
+  # generated (the runtime scanner wires directives at mount). The former
+  # `test_codegen_auto_emits_bind_template_hook` was removed because that
+  # behavior no longer exists; `test_codegen_off_skips_bind_template_hook`
+  # below documents the (now-universal) no-codegen output.
   def test_codegen_off_skips_bind_template_hook
     write_widget "counter", <<~GNT
       <template>

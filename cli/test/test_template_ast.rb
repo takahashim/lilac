@@ -177,20 +177,20 @@ class TestTemplateAST < Minitest::Test
     assert_equal each_dir.ref_id, text_dir.scope_id, "data-text under data-each scoped to its ref_id"
   end
 
-  def test_data_each_body_is_extracted_into_synthetic_template
+  def test_data_each_body_kept_in_place_no_synthetic_template
     html = %(<ul data-each="@items"><li><span data-text="label"></span></li></ul>)
     result = parse(html)
 
-    assert_equal 1, result.synthetic_templates.length
-    st = result.synthetic_templates.first
+    # scanner-canonical: the data-each row is NOT extracted. The runtime
+    # scanner snapshots the live innerHTML and clones per item, so no
+    # synthetic template is produced and the row stays in the main HTML.
+    assert_empty result.synthetic_templates
     each_dir = result.directives.find { |d| d.kind == :each }
-    assert_equal each_dir.ref_id, st.ref_id
-    assert_includes st.html, "<li>"
-    assert_includes st.html, %(data-text="label")
-    # Outer container survives, but the iteration body is stripped from
-    # the main HTML — the runtime bind_list repopulates per item.
+    refute_nil each_dir
+    # The iteration body survives in-place for the runtime to snapshot.
     assert_includes result.html, "<ul"
-    refute_match(/<li/, result.html, "iteration body should be stripped from main HTML")
+    assert_match(/<li/, result.html, "iteration body should stay in-place")
+    assert_includes result.html, %(data-text="label")
   end
 
   # ---- data-component detection (collision check only) ----------
@@ -219,7 +219,7 @@ class TestTemplateAST < Minitest::Test
     assert_equal 1, refs.length
   end
 
-  def test_nested_data_each_produces_two_synthetic_templates_with_independent_scopes
+  def test_nested_data_each_collects_independent_scopes_no_synthetic_templates
     html = <<~HTML
       <ul data-each="@categories" data-key="id">
         <li>
@@ -237,8 +237,9 @@ class TestTemplateAST < Minitest::Test
     assert_nil outer.scope_id
     assert_equal outer.ref_id, inner.scope_id
 
-    # Both data-each bodies extracted.
-    assert_equal 2, result.synthetic_templates.length
+    # scanner-canonical: no extraction → no synthetic templates. The
+    # nested scope_id wiring is still collected for lint.
+    assert_empty result.synthetic_templates
 
     text_dirs = result.directives.select { |d| d.kind == :text }
     h3_dir = text_dirs.find { |d| d.value == "name" }
@@ -246,11 +247,9 @@ class TestTemplateAST < Minitest::Test
     assert_equal outer.ref_id, h3_dir.scope_id
     assert_equal inner.ref_id, li_dir.scope_id
 
-    # Outer synthetic template body includes the inner <ul> (now empty)
-    # but not the inner <li> (extracted into its own template).
-    outer_st = result.synthetic_templates.find { |st| st.ref_id == outer.ref_id }
-    assert_includes outer_st.html, "<ul"
-    refute_includes outer_st.html, "data-text=\"title\""
+    # Both data-each bodies stay in-place in the main HTML.
+    assert_includes result.html, %(data-text="name")
+    assert_includes result.html, %(data-text="title")
   end
 
   # ---- data-ref duplicate detection ------------------------------

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'fileutils'
-require_relative 'codegen'
 require_relative 'html_emitter'
 
 module Lilac
@@ -34,12 +33,11 @@ module Lilac
       BUNDLE_FILENAME = 'lilac.bundle.html'
       BUNDLE_URL = "/#{BUNDLE_FILENAME}"
 
-      def initialize(components:, template_cache:, target:, codegen:,
+      def initialize(components:, template_cache:, target:,
                      output_dir:, bytecode_builder:)
         @components = components
         @template_cache = template_cache
         @target = target
-        @codegen = codegen
         @output_dir = output_dir
         @bytecode_builder = bytecode_builder
       end
@@ -82,36 +80,20 @@ module Lilac
             parts << HtmlEmitter.render_named_template(nt.name, nt.html)
           end
 
-          # Script (codegen + user code) — skipped entirely when no
-          # user_script exists since there's nothing to wire.
+          # Scanner-canonical: emit the user script as-is (no codegen
+          # bindings). Skipped entirely when no user_script exists.
           user_script = comp.script.strip
           next if user_script.empty?
 
-          full_script = [generated_bindings_for(name, parsed), user_script].reject(&:empty?).join("\n\n")
-
           if @target == :compiled
             # Defer: scripts get aggregated into one .mrb below.
-            compiled_scripts << full_script
+            compiled_scripts << user_script
           else
-            parts << HtmlEmitter.render_script(full_script)
+            parts << HtmlEmitter.render_script(user_script)
           end
         end
 
         [parts, compiled_scripts]
-      end
-
-      # Pre-compiled `Lilac::Bindings::<Class>` module source for one
-      # component, or `''` when codegen is disabled (runtime scanner
-      # mode for parity testing).
-      def generated_bindings_for(name, parsed)
-        return '' if @codegen == :off
-
-        Codegen.generate(
-          component_name: name,
-          directives: parsed[:default_directives],
-          source_path: parsed[:source_path],
-          emit_include: false
-        ).strip
       end
 
       def write_html_file!(parts)

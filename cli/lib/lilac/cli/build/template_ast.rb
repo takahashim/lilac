@@ -306,8 +306,14 @@ module Lilac
           child_scopes = child_scopes.push_form(current_form_scope) if is_form_elem
 
           if has_each
+            # scanner-canonical: keep the data-each row IN-PLACE. The
+            # runtime scanner's `dispatch_each` snapshots the live
+            # innerHTML, empties the container, and clones per item — so
+            # the builder must NOT extract the row into a synthetic
+            # `<template data-template>` (that path was codegen-only and
+            # left the container empty, which the scanner can't recover).
+            # We still recurse to collect directives for lint scoping.
             walk(elem, directives, refs_map, synthetic_templates, child_scopes.push_each(ref_id))
-            extract_each_body(elem, ref_id, synthetic_templates)
           else
             walk(elem, directives, refs_map, synthetic_templates, child_scopes)
           end

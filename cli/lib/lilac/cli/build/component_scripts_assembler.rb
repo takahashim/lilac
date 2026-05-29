@@ -1,26 +1,25 @@
 # frozen_string_literal: true
 
-require_relative 'codegen'
 require_relative 'component_name'
 require_relative '../lint/cross_ref_linter'
 
 module Lilac
   module CLI
     # Per-page assembly of the Ruby source one bundle script contains:
-    # for every component used on the page, the pre-compiled
-    # `Lilac::Bindings::<Class>` module (from `Codegen.generate`) joined
-    # to the user-authored script body. Runs `CrossRefLinter` ahead of
-    # codegen so any signal/method mismatch surfaces as a build error
-    # before the bytecode pass.
+    # the user-authored `<script>` body of every component used on the
+    # page. Binding is scanner-canonical (the runtime scanner wires
+    # `data-*` at mount), so no `Lilac::Bindings::<Class>` codegen is
+    # emitted here — this class only runs `CrossRefLinter` (to surface
+    # signal/method mismatches as build errors) and returns the user
+    # script unchanged.
     #
     # Used only by `PageCompiler` (per-page injection). The :bundle
     # delivery writer takes a leaner path through `BundleAssetWriter`
     # because the bundle file gathers ALL components rather than the
     # "used on this page" subset, and skips the lint pass entirely.
     class ComponentScriptsAssembler
-      def initialize(template_cache:, codegen:)
+      def initialize(template_cache:)
         @template_cache = template_cache
-        @codegen = codegen
       end
 
       # Returns `Array<String>` — one Ruby source chunk per component
@@ -50,19 +49,15 @@ module Lilac
 
         run_lint!(name, parsed, lint_script)
 
-        # Generated FIRST so that `Lilac::Bindings::<Class>` is
-        # defined before the user script's `Lilac.start` mounts
-        # components and calls `bind_template_hook`. The component
-        # base's `lookup_codegen_bindings` resolves and includes the
-        # module on demand at that point.
-        [generate_bindings(name, parsed), user_script].reject(&:empty?).join("\n\n")
+        # Scanner-canonical: no codegen module is emitted. The user
+        # script is returned as-is; the runtime scanner wires the
+        # component's `data-*` directives at mount.
+        user_script
       end
 
-      # Cross-reference lint runs before codegen so any warnings
-      # appear ahead of generated source in build output, matching
-      # the user's mental order ("first the diagnostics, then the
-      # result"). Errors raise — warnings go to stderr and the build
-      # carries on inside CrossRefLinter.
+      # Cross-reference lint surfaces signal/method mismatches as build
+      # errors before the bytecode pass. Errors raise — warnings go to
+      # stderr and the build carries on inside CrossRefLinter.
       def run_lint!(name, parsed, lint_script)
         result = CrossRefLinter.lint(
           script_text: lint_script,
@@ -75,24 +70,6 @@ module Lilac
 
         raise Builder::Error,
               "build failed: #{result.errors} lint error(s) in template; see warnings above."
-      end
-
-      def generate_bindings(name, parsed)
-        # Runtime scanner mode (codegen: :off) — leave directive
-        # interpretation to the runtime at mount time. Both targets
-        # otherwise rely on Component#bind_template_hook to look up
-        # `Lilac::Bindings::<Class>` by name; the explicit
-        # `<Class>.include(...)` line is dropped because it would
-        # either NameError (codegen runs before the class def) or
-        # run too late (after the user's `Lilac.start`).
-        return '' if @codegen == :off
-
-        Codegen.generate(
-          component_name: name,
-          directives: parsed[:default_directives],
-          source_path: parsed[:source_path],
-          emit_include: false
-        ).strip
       end
     end
   end
