@@ -93,7 +93,7 @@ jobs:
         working-directory: lilac
         env:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
-        run: make lilac-full lilac-compiled
+        run: make lilac-full lilac-compiled mrbc-host
 
       - name: Run wasm_spec (Ruby host)
         working-directory: lilac
