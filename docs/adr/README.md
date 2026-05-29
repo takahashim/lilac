@@ -68,6 +68,7 @@ refinement** として位置付ける。
 | [0029](./0029-data-component-data-use-split.md) | `<lilac-component>` 廃止、`data-component=` (定義) と `data-use=` (利用) で役割分離 | `runtime/mruby-lilac/mrblib/lilac_registry.rb` + `cli/lib/lilac/cli/build/builder.rb` + scaffold/examples/docs | 完了 (2026-05-25) |
 | [0030](./0030-bundle-delivery-via-lilac-bundle-link.md) | `c.delivery = :bundle` で `.lil` を 1 ファイルに集約、ページは `<link rel="lilac-bundle">` で参照 | `cli/lib/lilac/cli/build/bundle_asset_writer.rb` + `cli/lib/lilac/cli/build/page_compiler.rb` + `examples/7guis/public/boot.js` + `pages/lilac-full/index.js` | 完了 (2026-05-26) |
 | [0031](./0031-scanner-canonical-binding.md) | directive binding の canonical を scanner に統一(ADR-0017 axis A を覆す)、CLI codegen 層を削除 | `cli/lib/lilac/cli/build/template_ast.rb` + `component_scripts_assembler.rb` + `config.rb`(codegen.rb / form_extension.rb / value_codegen.rb / grammar_extra.rb 削除) | 完了 (2026-05-29、実機 perf scanner 277ms < codegen 324ms / 300 rows) |
+| [0032](./0032-lilac-wasm-bin-gem.md) | wasm 群(full/compiled/mrbc-host)+ JS ブリッジを単一 `lilac-wasm-bin` gem で配布、`mrbc` を専用 compiler wasm + wasmtime-rb で置換 | `wasm-bin/` gem + `runtime/mruby-host-compile/` + `cli/lib/lilac/cli/build/wasm_mrbc_driver.rb` + `compiled_runtime_resolver.rb` + `doctor.rb` | 完了 (2026-05、Part 1 出荷済み / auto-fallback は後続) |
 
 ## このドキュメントの位置付け
 
