@@ -69,7 +69,7 @@ BUILD_WASM_MRBC_HOST_RELEASE      := $(BUILD_DIR)/mrbc-host.release.wasm
         mrbc-host mrbc-host-release \
         lilac-all lilac-all-release \
         check-pair-diff \
-        test test-node test-wasm test-bundle test-wasm-rb test-cli test-all \
+        test test-node test-wasm test-bundle test-parity test-wasm-rb test-cli test-all \
         node-deps clean
 
 all: lilac-full
@@ -230,7 +230,7 @@ test-wasm-rb: lilac-full
 # rare classes of bugs that only surface under V8 (FinalizationRegistry
 # timing, real JS callback closures, etc.). Slower than the Ruby
 # runner; not needed for the inner dev loop.
-test-node: test-wasm test-bundle
+test-node: test-wasm test-bundle test-parity
 
 # Legacy alias retained so older scripts / muscle memory keep working.
 test-wasm: check-pair-diff lilac-full node_modules
@@ -246,6 +246,15 @@ test-bundle: lilac-full lilac-compiled node_modules
 	LILAC_COMPILED_WASM=$(BUILD_WASM_LILAC_COMPILED) \
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node --experimental-wasm-exnref test/bundle-runtime.mjs
+
+# :full vs :compiled DOM parity — build each fixture both ways, drive the
+# same scenario, assert byte-identical DOM after every step. Guards the
+# "same .lil → same DOM regardless of target" contract.
+test-parity: lilac-full lilac-compiled node_modules
+	LILAC_FULL_WASM=$(BUILD_WASM_LILAC_FULL) \
+	LILAC_COMPILED_WASM=$(BUILD_WASM_LILAC_COMPILED) \
+	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
+	  node --experimental-wasm-exnref test/parity-runner.mjs
 
 # Ruby-side CLI gem tests. The gem owns its own Gemfile / Rakefile
 # under `cli/` (standard Ruby monorepo layout — see README), so the
