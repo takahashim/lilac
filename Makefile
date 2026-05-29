@@ -69,7 +69,7 @@ BUILD_WASM_MRBC_HOST_RELEASE      := $(BUILD_DIR)/mrbc-host.release.wasm
         mrbc-host mrbc-host-release \
         lilac-all lilac-all-release \
         check-pair-diff \
-        test test-node test-wasm test-wasm-rb test-cli test-all \
+        test test-node test-wasm test-bundle test-wasm-rb test-cli test-all \
         node-deps clean
 
 all: lilac-full
@@ -230,13 +230,22 @@ test-wasm-rb: lilac-full
 # rare classes of bugs that only surface under V8 (FinalizationRegistry
 # timing, real JS callback closures, etc.). Slower than the Ruby
 # runner; not needed for the inner dev loop.
-test-node: test-wasm
+test-node: test-wasm test-bundle
 
 # Legacy alias retained so older scripts / muscle memory keep working.
 test-wasm: check-pair-diff lilac-full node_modules
 	MRUBY_WASM_PATH=$(BUILD_WASM_LILAC_FULL) \
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node --experimental-wasm-exnref test/runner.mjs
+
+# :bundle delivery (ADR-0030) boot-time behavior — fetch the
+# `<link rel="lilac-bundle">`, inject its <template>s, then mount. Needs
+# both wasm targets (full evals the bundle's Ruby; compiled chains .mrb).
+test-bundle: lilac-full lilac-compiled node_modules
+	LILAC_FULL_WASM=$(BUILD_WASM_LILAC_FULL) \
+	LILAC_COMPILED_WASM=$(BUILD_WASM_LILAC_COMPILED) \
+	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
+	  node --experimental-wasm-exnref test/bundle-runtime.mjs
 
 # Ruby-side CLI gem tests. The gem owns its own Gemfile / Rakefile
 # under `cli/` (standard Ruby monorepo layout — see README), so the
