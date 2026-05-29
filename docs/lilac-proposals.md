@@ -711,3 +711,132 @@ synthetic ref を無視するので harmless。`refs.foo` の user-authored ref 
 で parity-runner で動作検証もされている**ため、実装コストは config 周りの
 ~80 行のみ。dev rebuild 高速化と HTML 可読性向上が主な動機なので、
 体感メリットを実測してから判断するのも一つの選択。
+
+> **註 (2026-05-29)**: 後述の「ADR-0017 再検討」spike で、**`codegen: :off`
+> は `data-each` を含む component では built HTML 上で壊れる**ことが判明
+> (`tagName of null`)。builder が codegen mode に関わらず row を
+> `<template data-template>` に抽出するため、scanner が in-place row を
+> 復元できない。本提案(dev を codegen:off 既定に)を進めるなら、その
+> builder 側の row 抽出廃止が前提になる。両提案は同じ builder 変更を共有する。
+
+## ADR-0017 再検討 — binding canonical を codegen 以外にできるか (scanner-canonical 候補)
+
+### 動機
+
+[ADR-0017](./adr/0017-codegen-canonical-scanner-grammar-only.md) は「directive
+binding の canonical を codegen に統一、scanner gem は grammar reference +
+`codegen:off` escape hatch」と決めた。しかし `lib/lilac/cli/build/` の整理を
+進める中で「runtime canonical を徹底して builder を更に減らせないか」を再検討
+したところ、ADR-0017 が codegen を選んだ 4 論拠のうち **3 つが現在の実装実態
+では失効している**ことが分かった。
+
+前提(確定): **`:compiled` runtime に compiler は積まない**(`.rb` → `.mrb`
+は build 時のみ)。ただし scanner は属性**文字列**を pre-compiled mruby で
+解釈するだけで compiler を要さないため、この前提は scanner-canonical を
+妨げない。
+
+### ADR-0017 の 4 論拠の現在評価
+
+| ADR-0017 の根拠 | 現在の評価 | 根拠 |
+|---|---|---|
+| (1) data-each `tagName of null` バグ | ❌ 失効 | codegen が抽出した HTML に scanner も走らせた**二重処理の artifact**。scanner 単独・in-place row なら起きない |
+| (2) binding 二重発火 | ❌ 失効 | codegen と scanner の併存が原因。単独経路なら無い |
+| (3) grammar duplication (diff-0 pair) | △ 残る | host lint (`cross_ref_linter`) が grammar parse を使うので、scanner-canonical でも `value/grammar/class_parser` の host↔runtime 二重は残る |
+| (4) bundle size (scanner を `:compiled` から外せる余地) | ❌ 失効 | scanner gem は **既に `:compiled` wasm に linked**(`build_config/lilac-compiled.rb` の `conf.gem ".../mruby-lilac-directives"`、packages の `register_directive` 用)。除外レバーは行使されておらず、package 対応のため除外も部分的に不可 |
+
+加えて: **codegen 生成コードも毎 mount で scanner を呼んでいる**
+(`scan_extensions_trailer` → `Scanner.new(self).scan_extensions(...)`)。
+scanner の instantiation + DOM access は codegen mode でも既に発生している。
+
+### 提案 (scanner-canonical)
+
+binding canonical を **scanner に寄せる**。具体的には:
+
+- `cli/lib/lilac/cli/build/codegen.rb` (622 行) + `value_codegen.rb` +
+  `grammar_extra.rb` を**削除**
+- `TemplateAST` の data-each synthetic template 抽出 + `<li data-each>` の
+  空洞化を**廃止** → builder は row を **in-place で出力**(= ノービルド
+  と同じ shape)
+- `:compiled` の `.mrb` は **ユーザのコンポーネントクラスだけ**(codegen の
+  `bind_template_hook` 無し)。wasm 内蔵 scanner が mount 時に DOM walk で
+  binding
+- `:full` / `:compiled` / ノービルドが**完全に同一の binding 経路**(scanner)
+  に収束。ADR-0001 (runtime canonical) / ADR-0029・0030 (ノービルド世界観) と
+  一直線
+
+**重要**: これは「`c.codegen = :off` に切り替える」だけでは**ない**。builder の
+row 抽出 (`<template data-template>` 化) が codegen mode に関わらず走るため、
+**builder の row 出力を in-place 化する変更が必須**。flag flip ではなく
+builder 変更を伴う(spike で実証 — 下記)。
+
+### 利点
+
+- `build/` の最大削減: `codegen.rb` 622 + `value_codegen.rb` +
+  `grammar_extra.rb` + TemplateAST の synthetic 抽出ロジック
+- data-each の二重処理バグが**構造的に消滅**(抽出しないので)
+- 3 経路(full / compiled / no-build)の binding が単一実装に
+- bundle size 増分 **~0**(scanner は既に wasm 常駐・既に毎 mount 実行中)
+
+### 棄却した代替案
+
+**案 B: IR / manifest-canonical** — host が directive 命令列(データ)を吐き
+runtime は固定 interpreter で実行。しかしノービルドは CLI 不在で IR を生成
+できず full scanner が必要 → IR interpreter と scanner の**両方**を積むことに
+なり複雑度が増す。scanner が既に在る以上メリット薄。**棄却**。
+
+**案 C: target 別 canonical**(`:full`=scanner / `:compiled`=codegen)— 現状の
+整理版にすぎず divergence が増えるだけ。**棄却**。
+
+### 唯一の未解決点 — 実機 mount perf
+
+ADR-0017 の 4 論拠のうち失効しなかったのは perf 1 点:
+
+- codegen: built-in binding は事前焼き込み済み呼び出し
+- scanner-canonical: 同じ DOM walk 内で built-in も runtime 解釈
+
+差分は「per-row の属性 parse + dispatch の純増分」(Scanner instantiation /
+DOM walk は両者で既に共通)。300-row data-each のような directive-heavy ページ
+で実機計測すれば判断できる。**この perf 数字が、本提案を ADR に昇格させる
+唯一の保留条件。**
+
+### perf spike の結果 (2026-05-29)
+
+happy-dom + `:compiled` wasm で config-flip 計測を試みたが、**信頼できる数字は
+得られなかった**。判明した問題:
+
+1. **config flip では測れない** — 上記の通り codegen:off は built HTML 上で
+   data-each が壊れる(`tagName of null` 再現)。faithful な scanner 計測には
+   builder の in-place row 出力が前提
+2. **mount が非同期**(effect batch)で `loadBytecode` の wall-time が mount
+   時間の proxy にならない
+3. **happy-dom は perf 代表環境でない**(JS DOM emulation が wall time を支配し、
+   肝心の mruby scanner CPU 差分をマスク)
+
+副産物として確定した事実: codegen は component あたり ~1.5KB bytecode 増
+(計測 fixture で 1942B vs 483B)。
+
+→ trustworthy な計測には **(a) in-place row を吐く builder spike branch、
+(b) 実ブラウザ or Playwright、(c) render-complete 計測** が必要で、これは
+scanner-canonical 実装の builder spike に自然に内包される。**perf 計測は
+実装着手時に同時に行うのが合理的**(前倒しの独立計測は不要)。
+
+### 関連する確定判断
+
+- [ADR-0017](./adr/0017-codegen-canonical-scanner-grammar-only.md) — 本提案が
+  再検討対象(axis A = codegen canonical)。axis B (grammar SSOT 構造) は lint
+  のため維持されるので覆らない
+- [ADR-0001](./adr/0001-runtime-canonical.md) — 本提案は runtime canonical を
+  最も忠実に実現する方向
+- [ADR-0029](./adr/0029-data-component-data-use-split.md) /
+  [ADR-0030](./adr/0030-bundle-delivery-via-lilac-bundle-link.md) — ノービルド
+  世界観。scanner が既に no-build `:full` で production 動作している事実が、
+  scanner-canonical の実現可能性の裏付け
+
+### ステータス
+
+未判断 (proposal 段階)。技術的成立は spike で確認済み(scanner は no-build で
+production 動作中、data-each も in-place なら処理可能)。ADR への昇格は **実機
+mount perf が許容範囲** という 1 点の確認待ち。その計測は scanner-canonical の
+builder spike (row 出力の in-place 化) に内包して同時に行うのが合理的なので、
+**実装着手を decide した時点で perf も確定する**。逆に言えば、現時点で追加の
+独立 perf 計測は不要。
