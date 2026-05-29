@@ -9,17 +9,12 @@
 # install` workflow completes without any external mrbc binary.
 #
 # Why a separate variant (not reusing lilac-full.wasm):
-#   `lilac-full.wasm` ships with the **legacy** Wasm exception-
-#   handling proposal (`try` / `catch` / `delegate` opcodes) because
-#   `-mllvm -wasm-enable-sjlj` defaults to the legacy form. wasmtime-rb
-#   44.0 doesn't expose `Config::wasm_exceptions`, and the legacy form
-#   additionally requires the `legacy_exceptions` feature flag that's
-#   not surfaced in any current Ruby binding. The result: wasmtime-rb
-#   can't even *parse* the lilac-full module.
-#
-#   This variant uses the **new** EH proposal (`try_table` opcode) via
-#   `-mllvm -wasm-use-legacy-eh=false`, which wasmtime accepts when
-#   `wasm_exceptions` is the default (it is, in 44.x).
+#   Both this and `lilac-full.wasm` now use the **new** EH proposal
+#   (`try_table` via `-mllvm -wasm-use-legacy-eh=false`), so either
+#   could run under wasmtime-rb v45. The split is purely about **size**:
+#   mrbc-host is compiler-only (parser + codegen + dumper) and omits all
+#   the Lilac framework gems, keeping the wasm-driven `mrbc` backend
+#   small. `lilac-full` carries the whole runtime.
 #
 # Why not just drop sjlj entirely:
 #   mruby's `mrb_protect` / `mrb_raise` paths call `setjmp` / `longjmp`,

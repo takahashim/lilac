@@ -67,18 +67,10 @@ ar = "#{wasi_sdk}/bin/llvm-ar"
 target = "wasm32-wasip1"
 
 release = ENV["MRUBY_WASM_RELEASE"] == "1"
-# Both browser and wasmtime-rb now use the **new** EH proposal
-# (try_table) — see the sjlj_flags note below. The `host` build name
-# is retained transitionally so `make lilac-full-host` keeps working
-# while the test harness migrates to `lilac-full.wasm`; it now produces
-# an EH-identical wasm and will be collapsed once browser-verified.
-host_variant = ENV["MRUBY_WASM_EH"] == "new"
-build_name =
-  if host_variant
-    release ? "lilac-full-host-release" : "lilac-full-host"
-  else
-    release ? "lilac-full-release" : "lilac-full"
-  end
+# Single variant: browser and wasmtime-rb both consume this wasm (both
+# use the new EH proposal — see the sjlj_flags note below), so there is
+# no separate `host` build anymore.
+build_name = release ? "lilac-full-release" : "lilac-full"
 
 # Bridge mrbgems live in mruby-wasm-runtime; framework mrbgems live
 # in this repo's runtime/ subdir.

@@ -31,11 +31,11 @@ Dom = Dommy
 class MrubyWasm
   class EvalError < StandardError; end
 
-  # Default wasm_path points at the `lilac-full-host` variant (new EH
-  # lowering) because wasmtime-rb's default config rejects the legacy
-  # EH used by the browser-facing `lilac-full.wasm`. See
-  # `build_config/lilac-full.rb` for the variant split.
-  DEFAULT_WASM_PATH = File.expand_path("../../build/lilac-full-host.wasm", __dir__)
+  # Default wasm_path is the browser-facing `lilac-full.wasm`. It uses
+  # the new EH proposal (try_table), which wasmtime-rb accepts via
+  # `Engine.new(wasm_exceptions: true)` — so the same wasm the browser
+  # ships is what these specs run (no separate host variant).
+  DEFAULT_WASM_PATH = File.expand_path("../../build/lilac-full.wasm", __dir__)
 
   def initialize(wasm_path: DEFAULT_WASM_PATH, args: ["lilac-wasm"], env: {})
     @wasm_path = wasm_path
@@ -209,8 +209,8 @@ class MrubyWasm
   end
 
   # All 25 `js.*` imports get stubbed. Signatures must match
-  # lilac-full-host.wasm's import table exactly — verified via
-  # `wasm-objdump -j Import -x build/lilac-full-host.wasm`. Functional
+  # lilac-full.wasm's import table exactly — verified via
+  # `wasm-objdump -j Import -x build/lilac-full.wasm`. Functional
   # behavior is minimal; pure-mruby specs that don't touch JS run
   # cleanly with these defaults.
   def register_js_stubs(linker)

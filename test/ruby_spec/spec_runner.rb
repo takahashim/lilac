@@ -3,7 +3,7 @@
 require_relative "mruby_wasm"
 
 # Drives the pure-mruby subset of Lilac's wasm_spec test suite through
-# `lilac-full-host.wasm` + wasmtime-rb (replacing `node test/runner.mjs`
+# `lilac-full.wasm` + wasmtime-rb (replacing `node test/runner.mjs`
 # for these specs). DOM / async specs stay on the Node runner — see
 # the PURE_SPECS allow-list below for the boundary.
 #
