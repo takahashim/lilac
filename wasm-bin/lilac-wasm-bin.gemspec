@@ -30,10 +30,9 @@ Gem::Specification.new do |spec|
   #
   # The version pin is the minimum that exposes `Engine.new(wasm_exceptions:)`
   # (needed because mrbc-host.wasm uses the wasm exception-handling
-  # proposal). Until the upstream PR lands, that's the unreleased
-  # bytecodealliance/wasmtime-rb#expose-wasm-exceptions branch; once
-  # released, bump this to the published version.
-  spec.add_dependency "wasmtime", "~> 44.0"
+  # proposal). Released in wasmtime-rb v45.0.0 (2026-05, bundling the
+  # `expose-wasm-exceptions` work from bytecodealliance/wasmtime-rb#599).
+  spec.add_dependency "wasmtime", "~> 45.0"
 
   spec.metadata = {
     "source_code_uri" => "https://github.com/takahashim/lilac",

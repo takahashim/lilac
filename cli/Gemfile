@@ -28,21 +28,17 @@ end
 
 # wasmtime-rb drives `mrbc-host.wasm` from the host Ruby in
 # `WasmMrbcDriver`, replacing the external `mrbc` binary for the
-# `lilac build --target compiled` flow.
+# `lilac build --target compiled` flow. `mrbc-host.wasm` uses the wasm
+# exception-handling proposal (mruby's setjmp/longjmp lowers through
+# it), which needs `Engine.new(wasm_exceptions:)` — exposed since
+# wasmtime-rb v45.0.0.
 #
-# TEMPORARY: pinned to a local checkout while
-# https://github.com/bytecodealliance/wasmtime-rb/pull/599 (expose
-# `wasm_exceptions` engine option) waits for a rubygems release.
-# Merged 2026-05-20, still unreleased as of 2026-05-23 (last release
-# was v44.0.0 on 2026-05-06, before the merge). `mrbc-host.wasm` uses
-# the wasm exception-handling proposal (because mruby's setjmp/longjmp
-# lowers through it), and the released 44.0.0 gem doesn't expose the
-# config knob needed to opt in. Once a release lands (expected ~v45 in
-# early-to-mid June 2026 based on the monthly cadence), replace with
-# `gem "wasmtime", "~> X.Y"` and delete this local-checkout fallback.
+# A sibling `../../wasmtime-rb` checkout is used when present (lets us
+# track upstream without a publish cycle); otherwise the published
+# `~> 45.0` gem from the gemspec dependency resolves from rubygems.
 wasmtime_local = File.expand_path("../../wasmtime-rb", __dir__)
 if File.directory?(wasmtime_local)
   gem "wasmtime", path: wasmtime_local
 else
-  gem "wasmtime", "~> 44.0"
+  gem "wasmtime", "~> 45.0"
 end

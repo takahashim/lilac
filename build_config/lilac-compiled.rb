@@ -54,7 +54,10 @@ MRuby::CrossBuild.new(build_name) do |conf|
   conf.archiver.command = ar
 
   common_flags = ["--target=#{target}", "--sysroot=#{sysroot}"]
-  sjlj_flags = ["-mllvm", "-wasm-enable-sjlj"]
+  # New EH proposal (try_table) lowering for setjmp/longjmp — matches
+  # lilac-full.rb. Standardized + shipped in all major browsers
+  # (Safari 18.4+), and accepted by wasmtime-rb (legacy EH is not).
+  sjlj_flags = ["-mllvm", "-wasm-enable-sjlj", "-mllvm", "-wasm-use-legacy-eh=false"]
   shim_dir = "#{mwr_mrbgem}/hal-wasi-io/include"
   stub_flags = ["-isystem", shim_dir, "-include", "#{shim_dir}/wasi-shims.h"]
   # -Oz over -Os: ~5% smaller wasm; the compiled variant prioritizes

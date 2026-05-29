@@ -67,9 +67,11 @@ ar = "#{wasi_sdk}/bin/llvm-ar"
 target = "wasm32-wasip1"
 
 release = ENV["MRUBY_WASM_RELEASE"] == "1"
-# `host` variant: new EH proposal lowering (try_table) for wasmtime-rb
-# consumption. Browser path keeps legacy EH because Node + experimental
-# flags aren't a default we want to require. See test/ruby_spec/.
+# Both browser and wasmtime-rb now use the **new** EH proposal
+# (try_table) — see the sjlj_flags note below. The `host` build name
+# is retained transitionally so `make lilac-full-host` keeps working
+# while the test harness migrates to `lilac-full.wasm`; it now produces
+# an EH-identical wasm and will be collapsed once browser-verified.
 host_variant = ENV["MRUBY_WASM_EH"] == "new"
 build_name =
   if host_variant
@@ -93,13 +95,14 @@ MRuby::CrossBuild.new(build_name) do |conf|
 
   common_flags = ["--target=#{target}", "--sysroot=#{sysroot}"]
   # Lower setjmp/longjmp (used by mruby for exceptions and GC mark scan)
-  # to Wasm EH. The browser path stays on legacy EH (try / catch) so it
-  # works in current Node (used by `make test`) without
-  # --experimental-wasm-exnref. The `host` variant flips to the new
-  # proposal (try_table) because wasmtime-rb's default config rejects
-  # legacy EH.
-  sjlj_flags = ["-mllvm", "-wasm-enable-sjlj"]
-  sjlj_flags += ["-mllvm", "-wasm-use-legacy-eh=false"] if host_variant
+  # to Wasm EH, using the **new** EH proposal (try_table) everywhere.
+  # The new proposal is standardized (Wasm 2.0+EH) and shipped in all
+  # major browsers — Firefox, Chrome/Edge, and Safari 18.4+ (2025) —
+  # so the browser path no longer needs the legacy `try`/`catch`
+  # encoding. Using one encoding lets a single `lilac-full.wasm` run in
+  # the browser AND under wasmtime-rb (whose default config rejects the
+  # legacy form), collapsing the previous browser/host variant split.
+  sjlj_flags = ["-mllvm", "-wasm-enable-sjlj", "-mllvm", "-wasm-use-legacy-eh=false"]
   # POSIX shim headers (mrbgem/hal-wasi-io/include/) for wasi-sysroot
   # gaps. See hal-wasi-io/README.md in mruby-wasm-runtime for details.
   shim_dir = "#{mwr_mrbgem}/hal-wasi-io/include"
