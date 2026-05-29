@@ -56,6 +56,7 @@ class SpecRunner
     "runtime/mruby-lilac/wasm_spec/test_bind_template_hook.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_mount.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_autoregister.rb",
+    "runtime/mruby-lilac/wasm_spec/test_component_data_use.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_nested.rb",
     "runtime/mruby-lilac/wasm_spec/test_component_dynamic.rb",
     "runtime/mruby-lilac/wasm_spec/test_set_style.rb",
