@@ -294,6 +294,23 @@ module Lilac
       RefElement.new(js_element, current_owner)
     end
 
+    # `document` / `window` wrapped as RefElements bound to this
+    # component, so page-level listeners read the same as element ones
+    # and auto-cleanup on unmount — no raw `JS.global[:document]`:
+    #
+    #   document.on(:keydown) { |event| ... }
+    #   window.on(:resize)    { |event| ... }
+    #
+    # Each call returns a fresh wrapper; that's fine since the listener's
+    # lifecycle is tracked on the owner, not the wrapper.
+    def document
+      wrap(JS.global[:document])
+    end
+
+    def window
+      wrap(Lilac.__window__)
+    end
+
     # Component-instance alias for `Lilac.find_for_element` — returns
     # the Lilac component instance whose root is `element_js`, or `nil`
     # if the element is not a mounted data-component. Saves the

@@ -125,6 +125,30 @@ module Lilac
         yield(res, rej)
       })
     end
+
+    # Wrap `content` in a Blob and return an object URL — no hand-rolled
+    # `JS.global[:Blob].new(...)` / `URL.createObjectURL`:
+    #
+    #   url = Lilac.create_object_url(vtt_string, type: "text/vtt")
+    #
+    # `content` is a String (or an Array of parts, matching the Blob
+    # constructor). `type:` sets the Blob MIME type when given. Returns
+    # the URL as a Ruby String. The caller owns the URL's lifetime and
+    # must `revoke_object_url(url)` when done (createObjectURL leaks
+    # until revoked).
+    def create_object_url(content, type: nil)
+      parts = content.is_a?(Array) ? content : [content]
+      opts = type ? JS.object(type: type) : JS.object
+      blob = JS.global[:Blob].new(parts, opts)
+      JS.global[:URL].call(:createObjectURL, blob).to_s
+    end
+
+    # Release an object URL from `create_object_url`. No-op on `nil` so
+    # `revoke_object_url(@url)` is safe before a URL has been created.
+    def revoke_object_url(url)
+      return if url.nil?
+      JS.global[:URL].call(:revokeObjectURL, url)
+    end
   end
 
   # Default logger. `warn(msg)` and `error(label, error, source:)` are
