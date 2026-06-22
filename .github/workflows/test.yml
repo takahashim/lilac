@@ -95,11 +95,24 @@ jobs:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
         run: make lilac-full lilac-compiled mrbc-host
 
-      - name: Run wasm_spec (Ruby host)
+      # LILAC_JS_ENGINE=quickjs makes a missing/broken dommy-js-quickjs a hard
+      # failure instead of silently falling back to the lower-fidelity stub —
+      # CI must prove the real-JS path actually runs.
+      - name: Run wasm_spec (Ruby host, real JS via quickjs)
         working-directory: lilac
         env:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+          LILAC_JS_ENGINE: quickjs
         run: make test
+
+      # ADR-0033 Phase 2 Ruby ports of the bundle (:bundle boot) and parity
+      # (:full×:compiled DOM) integration specs, driven on quickjs + Dommy.
+      - name: Run bundle/parity runtime specs (Ruby host)
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+          LILAC_JS_ENGINE: quickjs
+        run: make test-bundle-rb test-parity-rb
 
       - name: Run wasm_spec (Node + happy-dom)
         working-directory: lilac
@@ -113,3 +126,21 @@ jobs:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
           MRUBY_WASM_JS_PATH: ${{ github.workspace }}/mruby-wasm-runtime/mrbgem/mruby-wasm-js/js
         run: bundle exec rake test
+
+      # Pre-release smoke: build the -Oz release wasm and stage the gh-pages
+      # CDN tree, so release-only breakage (release.yml runs only on a v* tag)
+      # is caught on every push instead of at tag time.
+      - name: Build release artifact + stage gh-pages tree (smoke)
+        working-directory: lilac
+        env:
+          MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+        run: |
+          make lilac-full-release
+          make pages-pack VERSION=v0.0.0-ci
+
+      # Catch gemspec / packaging errors before a rubygems publish.
+      - name: Build gems (smoke)
+        working-directory: lilac
+        run: |
+          (cd cli && gem build lilac-cli.gemspec)
+          (cd wasm-bin && gem build lilac-wasm-bin.gemspec)
