@@ -228,6 +228,31 @@ refs.button.on(:click, JS.object(once: true)) { |event| ... }  # options
 
 ここで登録された listener は、Widget unmount 時に自動的に `removeEventListener` + `JS.release_callback` される。
 
+### イベントオブジェクト: `Lilac::Event`
+
+`on` / `once` ハンドラ (手書き `ref.on`・`data-on-*`・form wiring すべて) に渡るのは raw な JS イベントではなく、薄いラッパ `Lilac::Event`。raw JS を書かずに済むためのもの:
+
+```ruby
+document.on(:keydown) do |event|
+  return if event.target.closest("audio, .player")  # target は RefElement
+  event.prevent_default                              # not event.call(:preventDefault)
+  go_next if event.key == "ArrowRight"               # not event[:key].to_s
+end
+```
+
+| メソッド | 内容 |
+|---|---|
+| `prevent_default` / `stop_propagation` / `stop_immediate_propagation` | 各 DOM メソッド。chain 用に `self` を返す |
+| `default_prevented?` | Boolean |
+| `type` | イベント種別 (String) |
+| `key` | `key` プロパティ (String)。非キーイベントは `nil` |
+| `target` / `current_target` | **RefElement** で返す (生 Element ではない) → `closest` / `on` / `attr` がそのまま繋がる |
+| `call(method, *args)` | 生 JS メソッド呼び (`event.call(:preventDefault)` 等) |
+| `[](name)` | 生 JS プロパティ読み (`event[:clientX]` / `event[:detail]` 等) |
+| `to_js` | ラップしている JS::Object |
+
+後方互換は RefElement と同じ「bracket = 生 JS / メソッド = ergonomic」規約。`event[:detail][:id]` や `event.call(:preventDefault)` は従来どおり動く。未定義メソッドは生 JS::Object に透過する。唯一の挙動変化は **`event.target`(メソッド呼び)が RefElement を返す**点 (`event[:target]` は生のまま)。ラップした event を生 JS 関数へ直接渡す場合は `event.to_js` を使う。
+
 ### Custom Event dispatch
 
 ```ruby
@@ -304,6 +329,34 @@ end
 ```
 
 wrap 後は `attr` / `data` / `text` / `on` 等の RefElement API が全て使える。`on` で listener を登録すれば自 widget の lifecycle に紐付き unmount で自動 cleanup される。
+
+### `document` / `window`
+
+ページ全体に対する listener (キー操作、リサイズ等) を登録したい時は、`wrap(JS.global[:document])` と書く代わりに `document` / `window` ショートカットが使える。どちらも RefElement を返し、`on` の listener は自 widget の lifecycle に紐付いて unmount で自動 cleanup される:
+
+```ruby
+document.on(:keydown) { |event| close if event[:key].to_s == "Escape" }
+window.on(:resize)    { |event| recompute_layout }
+```
+
+`document` / `window` は予約メソッド。同名のユーザメソッドを定義すると上書きされる点に注意。
+
+### 祖先方向の検索: `closest`
+
+DOM 標準 `Element.closest(selectors)` のラッパ。自分自身を含む祖先方向で `selector` に最初にマッチする要素を **RefElement** で返す (マッチ無しは `nil`)。生 `Element` ではなく RefElement を返すので、結果にそのまま `on` / `attr` 等が繋げられる:
+
+```ruby
+panel = wrap(event[:target]).closest("audio, .player")
+panel.on(:click) { ... } if panel
+```
+
+`closest` は Element にしか存在しないため、null / text ノード / document など **非 Element の wrapped ノードに対しては例外を投げず `nil`** を返す。これにより raw な `event[:target]` をそのまま wrap して問い合わせられる:
+
+```ruby
+def in_player?(target)
+  !wrap(target).closest("audio, .player").nil?
+end
+```
 
 ### HTML 属性アクセス
 
@@ -1353,6 +1406,19 @@ refs.row.dispatch("row:select", detail: { id: 42 }, bubbles: true)
 ```
 
 Widget 内部の JS handle nil チェックには bare `nil?` ではなく `js_null?` を使う (理由は上記リンク先)。
+
+### Object URL: `Lilac.create_object_url` / `Lilac.revoke_object_url`
+
+Blob → object URL の生成と解放。生の `JS.global[:Blob].new(...)` / `URL.createObjectURL` を書かずに済むモジュール関数:
+
+```ruby
+url = Lilac.create_object_url(vtt_string, type: "text/vtt")
+track_js[:src] = url
+# ...使い終わったら
+Lilac.revoke_object_url(url)   # nil は no-op
+```
+
+`content` は String、または Blob コンストラクタに合わせた parts の Array。`type:` は省略可。`createObjectURL` は revoke するまでリークするので、**URL の寿命は呼び出し側が管理し、不要になったら `revoke_object_url` する**。URL の寿命が widget に一致するなら `cleanup { Lilac.revoke_object_url(url) }` で unmount 時に自動解放できる。
 
 ---
 
