@@ -111,6 +111,7 @@ jobs:
         working-directory: lilac
         env:
           MRUBY_WASM_RUNTIME_PATH: ${{ github.workspace }}/mruby-wasm-runtime
+          MRUBY_WASM_JS_PATH: ${{ github.workspace }}/mruby-wasm-runtime/mrbgem/mruby-wasm-js/js
           LILAC_JS_ENGINE: quickjs
         run: make test-bundle-rb test-parity-rb
 
