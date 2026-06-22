@@ -3,10 +3,16 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
 
+# The bundle/parity runtime specs (test_bundle_runtime.rb / test_parity.rb)
+# each run `lilac build` for both wasm targets and drive the quickjs+Dommy
+# runtime — far too slow for the default inner loop. They're excluded here and
+# run via `make test-bundle-rb` / `make test-parity-rb` (and `make test-all`).
+RUNTIME_PARITY_SPECS = %w[test/test_bundle_runtime.rb test/test_parity.rb].freeze
+
 Rake::TestTask.new(:test) do |t|
   t.libs << "test"
   t.libs << "lib"
-  t.test_files = FileList["test/**/test_*.rb"]
+  t.test_files = FileList["test/**/test_*.rb"].exclude(*RUNTIME_PARITY_SPECS)
   t.warning = false
 end
 
