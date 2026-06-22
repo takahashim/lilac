@@ -102,6 +102,29 @@ module Lilac
       promise.await
       nil
     end
+
+    # Build an awaitable JS Promise from a Ruby block, without reaching
+    # for `JS.global[:Promise]` or the `resolve.call(:call)`
+    # Function.prototype dance. The block receives `resolve` / `reject`
+    # as plain Ruby callables:
+    #
+    #   value = Lilac.promise { |resolve, reject|
+    #     refs.btn.on(:click) { resolve.call(:ok) }
+    #     refs.btn.on(:error) { reject.call }
+    #   }.await
+    #
+    # `resolve.call(value)` / `reject.call(value)` settle the promise;
+    # call with no argument to settle with `nil`. Returns the JS Promise
+    # so `.await` (inside a fiber) — or `.then` / `.catch` — work as
+    # usual. See `RefElement#once` for the common "await a DOM event"
+    # case built on top of this.
+    def promise
+      JS.global[:Promise].new(JS.callback { |resolve, reject|
+        res = ->(value = nil) { resolve.call(:call, nil, value) }
+        rej = ->(value = nil) { reject.call(:call, nil, value) }
+        yield(res, rej)
+      })
+    end
   end
 
   # Default logger. `warn(msg)` and `error(label, error, source:)` are

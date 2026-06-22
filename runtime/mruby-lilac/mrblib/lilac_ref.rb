@@ -130,6 +130,54 @@ module Lilac
       cb
     end
 
+    # Await a DOM event as a Promise — no hand-rolled
+    # `JS.global[:Promise].new(...)`:
+    #
+    #   event = refs.track.once(:load, error: :error).await
+    #
+    # Resolves with the event object the first time `event` fires;
+    # if any `error:` event (a Symbol or Array of them) fires first,
+    # rejects with that event. Both listeners are registered
+    # `{ once: true }`, and when either settles — or the owning
+    # component unmounts first — the rest are removed and every
+    # callback released, so nothing leaks even if the losing event
+    # never fires. Must be awaited inside an async context (a fiber),
+    # the same precondition as any other `.await`.
+    def once(event, error: nil)
+      want = event.to_s
+      error_events =
+        if error.nil? then []
+        elsif error.is_a?(Array) then error.map(&:to_s)
+        else [error.to_s]
+        end
+      js = @js
+      once_opt = JS.object(once: true)
+      Lilac.promise do |resolve, reject|
+        subs = []
+        settled = false
+        teardown = lambda do
+          next if settled
+          settled = true
+          subs.each do |evt, cb|
+            js.call(:removeEventListener, evt, cb)
+            JS.release_callback(cb)
+          end
+          subs.clear
+        end
+        @component.cleanup { teardown.call } if @component
+        listen = lambda do |evt, settle_with|
+          cb = JS.callback do |ev|
+            teardown.call
+            settle_with.call(ev)
+          end
+          js.call(:addEventListener, evt, cb, once_opt)
+          subs << [evt, cb]
+        end
+        listen.call(want, resolve)
+        error_events.each { |evt| listen.call(evt, reject) }
+      end
+    end
+
     # Fire a `CustomEvent` on the wrapped DOM element. Throws at
     # runtime if `@js` isn't an EventTarget — same trade-off Lilac
     # has always accepted for keeping `refs.x.dispatch(...)` natural.
