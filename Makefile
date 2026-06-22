@@ -210,29 +210,22 @@ node_modules: package.json
 	npm install --no-audit --no-fund --silent
 	@touch node_modules
 
-# Default `make test` is the **Ruby-only** wasm spec runner — fast,
-# no Node install required, drives lilac-full.wasm through
-# wasmtime-rb + Dommy. Covers the same wasm_spec/ scenarios as the
-# Node-based path; the Node runner remains available as `make
-# test-node` for cross-checking against happy-dom in CI / pre-release.
+# Default test: Ruby-only wasm spec runner (wasmtime-rb + Dommy).
+# `make test-node` runs the same scenarios under Node + happy-dom.
 test: test-wasm-rb
 
-# Ruby-side wasm spec runner — pure-Ruby host, no Node dependency.
-# Drives lilac-full.wasm through wasmtime-rb. Since the new EH proposal
-# (try_table) is used for both browser and wasmtime, the browser wasm
-# is the test wasm — no separate host variant.
+# Ruby-host wasm spec runner (no Node). Drives lilac-full.wasm via
+# wasmtime-rb; the JS bridge runs real JS through dommy-js-quickjs
+# (builds a native `quickjs` ext — needs a C toolchain). Set
+# LILAC_JS_ENGINE=dommy-stub for the lower-fidelity stub evaluator.
 test-wasm-rb: lilac-full
 	cd cli && MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  bundle exec ruby -Itest -Ilib ../test/ruby_spec/spec_runner.rb
 
-# Node + happy-dom runner — same scenarios as `test-wasm-rb` but with
-# V8 as the wasm host and happy-dom as DOM. Used in CI to catch the
-# rare classes of bugs that only surface under V8 (FinalizationRegistry
-# timing, real JS callback closures, etc.). Slower than the Ruby
-# runner; not needed for the inner dev loop.
+# Node + happy-dom runner — same scenarios under V8 (catches V8-only
+# GC / closure bugs). Slower; CI / pre-release, not the inner loop.
 test-node: test-wasm test-bundle test-parity
 
-# Legacy alias retained so older scripts / muscle memory keep working.
 test-wasm: check-pair-diff lilac-full node_modules
 	MRUBY_WASM_PATH=$(BUILD_WASM_LILAC_FULL) \
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
@@ -256,23 +249,32 @@ test-parity: lilac-full lilac-compiled node_modules
 	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
 	  node --experimental-wasm-exnref test/parity-runner.mjs
 
-# Ruby-side CLI gem tests. The gem owns its own Gemfile / Rakefile
-# under `cli/` (standard Ruby monorepo layout — see README), so the
-# convention is to `cd cli` for any `bundle exec` work. This target
-# wraps that so the root-level workflow doesn't have to.
+# Ruby ports of test-bundle / test-parity (no Node). Build both wasm
+# targets, so they're out of the default loop — run here and in test-all.
+test-bundle-rb: lilac-full lilac-compiled
+	cd cli && LILAC_FULL_WASM=$(BUILD_WASM_LILAC_FULL) \
+	LILAC_COMPILED_WASM=$(BUILD_WASM_LILAC_COMPILED) \
+	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
+	  bundle exec ruby -Itest test/test_bundle_runtime.rb
+
+test-parity-rb: lilac-full lilac-compiled
+	cd cli && LILAC_FULL_WASM=$(BUILD_WASM_LILAC_FULL) \
+	LILAC_COMPILED_WASM=$(BUILD_WASM_LILAC_COMPILED) \
+	MRUBY_WASM_RUNTIME_PATH=$(MRUBY_WASM_RUNTIME) \
+	  bundle exec ruby -Itest test/test_parity.rb
+
+# CLI gem tests. The gem has its own Gemfile / Rakefile under cli/, so
+# `cd cli` for bundle exec; this target wraps that.
 test-cli:
 	cd cli && bundle exec rake test
 
-# Everything — CLI gem + Ruby wasm spec + Node wasm spec. Slow
-# because `test-node` rebuilds lilac-full; use pre-release / in CI.
-test-all: test-cli test-wasm-rb test-node
+# Everything — slow (rebuilds wasm targets, runs both runners); pre-release / CI.
+test-all: test-cli test-wasm-rb test-bundle-rb test-parity-rb test-node
 
 # ── serve (examples in a browser) ──────────────────────────────────────
-# Examples reference `../mrbgem/mruby-wasm-js/js/index.js`, which lives
-# in the mruby-wasm-runtime sibling repo — not in lilac itself. We copy
-# the bridge into lilac/mrbgem/ so the path resolves under the served
-# root. (A symlink would be cheaper but wsv refuses to follow symlinks
-# pointing outside the served root, returning 403.)
+# Examples reference ../mrbgem/mruby-wasm-js/js/index.js from the
+# mruby-wasm-runtime sibling. Copy it under lilac/mrbgem/ so the path
+# resolves (wsv 403s on symlinks pointing outside the served root).
 mrbgem:
 	@echo "Copying mrbgem from $(MRUBY_WASM_RUNTIME)/mrbgem"
 	@cp -R $(MRUBY_WASM_RUNTIME)/mrbgem mrbgem
@@ -290,18 +292,10 @@ serve: lilac-full mrbgem
 
 
 # ── GitHub Pages release staging ────────────────────────────────────────
-# Stages a self-contained CDN delivery tree under dist-pages/v$VERSION/
-# for publication to the gh-pages branch (ADR-28). Layout:
-#
-#   dist-pages/v$VERSION/
-#     lilac.wasm                  ← compiled wasm (release build, -Os)
-#     index.js / index.d.ts       ← boot helper from pages/lilac-full/
-#     README.md / LICENSE
-#     mruby-wasm-js/              ← bridge files for browser ES module
-#
-# All imports inside index.js are relative (./mruby-wasm-js/index.js)
-# so the tree is self-contained — no bundler / import map needed.
-# Invoked by .github/workflows/release.yml on each tag push (v*).
+# Stage a self-contained CDN tree under dist-pages/v$VERSION/ for the
+# gh-pages branch (ADR-28): release wasm + boot helper (pages/lilac-full/)
+# + the mruby-wasm-js bridge, all relative-imported (no bundler needed).
+# Invoked by .github/workflows/release.yml on each v* tag.
 PAGES_DIR     := $(CURDIR)/dist-pages
 PAGES_SOURCE  := $(CURDIR)/pages/lilac-full
 BRIDGE_SOURCE := $(MRUBY_WASM_RUNTIME)/mrbgem/mruby-wasm-js/js
