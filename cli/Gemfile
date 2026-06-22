@@ -4,38 +4,30 @@ source "https://rubygems.org"
 
 gemspec
 
-# Use a local wsv checkout when present so changes flow without a
-# rubygems publish cycle. Falls through to the gemspec's ~> 0.10
-# dependency (resolved from rubygems) when the sibling clone is absent
-# — keeps CI builds working without cloning wsv too.
+# Prefer a local wsv checkout when present; otherwise the gemspec's
+# ~> 0.10 resolves from rubygems.
 wsv_local = File.expand_path("../../wsv", __dir__)
 gem "wsv", path: wsv_local if File.directory?(wsv_local)
 
-# `lilac-wasm-bin` lives next to `cli/` as a sibling gem in this
-# monorepo. Pulling it via `path:` means the `CompiledRuntimeResolver`
-# soft-require can find `Lilac::Wasm::Bin` during dev / tests without
-# a rubygems publish cycle. The scaffold Gemfile users get points at
-# the published gem (no path:).
+# Sibling gem in this monorepo; `path:` lets CompiledRuntimeResolver's
+# soft-require find Lilac::Wasm::Bin in dev without a publish cycle.
 gem "lilac-wasm-bin", path: File.expand_path("../wasm-bin", __dir__)
 
 group :development do
   gem "minitest", "~> 5.0"
   gem "rake", "~> 13.0"
-  # Ruby-host DOM polyfill backing the wasmtime-rb test runner.
-  # Maintained as a standalone gem in a sibling clone of this repo.
-  gem "dommy", ">= 0.6"
+
+  # Test-runner stack for the wasmtime-rb Ruby host: dommy (DOM polyfill)
+  # + dommy-js-quickjs (real-JS engine; builds a native `quickjs` ext).
+  # makiri (dommy's HTML backend) resolves transitively.
+  gem "dommy", "~> 0.9"
+  gem "dommy-js-quickjs", "~> 0.9"
 end
 
-# wasmtime-rb drives `mrbc-host.wasm` from the host Ruby in
-# `WasmMrbcDriver`, replacing the external `mrbc` binary for the
-# `lilac build --target compiled` flow. `mrbc-host.wasm` uses the wasm
-# exception-handling proposal (mruby's setjmp/longjmp lowers through
-# it), which needs `Engine.new(wasm_exceptions:)` — exposed since
-# wasmtime-rb v45.0.0.
-#
-# A sibling `../../wasmtime-rb` checkout is used when present (lets us
-# track upstream without a publish cycle); otherwise the published
-# `~> 45.0` gem from the gemspec dependency resolves from rubygems.
+# wasmtime-rb drives mrbc-host.wasm from Ruby (WasmMrbcDriver for
+# `lilac build --target compiled`). Needs Engine.new(wasm_exceptions:)
+# (wasmtime-rb >= 45) for mruby's setjmp/longjmp lowering. Sibling
+# checkout when present, else ~> 45.0 from rubygems.
 wasmtime_local = File.expand_path("../../wasmtime-rb", __dir__)
 if File.directory?(wasmtime_local)
   gem "wasmtime", path: wasmtime_local
