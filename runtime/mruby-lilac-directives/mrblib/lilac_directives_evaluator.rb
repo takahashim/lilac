@@ -16,12 +16,9 @@ module Lilac
     #     for BareIdent — which itself may be a Signal if the item stores
     #     Signals, or a plain scalar otherwise).
     #
-    #   - `read(value, item)` — thin wrapper over `read_raw` that
-    #     unwraps Ivar's Signal via `.value`. Ivar is asymmetric
-    #     intentionally: by convention every `@ivar` directive value
-    #     points at a Signal so the binding layer wants the current
-    #     scalar; BareIdent gives back whatever the item stored, and
-    #     unwrapping happens (or doesn't) inside the bind effect.
+    #   - `read(value, item)` — resolves to the current scalar. An
+    #     Ivar's Signal, and a BareIdent pointing at a per-row reactive
+    #     value, are both read via `.value`; plain values pass through.
     class Evaluator
       def initialize(host)
         @host = host
@@ -29,9 +26,10 @@ module Lilac
 
       def bind_source(value, item)
         return lookup_ivar(value) if value.is_a?(Value::Ivar)
-        # BareIdent → wrap in reactive computed so the binding
-        # re-evaluates when the iteration item reference changes.
-        @host.computed { read_raw(value, item) }
+        # BareIdent → reactive computed so the binding re-evaluates when the
+        # item reference changes. `read` unwraps a per-row reactive field so
+        # the computed subscribes to it.
+        @host.computed { read(value, item) }
       end
 
       def read_raw(value, item)
@@ -45,7 +43,13 @@ module Lilac
 
       def read(value, item)
         resolved = read_raw(value, item)
-        value.is_a?(Value::Ivar) ? resolved.value : resolved
+        # Ivar values are Signals by convention — read the current scalar.
+        return resolved.value if value.is_a?(Value::Ivar)
+
+        # A BareIdent may point at a per-row reactive value; read its
+        # `.value` so it resolves to the scalar and, inside a reactive
+        # context, subscribes. Plain values pass through.
+        resolved.is_a?(Reactive::Subscribable) ? resolved.value : resolved
       end
 
       # Resolve a Value::Ivar to the host's underlying object (typically

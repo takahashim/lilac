@@ -187,4 +187,46 @@ Spec.describe "data-each (runtime scanner)" do
     body[:innerHTML] = ""
     Lilac.flush_async!
   end
+
+  Spec.assert "data-each row whose item field holds a Signal is reactive (per-row)" do
+    body = JS.global[:document][:body]
+    body[:innerHTML] = <<~HTML
+      <div data-component="each-sig-rt">
+        <ul data-each="@rows" data-key="id">
+          <li data-class="{ active: active }" data-text="name"></li>
+        </ul>
+      </div>
+    HTML
+
+    a_active = nil
+    klass = Class.new(Lilac::Component) do
+      define_method(:setup) do
+        a_active = signal(false)
+        @rows = signal([
+          { id: 1, name: "a", active: a_active },
+          { id: 2, name: "b", active: signal(false) },
+        ])
+      end
+    end
+
+    Lilac.register("each-sig-rt", klass)
+    Lilac.start
+    Lilac.flush_async!
+
+    lis = body.call(:querySelectorAll, "[data-component=\"each-sig-rt\"] li")
+    Spec.assert_equal false, lis[0][:classList].call(:contains, "active").js_bool
+    Spec.assert_equal false, lis[1][:classList].call(:contains, "active").js_bool
+
+    # Flip only row 1's per-row Signal — no list re-emit. The binding must
+    # have subscribed to the inner Signal (regression: it used to bind the
+    # always-truthy Signal object, so the class never reflected the value).
+    a_active.value = true
+    Lilac.flush_async!
+    Spec.assert_equal true,  lis[0][:classList].call(:contains, "active").js_bool
+    Spec.assert_equal false, lis[1][:classList].call(:contains, "active").js_bool
+
+    Lilac.reset!
+    body[:innerHTML] = ""
+    Lilac.flush_async!
+  end
 end
