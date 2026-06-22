@@ -109,4 +109,36 @@ Spec.describe "bind" do
 
     body[:innerHTML] = ""
   end
+
+  Spec.assert "bind class: on a raw createElement node (not a ref)" do
+    doc = JS.global[:document]
+    body = doc[:body]
+    body[:innerHTML] = <<~HTML
+      <div data-component="bind-raw">
+        <div data-ref="host"></div>
+      </div>
+    HTML
+
+    on = nil
+    klass = Class.new(Lilac::Component) do
+      define_method(:setup) do
+        on = signal(false)
+        node = JS.global[:document].call(:createElement, "div")
+        refs.host.append(node)
+        # Regression: a raw JS::Object node used to raise "cannot wrap Class
+        # as JS value" because coerce_ref called `node.is_a?(RefElement)`,
+        # which a BasicObject-based JS::Object forwards into JS.
+        bind node, class: { "active" => on }
+      end
+    end
+    Lilac.register "bind-raw", klass
+    Lilac.start
+
+    node = doc.call(:querySelector, "[data-component='bind-raw'] [data-ref='host'] div")
+    Spec.assert_equal false, node[:classList].call(:contains, "active").js_bool
+    on.value = true
+    Spec.assert_equal true, node[:classList].call(:contains, "active").js_bool
+
+    body[:innerHTML] = ""
+  end
 end

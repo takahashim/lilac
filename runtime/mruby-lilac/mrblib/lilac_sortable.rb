@@ -135,7 +135,10 @@ module Lilac
       private
 
       def apply_sortable_target(el_ref, signal, key, event)
-        el = el_ref.is_a?(RefElement) ? el_ref : wrap(el_ref)
+        # `RefElement === el_ref`, not `el_ref.is_a?(RefElement)`: a raw
+        # JS::Object node would route `is_a?` into JS via method_missing
+        # (see Bindable#coerce_ref). `Module#===` checks from this side.
+        el = RefElement === el_ref ? el_ref : wrap(el_ref)
         if signal.nil? || key.nil?
           name = el.respond_to?(:name) ? el.name : nil
           binding = name ? each_binding_for(name) : nil

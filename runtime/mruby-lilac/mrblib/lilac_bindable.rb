@@ -267,7 +267,13 @@ module Lilac
     private
 
     def coerce_ref(ref)
-      ref.is_a?(RefElement) ? ref : RefElement.new(ref, self)
+      # `RefElement === ref`, not `ref.is_a?(RefElement)`: a raw DOM node
+      # passed to `bind` is a `JS::Object` (BasicObject-based), so calling
+      # `is_a?` on it routes through method_missing into JS with the Ruby
+      # `RefElement` class as an argument — `JS.wrap` then raises the
+      # opaque "cannot wrap Class as JS value". `Module#===` does the kind
+      # check from RefElement's side and never touches `ref`.
+      RefElement === ref ? ref : RefElement.new(ref, self)
     end
 
     def bind_one(el, prop, &compute)
