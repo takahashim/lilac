@@ -43,28 +43,36 @@ class MrubyWasm
     @env = env
     @stdout_buf = String.new(encoding: Encoding::BINARY)
     @stderr_buf = String.new(encoding: Encoding::BINARY)
-    # JS handle table — minimal browser surface:
+    # JS engine backing the bridge. The default runs real JavaScript on a
+    # QuickJS VM bound to a Dommy DOM (dommy-js-quickjs); LILAC_JS_ENGINE=
+    # dommy-stub selects the older literal-only evaluator + Dommy-direct path.
+    @js_engine = build_js_engine
+    # mruby routes $stdout/$stderr through console (mruby-wasm-js's
+    # z_console_io), so spec output (Spec.summary's "[OK] …" lines the runner
+    # parses) reaches us via the JS console, not WASI fd_write. Mirror it into
+    # the capture buffers. (The dommy-stub path routes console through js_call
+    # → console_log instead.)
+    wire_console! if @js_engine
+    # JS handle table.
     #   id 0 = undefined / null sentinel
-    #   id 1 = the global object (MrubyWasm::Dom::Window instance —
-    #          dispatches via the `__js_get__` duck-typed protocol,
-    #          gives access to document / console / Object / Array /
-    #          JSON via property reads)
-    #   id 2 = console      (sentinel) — log / warn / error → buffers
-    #   id 3 = Object       (sentinel) — `new Object`, `Object.keys(o)`
-    #   id 4 = Array        (sentinel) — `new Array`, instanceof check
-    #   id 5 = JSON         (sentinel) — parse / stringify via Ruby JSON
-    # Primitives (Integer / Float / String / true / false / nil),
-    # Ruby Hashes / Arrays get stored under user handles ≥ 100.
-    # Dom::Document / Dom::Element instances also live here once
-    # accessed via the bridge.
-    @handles = {
-      0 => nil,
-      1 => Dom::Window.new(self),
-      2 => :console,
-      3 => :object_ctor,
-      4 => :array_ctor,
-      5 => :json_ctor,
-    }
+    #   id 1 = the global object
+    # quickjs engine: handle 1 is the VM's globalThis (a JsRef). dommy-stub:
+    # handle 1 is a Dommy::Window and ids 2-5 are well-known ctor sentinels
+    # (console/Object/Array/JSON), reused so the wasm always sees one id.
+    # User values (primitives, JsRefs, Ruby Hashes/Arrays) live at ids ≥ 100.
+    @handles =
+      if @js_engine
+        {0 => nil, 1 => @js_engine.global}
+      else
+        {
+          0 => nil,
+          1 => Dom::Window.new(self),
+          2 => :console,
+          3 => :object_ctor,
+          4 => :array_ctor,
+          5 => :json_ctor,
+        }
+      end
     @next_handle = 100
     # @pending_error holds a JS-side exception object (handle id) that
     # the wasm picks up via the `js_take_error` import. Any exception
@@ -73,6 +81,31 @@ class MrubyWasm
     # crashing the host.
     @pending_error = 0
     boot!
+  end
+
+  # Route the quickjs console into the stdout/stderr capture buffers so the
+  # spec runner can parse Spec output. severity :error/:warning → stderr.
+  def wire_console!
+    @js_engine.on_log do |log|
+      buf = %i[error warning].include?(log.severity) ? @stderr_buf : @stdout_buf
+      buf << log.to_s << "\n"
+    end
+  end
+
+  # Build the real-JS engine, or nil to use the legacy dommy-stub path.
+  # An explicit LILAC_JS_ENGINE=quickjs makes a missing dommy-js-quickjs a
+  # hard error (no silent fidelity downgrade); the unset default tolerates it.
+  def build_js_engine
+    requested = ENV.fetch("LILAC_JS_ENGINE", "quickjs")
+    return nil if requested == "dommy-stub"
+
+    require_relative "quickjs_bridge"
+    QuickjsBridge.new(invoke: method(:invoke_callback))
+  rescue LoadError => e
+    raise if requested == "quickjs"
+
+    warn "[mruby_wasm] dommy-js-quickjs unavailable (#{e.message}); using dommy-stub engine"
+    nil
   end
 
   attr_reader :wasm_path
@@ -102,6 +135,10 @@ class MrubyWasm
   # order, draining microtasks at each step. Bounded to avoid
   # runaways.
   def drain_async!(max_iterations: 1000)
+    # quickjs engine: a real (WHATWG-ordered) event loop drains the native
+    # microtask queue and advances Dommy's deterministic scheduler in lockstep.
+    return @js_engine.run_until_idle if @js_engine
+
     window = @handles[1]
     return unless window.respond_to?(:scheduler)
 
@@ -166,6 +203,33 @@ class MrubyWasm
     window.scheduler.drain_microtasks
   end
 
+  # Load mruby bytecode (a compiled `.mrb`) into the VM, the way the
+  # :compiled boot chain does. Mirrors #eval but through the irep loader
+  # export; the bytes flow in via the handle table (js_to_string_* reads).
+  def load_bytecode(bytes)
+    # js_load_irep_handle (callback.c) reads the bytecode array-like — it
+    # queries handle["length"] then handle[i] as integer bytes (the shape a
+    # JS Uint8Array crosses as), NOT via js_to_string. So hand it a Ruby Array
+    # of byte values; our js_get Array branch serves length + indexed bytes.
+    handle = store_handle(bytes.bytes)
+    rc = @js_load_irep_handle.call(handle)
+    drain_async!
+    rc
+  ensure
+    @handles.delete(handle) if handle
+  end
+
+  # The Dommy document/window the quickjs runtime renders into (nil on the
+  # dommy-stub path). Host-side bundle/parity tests drive and inspect this DOM
+  # directly via Dommy's Ruby API — the same DOM the wasm runtime mutates.
+  def document
+    @js_engine&.document
+  end
+
+  def window
+    @js_engine&.window
+  end
+
   # Drain + return captured stdout. Clears the internal buffer.
   def stdout
     out = @stdout_buf
@@ -204,8 +268,12 @@ class MrubyWasm
     @js_eval_handle     = @instance.export("js_eval_handle")&.to_func
     @js_load_irep_handle = @instance.export("js_load_irep_handle")&.to_func
 
-    raise "lilac-full.wasm is missing compile_source export" unless @compile_source
-    raise "lilac-full.wasm is missing js_load_irep_handle export" unless @js_load_irep_handle
+    # `compile_source` only exists in the :full wasm (the :compiled variant
+    # ships no compiler — ADR-0015 — and is driven via load_bytecode instead).
+    # Both variants export js_load_irep_handle + js_eval_handle, which is all
+    # eval / load_bytecode need.
+    raise "wasm is missing js_load_irep_handle export" unless @js_load_irep_handle
+    raise "wasm is missing js_eval_handle export" unless @js_eval_handle
   end
 
   # All 25 `js.*` imports get stubbed. Signatures must match
@@ -225,7 +293,9 @@ class MrubyWasm
     # work, but the wrap path that test fixtures depend on does.
     define.call("js_eval", [:i32, :i32], [:i32]) do |caller, p, l|
       src = read_mem_str(caller, p, l).strip
-      handle_for(evaluate_js_source(src))
+      # quickjs engine runs the real source; dommy-stub falls back to the
+      # literal/limited-constructor evaluator.
+      handle_for(@js_engine ? @js_engine.eval(src) : evaluate_js_source(src))
     end
     # () -> handle (= the global object)
     define.call("js_global", [], [:i32]) { |_c| 1 }
@@ -360,7 +430,10 @@ class MrubyWasm
     define.call("js_is_null", [:i32], [:i32]) { |_c, h| @handles[h].nil? ? 1 : 0 }
     # (handle, handle) -> bool
     define.call("js_strict_equal", [:i32, :i32], [:i32]) do |_c, a, b|
-      @handles[a] == @handles[b] ? 1 : 0
+      va = @handles[a]
+      vb = @handles[b]
+      equal = @js_engine ? @js_engine.strict_equal(va, vb) : (va == vb)
+      equal ? 1 : 0
     end
     # (handle) -> length of typeof result string
     define.call("js_typeof_len", [:i32], [:i32]) { |_c, h| typeof_for(@handles[h]).bytesize }
@@ -371,16 +444,18 @@ class MrubyWasm
       nil
     end
     # (handle) -> length
-    define.call("js_inspect_len", [:i32], [:i32]) { |_c, h| @handles[h].inspect.bytesize }
+    define.call("js_inspect_len", [:i32], [:i32]) { |_c, h| inspect_for(@handles[h]).bytesize }
     # (handle, dst_ptr, dst_len) -> ()
     define.call("js_inspect_copy", [:i32, :i32, :i32], []) do |caller, h, p, l|
-      s = @handles[h].inspect.byteslice(0, l)
+      s = inspect_for(@handles[h]).byteslice(0, l)
       caller.export("memory").to_memory.write(p, s)
       nil
     end
-    # (handle, ctor_handle) -> bool. Currently only Array detection.
+    # (handle, ctor_handle) -> bool.
     define.call("js_instanceof", [:i32, :i32], [:i32]) do |_c, h, ctor|
-      if @handles[ctor] == :array_ctor && @handles[h].is_a?(Array)
+      if @js_engine
+        @js_engine.instanceof(@handles[h], @handles[ctor]) ? 1 : 0
+      elsif @handles[ctor] == :array_ctor && @handles[h].is_a?(Array)
         1
       elsif @handles[ctor] == :object_ctor && @handles[h].is_a?(Hash)
         1
@@ -393,7 +468,9 @@ class MrubyWasm
     # JS-callable wrapper object that routes invocations back through
     # the exported `js_invoke_proc(callback_id, args_handle)`.
     define.call("js_make_callback", [:i32], [:i32]) do |_c, callback_id|
-      store_handle(Dom::Bridge::Callback.new(self, callback_id))
+      # quickjs engine: a JS function (returned as a JsRef) that routes back to
+      # js_invoke_proc. dommy-stub: a Dommy-side callback shim.
+      store_handle(@js_engine ? @js_engine.make_callback(callback_id) : Dom::Bridge::Callback.new(self, callback_id))
     end
     # () -> count
     define.call("js_handle_count", [], [:i32]) { |_c| @handles.size }
@@ -483,6 +560,8 @@ class MrubyWasm
   #   true/false → "boolean"
   #   Hash / Array / Symbol sentinels → "object"
   def typeof_for(value)
+    return @js_engine.typeof(value) if @js_engine
+
     case value
     when nil               then "object"
     when Integer, Float    then "number"
@@ -492,6 +571,14 @@ class MrubyWasm
       "function"
     else                        "object"
     end
+  end
+
+  # Debug rendering for `p value` (js_inspect). JsRefs stringify via the VM;
+  # everything else uses Ruby #inspect.
+  def inspect_for(value)
+    return @js_engine.to_string(value) if @js_engine && value.is_a?(QuickjsBridge::JsRef)
+
+    value.inspect
   end
 
   # Dispatch a JS method call to a host-side Ruby value. Returns the
@@ -544,6 +631,8 @@ class MrubyWasm
   end
 
   def string_value_for(value)
+    return @js_engine.to_string(value) if @js_engine && value.is_a?(QuickjsBridge::JsRef)
+
     case value
     when String then value
     when true then "true"
