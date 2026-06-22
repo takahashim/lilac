@@ -21,10 +21,10 @@ import { readFile, mkdtemp, cp, readdir, rm } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
-const REPO   = "/Users/maki/git/lilac";
-const MWR    = process.env.MRUBY_WASM_RUNTIME_PATH || "/Users/maki/git/mruby-wasm-runtime";
+const REPO   = join(dirname(fileURLToPath(import.meta.url)), "..");
+const MWR    = process.env.MRUBY_WASM_RUNTIME_PATH || join(REPO, "..", "mruby-wasm-runtime");
 // Default to release wasms (matches CI), but allow env override so
 // contributors can iterate without paying the release rebuild cost.
 const FULL_WASM     = process.env.LILAC_FULL_WASM     || `${REPO}/build/lilac-full.release.wasm`;

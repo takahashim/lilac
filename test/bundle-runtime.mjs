@@ -17,10 +17,10 @@ import { readFile, mkdtemp, cp, writeFile } from "node:fs/promises";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
-const REPO = "/Users/maki/git/lilac";
-const MWR  = process.env.MRUBY_WASM_RUNTIME_PATH || "/Users/maki/git/mruby-wasm-runtime";
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
+const MWR  = process.env.MRUBY_WASM_RUNTIME_PATH || join(REPO, "..", "mruby-wasm-runtime");
 const FULL_WASM     = process.env.LILAC_FULL_WASM     || `${REPO}/build/lilac-full.wasm`;
 const COMPILED_WASM = process.env.LILAC_COMPILED_WASM || `${REPO}/build/lilac-compiled.wasm`;
 const LILAC_BIN   = `${REPO}/cli/exe/lilac`;
