@@ -116,7 +116,7 @@ module Lilac
       component = @component
       cb = JS.callback do |*args|
         begin
-          block.call(*args)
+          block.call(Event.new(args[0], component), *args[1..-1])
         rescue => e
           Lilac.logger.error("listener (#{evt})", e, source: component)
         end
@@ -151,8 +151,9 @@ module Lilac
         else [error.to_s]
         end
       js = @js
+      component = @component
       once_opt = JS.object(once: true)
-      Lilac.promise do |resolve, reject|
+      js_promise = Lilac.promise do |resolve, reject|
         subs = []
         settled = false
         teardown = lambda do
@@ -176,6 +177,28 @@ module Lilac
         listen.call(want, resolve)
         error_events.each { |evt| listen.call(evt, reject) }
       end
+      # The JS Promise must resolve with a raw JS value (it round-trips
+      # through JS), so it carries the raw event; EventPromise wraps the
+      # awaited result as a Lilac::Event on the Ruby side.
+      EventPromise.new(js_promise, @component)
+    end
+
+    # Nearest ancestor-or-self matching the CSS `selector`, wrapped as a
+    # RefElement bound to the same component, or `nil` if there's no
+    # match. Mirrors the DOM `Element.closest(selectors)` standard but
+    # returns Lilac's RefElement (so the result keeps `on` / `attr` /
+    # etc.) instead of a raw JS::Object.
+    #
+    # Tolerant of non-Element / null wrapped nodes: `closest` only exists
+    # on Elements, so a text node, the document, or a js-null `@js`
+    # returns `nil` rather than raising. This lets a raw `event[:target]`
+    # be wrapped and queried directly:
+    #
+    #   in_player = !wrap(event[:target]).closest("audio, .player").nil?
+    def closest(selector)
+      return nil if @js.js_null? || @js[:nodeType].to_i != 1
+      found = @js.call(:closest, selector.to_s)
+      found.js_null? ? nil : RefElement.new(found, @component)
     end
 
     # Fire a `CustomEvent` on the wrapped DOM element. Throws at
@@ -260,6 +283,132 @@ module Lilac
 
     def method_missing(sym, *args, &block)
       @js.__send__(sym, *args, &block)
+    end
+
+    def respond_to_missing?(_sym, _include_private = false)
+      true
+    end
+  end
+
+  # Thin wrapper around a DOM event, handed to every `on` / `once`
+  # handler (manual `ref.on`, `data-on-*`, and form wiring all route
+  # through `RefElement#on`, so this is the single wrap point).
+  #
+  # Goal: keep raw JS out of handlers. Instead of
+  # `event.call(:preventDefault)` and `event[:key].to_s` you write
+  # `event.prevent_default` and `event.key`, and `event.target` comes
+  # back as a RefElement so `event.target.closest(...)` just works.
+  #
+  # Backward compatible by the same "bracket = raw, method = ergonomic"
+  # convention RefElement uses: `event[:clientX]` still reads the raw JS
+  # property, `event.call(:preventDefault)` still works, and any other
+  # method falls through to the wrapped JS::Object.
+  class Event
+    attr_reader :js
+
+    def initialize(js_event, component)
+      @js = js_event
+      @component = component
+    end
+
+    # Common verbs — snake_case, chainable (return self).
+    def prevent_default
+      @js.call(:preventDefault)
+      self
+    end
+
+    def stop_propagation
+      @js.call(:stopPropagation)
+      self
+    end
+
+    def stop_immediate_propagation
+      @js.call(:stopImmediatePropagation)
+      self
+    end
+
+    def default_prevented?
+      @js[:defaultPrevented].js_bool
+    end
+
+    # Common reads — returned as Ruby types.
+    def type
+      @js[:type].to_s
+    end
+
+    # `nil` for non-keyboard events (the JS `key` property is undefined,
+    # which `js_null?` reports true for).
+    def key
+      k = @js[:key]
+      k.js_null? ? nil : k.to_s
+    end
+
+    # `target` / `currentTarget` as RefElements bound to the same
+    # component, so listeners / closest / attr chain off them directly.
+    def target
+      wrap_node(@js[:target])
+    end
+
+    def current_target
+      wrap_node(@js[:currentTarget])
+    end
+
+    # Explicit `call` (rather than leaning on method_missing) so the
+    # familiar `event.call(:preventDefault)` reads as a first-class
+    # method and stays obvious to anyone scanning the class.
+    def call(method, *args, &block)
+      @js.call(method, *args, &block)
+    end
+
+    # Raw property access + unwrap, preserved for backward compat.
+    def [](name)
+      @js[name]
+    end
+
+    def to_js
+      @js
+    end
+
+    def method_missing(sym, *args, &block)
+      @js.__send__(sym, *args, &block)
+    end
+
+    def respond_to_missing?(_sym, _include_private = false)
+      true
+    end
+
+    private
+
+    def wrap_node(node)
+      return nil if node.nil? || node.js_null?
+      RefElement.new(node, @component)
+    end
+  end
+
+  # Awaitable returned by `RefElement#once`. The underlying JS Promise
+  # has to resolve with a raw JS value (the value round-trips through JS,
+  # so a Ruby object can't be carried across), therefore it resolves with
+  # the raw event and we wrap the result as a `Lilac::Event` only after
+  # `.await` brings it back to the Ruby side:
+  #
+  #   event = refs.track.once(:load, error: :error).await   # → Lilac::Event
+  #
+  # Rejections still raise `JS::Error` (the error event isn't wrapped),
+  # matching the pre-wrapper behaviour. `await` is the supported surface;
+  # other calls (`then` / `catch`) fall through to the JS Promise and
+  # yield the raw event.
+  class EventPromise
+    def initialize(js_promise, component)
+      @promise = js_promise
+      @component = component
+    end
+
+    def await
+      Event.new(@promise.await, @component)
+    end
+
+    def method_missing(sym, *args, &block)
+      @promise.__send__(sym, *args, &block)
     end
 
     def respond_to_missing?(_sym, _include_private = false)

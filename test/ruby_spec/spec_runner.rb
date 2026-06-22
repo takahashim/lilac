@@ -92,6 +92,14 @@ class SpecRunner
     "runtime/mruby-lilac/wasm_spec/test_node_operations.rb",
     # RefElement#once — awaitable DOM-event helper (Promise-backed).
     "runtime/mruby-lilac/wasm_spec/test_once_event.rb",
+    # Component#document / #window — wrapped page-level RefElements.
+    "runtime/mruby-lilac/wasm_spec/test_document_window.rb",
+    # RefElement#closest — DOM closest() returning RefElement | nil.
+    "runtime/mruby-lilac/wasm_spec/test_closest.rb",
+    # Lilac::Event — event wrapper handed to on/once handlers.
+    "runtime/mruby-lilac/wasm_spec/test_event.rb",
+    # Lilac.create_object_url / revoke_object_url — Blob object URLs.
+    "runtime/mruby-lilac/wasm_spec/test_object_url.rb",
     # Session 15 unlock — mruby-lilac-form / mruby-lilac-directives /
     # mruby-lilac-async (test_selector 既存) を probe pass で一括追加
     "runtime/mruby-lilac-form/wasm_spec/test_form.rb",
