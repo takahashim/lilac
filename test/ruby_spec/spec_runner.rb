@@ -100,6 +100,8 @@ class SpecRunner
     "runtime/mruby-lilac/wasm_spec/test_event.rb",
     # Lilac.create_object_url / revoke_object_url — Blob object URLs.
     "runtime/mruby-lilac/wasm_spec/test_object_url.rb",
+    # RefElement#toggle_class — force-set and (force-omitted) flip.
+    "runtime/mruby-lilac/wasm_spec/test_toggle_class.rb",
     # Session 15 unlock — mruby-lilac-form / mruby-lilac-directives /
     # mruby-lilac-async (test_selector 既存) を probe pass で一括追加
     "runtime/mruby-lilac-form/wasm_spec/test_form.rb",

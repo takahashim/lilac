@@ -253,8 +253,15 @@ module Lilac
       attr("data-#{name.to_s.tr("_", "-")}", value)
     end
 
-    def toggle_class(name, force)
-      @js[:classList].call(:toggle, name.to_s, !!force)
+    # Toggle a class, mirroring the DOM `classList.toggle` contract
+    NO_FORCE = Object.new.freeze
+    def toggle_class(name, force = NO_FORCE)
+      if force.equal?(NO_FORCE)
+        @js[:classList].call(:toggle, name.to_s)
+      else
+        @js[:classList].call(:toggle, name.to_s, !!force)
+      end
+      nil
     end
 
     def set_style(property, value)
