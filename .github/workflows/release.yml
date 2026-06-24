@@ -58,11 +58,13 @@ jobs:
           path: ~/.cache/mruby-wasm-runtime
           key: wasi-sdk-33.0-x86_64-linux
 
-      - name: Cache mruby clone
+      - name: Cache mruby clone (source only, without build)
         uses: actions/cache@v5
         with:
-          path: mruby-wasm-runtime/mruby
-          key: mruby-4.0.0
+          path: |
+            mruby-wasm-runtime/mruby
+            !mruby-wasm-runtime/mruby/build
+          key: mruby-4.0.0-src
 
       - name: Bootstrap wasi-sdk + mruby clone
         working-directory: mruby-wasm-runtime
