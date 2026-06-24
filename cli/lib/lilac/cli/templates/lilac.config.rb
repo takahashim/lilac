@@ -13,9 +13,12 @@ Lilac::CLI.configure do |c|
   # c.dev_host    = "127.0.0.1"   # `lilac dev` bind host
   # c.dev_port    = 5173          # `lilac dev` bind port
 
-  # --target compiled discovery overrides. Both default to nil, in which
-  # case the CLI auto-discovers via env vars, a monorepo ancestor, or
-  # `node_modules/@takahashim/lilac-compiled` + `node_modules/@takahashim/mruby-wasm-js`.
-  # c.lilac_compiled_path = "/abs/path/to/lilac-compiled.wasm"
-  # c.mruby_wasm_js_path  = "/abs/path/to/mruby-wasm-js/"
+  # Runtime wasm + bridge discovery overrides. All default to nil, in
+  # which case the CLI auto-discovers via env vars, the `lilac-wasm-bin`
+  # gem (recommended — already in the scaffolded Gemfile), or a monorepo
+  # ancestor. Set these to vendor a specific wasm for a fully offline,
+  # CDN-free build.
+  # c.lilac_full_path     = "/abs/path/to/lilac-full.wasm"      # --target full
+  # c.lilac_compiled_path = "/abs/path/to/lilac-compiled.wasm"  # --target compiled
+  # c.mruby_wasm_js_path  = "/abs/path/to/mruby-wasm-js/"       # JS bridge (both targets)
 end

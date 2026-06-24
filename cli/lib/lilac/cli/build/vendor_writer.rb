@@ -12,6 +12,29 @@ module Lilac
     # The copy mechanics — mkdir, single-file wasm cp, bridge dir
     # walk skipping subdirectories — are the same for both.
     module VendorWriter
+      # Single source of truth for the runtime assets a self-contained
+      # (offline-runnable) dist must carry, per build target, as paths
+      # relative to the dist root. Consumed by `Builder` (the :full skip
+      # guard), `OfflineVerifier` (presence check), and `Doctor`
+      # (`RUNTIME_WASM` / `RUNTIME_JS_ADAPTER`) so the definition of "a
+      # complete vendored runtime" lives in exactly one place.
+      #
+      # Each value names its roles (`:wasm` / `:bridge`) so consumers
+      # reference by meaning, not array position. The wasm basename
+      # differs by target (`lilac-full.wasm` vs the vendored `lilac.wasm`);
+      # the bridge entry is the shared `mruby-wasm-js/index.js`. The
+      # vendor directory of a target is `File.dirname(...[:wasm])`.
+      REQUIRED_ASSETS = {
+        full: {
+          wasm:   'vendor/lilac-full/lilac-full.wasm',
+          bridge: 'vendor/lilac-full/mruby-wasm-js/index.js',
+        }.freeze,
+        compiled: {
+          wasm:   'vendor/lilac-compiled/lilac.wasm',
+          bridge: 'vendor/lilac-compiled/mruby-wasm-js/index.js',
+        }.freeze,
+      }.freeze
+
       module_function
 
       # Copy `wasm_src` to `<vendor_dir>/<wasm_name>` and every regular

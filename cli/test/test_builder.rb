@@ -30,7 +30,6 @@ class TestBuilder < Minitest::Test
   def build!(target: :full, mrbc_path: nil,
              lilac_compiled_path: nil, mruby_wasm_js_path: nil,
              packages: [],
-             project_root: Dir.pwd,
              delivery: :inline)
     Lilac::CLI::Builder.new(
       components_dir: @components,
@@ -41,13 +40,25 @@ class TestBuilder < Minitest::Test
       lilac_compiled_path: lilac_compiled_path,
       mruby_wasm_js_path: mruby_wasm_js_path,
       packages: packages,
-      project_root: project_root,
       delivery: delivery,
     ).build
   end
 
   def read_output(name)
     File.read(File.join(@output, name))
+  end
+
+  # Throwaway lilac-full runtime (dummy wasm + a bridge dir containing
+  # index.js) so a `:full` build resolves deterministically without the
+  # gem or the monorepo build/ artifact. Returns [wasm_path, bridge_dir].
+  def fixture_full_runtime
+    base = File.join(@tmp, "fixture-runtime")
+    bridge = File.join(base, "mruby-wasm-js")
+    FileUtils.mkdir_p(bridge)
+    wasm = File.join(base, "lilac-full.wasm")
+    File.write(wasm, "WASM")
+    File.write(File.join(bridge, "index.js"), "export const createVM = () => {};")
+    [wasm, bridge]
   end
 
   def test_self_closing_widget_placeholder_is_replaced
@@ -576,19 +587,48 @@ class TestBuilder < Minitest::Test
     GNT
     write_page "index", '<html><body><div data-use="x"></div></body></html>'
 
+    wasm, bridge = fixture_full_runtime
     result = Lilac::CLI::Builder.new(
       components_dir: @components,
       pages_dir: @pages,
       output_dir: @output,
       public_dir: File.join(@tmp, "public-not-here"),
-      # `auto_vendor_full_runtime!` would create `dist/vendor/lilac-full/`
-      # when `lilac-wasm-bin` is available. Disable here so the test
-      # stays focused on the public_dir-absent behavior.
+      # Pin an explicit runtime so the test is deterministic regardless of
+      # gem/monorepo presence; the focus here is the public_dir-absent path.
+      lilac_full_path: wasm,
+      mruby_wasm_js_path: bridge,
       disable_gem_discovery: true,
     ).build
 
     assert_equal 0, result[:public_files]
-    refute File.exist?(File.join(@output, "vendor"))
+    # :full now always vendors its runtime (strict, offline-safe).
+    assert File.exist?(File.join(@output, "vendor", "lilac-full", "lilac-full.wasm"))
+  end
+
+  def test_full_target_skips_vendoring_when_already_present
+    write_widget "x", <<~GNT
+      <template><div data-component="x"></div></template>
+      <script type="text/ruby">class X < Lilac::Component; end</script>
+    GNT
+    write_page "index", '<html><body><div data-use="x"></div></body></html>'
+
+    # Pre-vendor the runtime by hand (the gem-less self-hosting workflow).
+    vendor = File.join(@output, "vendor", "lilac-full")
+    FileUtils.mkdir_p(File.join(vendor, "mruby-wasm-js"))
+    File.write(File.join(vendor, "lilac-full.wasm"), "PREVENDORED")
+    File.write(File.join(vendor, "mruby-wasm-js", "index.js"), "BOOT")
+
+    # No runtime discoverable (gem off, no explicit path). Must NOT raise:
+    # the skip guard sees the assets already in place and leaves them.
+    Lilac::CLI::Builder.new(
+      components_dir: @components,
+      pages_dir: @pages,
+      output_dir: @output,
+      target: :full,
+      disable_gem_discovery: true,
+    ).build
+
+    assert_equal "PREVENDORED", File.read(File.join(vendor, "lilac-full.wasm"))
   end
 
   def test_public_dir_skip_gitkeep
@@ -1084,7 +1124,6 @@ class TestBuilder < Minitest::Test
           output_dir: @output,
           target: :compiled,
           mrbc_path: mrbc,
-          project_root: sandbox,
         ).tap do |b|
           # Inject a resolver whose monorepo_root points at /nope so the
           # discovery genuinely fails — needed because the real monorepo
@@ -1093,7 +1132,7 @@ class TestBuilder < Minitest::Test
           # gem fallback (which would otherwise land back in the real
           # monorepo's build/).
           stub = Lilac::CLI::CompiledRuntimeResolver.new(
-            project_root: sandbox, monorepo_root: no_repo,
+            monorepo_root: no_repo,
             disable_gem_discovery: true,
           )
           b.instance_variable_set(:@compiled_runtime_resolver, stub)

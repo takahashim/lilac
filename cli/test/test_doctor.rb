@@ -14,9 +14,17 @@ class TestDoctor < Minitest::Test
     FileUtils.remove_entry(@tmp)
   end
 
-  def run_doctor(lilac_compiled_path: nil)
+  def run_doctor(lilac_compiled_path: nil, lilac_full_path: nil,
+                 mruby_wasm_js_path: nil, output_dir: nil, build_target: nil)
     out = StringIO.new
-    config = Lilac::CLI::Config.new(root: @tmp, lilac_compiled_path: lilac_compiled_path)
+    config = Lilac::CLI::Config.new(
+      root: @tmp,
+      lilac_compiled_path: lilac_compiled_path,
+      lilac_full_path: lilac_full_path,
+      mruby_wasm_js_path: mruby_wasm_js_path,
+      output_dir: output_dir,
+      build_target: build_target,
+    )
     status = Lilac::CLI::Doctor.new(config, out: out).run
     [status, out.string]
   end
@@ -129,6 +137,53 @@ class TestDoctor < Minitest::Test
     # On CI / monorepo machines without `build/lilac-compiled.wasm`,
     # this naturally lands in the warn branch.
     skip 'needs a sandboxed monorepo to be deterministic; covered by resolver tests'
+  end
+
+  def test_full_runtime_reports_ok_when_discoverable
+    scaffold_minimal_project
+    fake = File.join(@tmp, 'fake-lilac-full.wasm')
+    File.binwrite(fake, 'wasm')
+
+    status, out = run_doctor(lilac_full_path: fake)
+    assert_equal 0, status, out
+    assert_match(/\[OK\].*full wasm discoverable/, out)
+  end
+
+  def test_offline_dist_skipped_when_no_build_output
+    scaffold_minimal_project
+    status, out = run_doctor
+    assert_equal 0, status, out
+    assert_match(/\[OK\].*offline check skipped/, out)
+  end
+
+  def test_offline_dist_ok_when_self_contained
+    scaffold_minimal_project
+    dist = File.join(@tmp, 'dist')
+    vendor = File.join(dist, 'vendor', 'lilac-full', 'mruby-wasm-js')
+    FileUtils.mkdir_p(vendor)
+    File.write(File.join(dist, 'vendor', 'lilac-full', 'lilac-full.wasm'), 'WASM')
+    File.write(File.join(vendor, 'index.js'), 'export const createVM = () => {};')
+    File.write(File.join(dist, 'index.html'),
+               '<script type="module">import { createVM } from "/vendor/lilac-full/mruby-wasm-js/index.js";</script>')
+
+    status, out = run_doctor(output_dir: dist, build_target: :full)
+    assert_equal 0, status, out
+    assert_match(/\[OK\].*offline-runnable/, out)
+  end
+
+  def test_offline_dist_warns_on_remote_url
+    scaffold_minimal_project
+    dist = File.join(@tmp, 'dist')
+    vendor = File.join(dist, 'vendor', 'lilac-full', 'mruby-wasm-js')
+    FileUtils.mkdir_p(vendor)
+    File.write(File.join(dist, 'vendor', 'lilac-full', 'lilac-full.wasm'), 'WASM')
+    File.write(File.join(vendor, 'index.js'), 'export const createVM = () => {};')
+    File.write(File.join(dist, 'index.html'),
+               '<script type="module">import { boot } from "https://takahashim.github.io/lilac/v0.1.0/index.js";</script>')
+
+    status, out = run_doctor(output_dir: dist, build_target: :full)
+    assert_equal 0, status, 'offline issues are warn-only, not errors'
+    assert_match(/\[WARN\].*offline:.*github\.io/, out)
   end
 
   def test_mrbc_backend_check_reports_a_line

@@ -10,6 +10,8 @@ require_relative 'build_context'
 require_relative 'bundle_asset_writer'
 require_relative 'package_stager'
 require_relative 'vendor_writer'
+require_relative 'compiled_runtime_resolver'
+require_relative 'full_runtime_resolver'
 require_relative 'page_compiler'
 require_relative '../lint/build_linter'
 
@@ -68,9 +70,9 @@ module Lilac
           target: target || config.build_target,
           mrbc_path: config.mrbc_path,
           lilac_compiled_path: config.lilac_compiled_path,
+          lilac_full_path: config.lilac_full_path,
           mruby_wasm_js_path: config.mruby_wasm_js_path,
           packages: config.packages,
-          project_root: config.root,
           delivery: delivery || config.delivery,
           live_reload: live_reload
         )
@@ -79,9 +81,9 @@ module Lilac
       def initialize(components_dir:, pages_dir:, output_dir:, public_dir: nil,
                      live_reload: false,
                      target: :full, mrbc_path: nil,
-                     lilac_compiled_path: nil, mruby_wasm_js_path: nil,
+                     lilac_compiled_path: nil, lilac_full_path: nil,
+                     mruby_wasm_js_path: nil,
                      packages: [],
-                     project_root: Dir.pwd,
                      disable_gem_discovery: false,
                      delivery: :inline)
         @components_dir = components_dir
@@ -106,6 +108,11 @@ module Lilac
         # built dist is fully self-contained and no manual cp into
         # `public/vendor/lilac-compiled/` is required.
         @lilac_compiled_path = lilac_compiled_path
+        # Discovery hint for the full runtime wasm — parallel to
+        # `@lilac_compiled_path`. Used by `auto_vendor_full_runtime!`
+        # via `FullRuntimeResolver` so a `:full` build is reliably
+        # self-contained (offline-runnable) without the CDN.
+        @lilac_full_path     = lilac_full_path
         @mruby_wasm_js_path  = mruby_wasm_js_path
         # Pre-compiled Lilac package `.mrb` paths (absolute). For both
         # `:compiled` and `:full` builds these get staged under
@@ -114,7 +121,6 @@ module Lilac
         # `dist/lilac.packages.json` manifest the scaffold boot fetches.
         # See decisions §25 / §26.
         @packages            = Array(packages).map { |p| File.expand_path(p) }
-        @project_root        = project_root
         # Mirrors `CompiledRuntimeResolver` / `BytecodeBuilder`'s
         # `disable_gem_discovery:` — tests pass `true` so the gem-bundled
         # wasm doesn't satisfy lookups they're trying to isolate. Plumbed
@@ -190,9 +196,10 @@ module Lilac
         # produced — pages without any Ruby script don't reference the
         # bootstrap module.
         auto_vendor_compiled_runtime! if @target == :compiled && Dir.glob(File.join(@output_dir, '*.mrb')).any?
-        # :full vendor — symmetric to :compiled. Gated by `lilac-wasm-bin`
-        # availability (silent no-op when the gem isn't loadable, e.g.
-        # tests with `disable_gem_discovery: true`).
+        # :full vendor — symmetric to :compiled. Strict: raises with an
+        # actionable message when no runtime is discoverable (so an
+        # offline build can't silently ship without its wasm), unless the
+        # assets are already vendored (manual / public-mirror workflow).
         auto_vendor_full_runtime! if @target == :full
 
         { pages: pages.length, components: components.length, public_files: public_files }
@@ -255,7 +262,16 @@ module Lilac
         @compiled_runtime_resolver ||= CompiledRuntimeResolver.new(
           lilac_compiled_path: @lilac_compiled_path,
           mruby_wasm_js_path: @mruby_wasm_js_path,
-          project_root: @project_root,
+          disable_gem_discovery: @disable_gem_discovery
+        )
+      end
+
+      # Lazily resolves the lilac-full runtime (wasm + bridge), mirroring
+      # `compiled_runtime_resolver`.
+      def full_runtime_resolver
+        @full_runtime_resolver ||= FullRuntimeResolver.new(
+          lilac_full_path: @lilac_full_path,
+          mruby_wasm_js_path: @mruby_wasm_js_path,
           disable_gem_discovery: @disable_gem_discovery
         )
       end
@@ -263,20 +279,24 @@ module Lilac
       # :full target: vendor lilac-full.wasm + bridge into
       # `dist/vendor/lilac-full/` so the scaffold-generated page
       # (`import { createVM } from "/vendor/lilac-full/..."`) finds its
-      # runtime assets after `lilac build`.
+      # runtime assets after `lilac build` — making the dist fully
+      # self-contained / offline-runnable with no CDN.
       #
-      # Resolution is `lilac-wasm-bin` gem only — the gem itself walks
-      # up to the monorepo `build/` directory as a fallback when used
-      # with `path:`, so contributors get the same auto-sync as
-      # production users. Silently no-ops when the gem isn't loadable
-      # (gem missing, `@disable_gem_discovery: true` for tests).
+      # Strict, symmetric with `auto_vendor_compiled_runtime!`: raises
+      # `FullRuntimeResolver::Error` (actionable message) when no runtime
+      # can be discovered, rather than silently shipping a dist missing
+      # its runtime. The one exception is the manual-vendor workflow: if
+      # the assets are already present under the vendor dir (e.g. mirrored
+      # from `public/vendor/lilac-full/` — `mirror_public_files` runs
+      # before this — or copied by hand), we skip resolution entirely so
+      # gem-less self-hosting still works.
       def auto_vendor_full_runtime!
-        wasm_src, bridge_src = resolve_full_runtime_sources
-        return unless wasm_src && bridge_src
+        return if VendorWriter::REQUIRED_ASSETS[:full]
+                    .each_value.all? { |rel| File.file?(File.join(@output_dir, rel)) }
 
         VendorWriter.copy!(
-          wasm_src: wasm_src,
-          bridge_src: bridge_src,
+          wasm_src: full_runtime_resolver.resolve_wasm!,
+          bridge_src: full_runtime_resolver.resolve_bridge!,
           vendor_dir: File.join(@output_dir, 'vendor', 'lilac-full'),
           wasm_name: 'lilac-full.wasm'
         )
@@ -299,24 +319,6 @@ module Lilac
           vendor_dir: File.join(@output_dir, 'vendor', 'lilac-compiled'),
           wasm_name: 'lilac.wasm'
         )
-      end
-
-      # Soft-resolve the :full runtime via `lilac-wasm-bin`. Returns
-      # `[wasm, bridge]` or `[nil, nil]` when the gem isn't loadable
-      # (or `disable_gem_discovery` is set for tests) — vendor caller
-      # treats nil as "skip, nothing to do" rather than an error,
-      # mirroring how the user runs `lilac build --target full` without
-      # the gem when they vendor manually.
-      def resolve_full_runtime_sources
-        return [nil, nil] if @disable_gem_discovery
-
-        begin
-          require "lilac/wasm/bin"
-        rescue LoadError
-          return [nil, nil]
-        end
-
-        [::Lilac::Wasm::Bin.lilac_full_wasm, ::Lilac::Wasm::Bin.mruby_wasm_js_dir]
       end
 
     end

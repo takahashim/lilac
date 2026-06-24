@@ -4,14 +4,14 @@ require_relative "test_helper"
 require "fileutils"
 require "tmpdir"
 
-class TestCompiledRuntimeResolver < Minitest::Test
-  Resolver = Lilac::CLI::CompiledRuntimeResolver
+class TestFullRuntimeResolver < Minitest::Test
+  Resolver = Lilac::CLI::FullRuntimeResolver
 
   def setup
-    @tmp = Dir.mktmpdir("lilac-resolver-test-")
+    @tmp = Dir.mktmpdir("lilac-full-resolver-test-")
     # Discovery routes inspect ENV; isolate the test from the developer's
     # real env so behaviour is deterministic regardless of who runs it.
-    @env_keys = %w[LILAC_COMPILED_WASM MRUBY_WASM_JS_PATH]
+    @env_keys = %w[LILAC_FULL_WASM MRUBY_WASM_JS_PATH]
     @env_saved = @env_keys.to_h { |k| [k, ENV.delete(k)] }
   end
 
@@ -26,14 +26,14 @@ class TestCompiledRuntimeResolver < Minitest::Test
     wasm = File.join(@tmp, "explicit.wasm")
     File.binwrite(wasm, "WASM")
 
-    r = Resolver.new(lilac_compiled_path: wasm, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
+    r = Resolver.new(lilac_full_path: wasm, monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal wasm, r.resolve_wasm!
   end
 
   def test_resolves_wasm_from_env_var
     wasm = File.join(@tmp, "env.wasm")
     File.binwrite(wasm, "WASM")
-    ENV["LILAC_COMPILED_WASM"] = wasm
+    ENV["LILAC_FULL_WASM"] = wasm
 
     r = Resolver.new(monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     assert_equal wasm, r.resolve_wasm!
@@ -42,15 +42,15 @@ class TestCompiledRuntimeResolver < Minitest::Test
   def test_explicit_beats_env_beats_monorepo
     monorepo = File.join(@tmp, "fake-monorepo")
     FileUtils.mkdir_p(File.join(monorepo, "build"))
-    File.binwrite(File.join(monorepo, "build", "lilac-compiled.wasm"), "MONOREPO")
+    File.binwrite(File.join(monorepo, "build", "lilac-full.wasm"), "MONOREPO")
 
     env_wasm = File.join(@tmp, "env.wasm"); File.binwrite(env_wasm, "ENV")
     explicit_wasm = File.join(@tmp, "explicit.wasm"); File.binwrite(explicit_wasm, "EXPLICIT")
 
-    ENV["LILAC_COMPILED_WASM"] = env_wasm
+    ENV["LILAC_FULL_WASM"] = env_wasm
 
     # Explicit wins
-    r1 = Resolver.new(lilac_compiled_path: explicit_wasm, monorepo_root: monorepo, disable_gem_discovery: true)
+    r1 = Resolver.new(lilac_full_path: explicit_wasm, monorepo_root: monorepo, disable_gem_discovery: true)
     assert_equal explicit_wasm, r1.resolve_wasm!
 
     # Without explicit, env wins
@@ -58,34 +58,41 @@ class TestCompiledRuntimeResolver < Minitest::Test
     assert_equal env_wasm, r2.resolve_wasm!
 
     # Without env, monorepo build/ wins (the last fallback before raise).
-    ENV.delete("LILAC_COMPILED_WASM")
+    ENV.delete("LILAC_FULL_WASM")
     r3 = Resolver.new(monorepo_root: monorepo, disable_gem_discovery: true)
-    assert_equal File.join(monorepo, "build", "lilac-compiled.wasm"), r3.resolve_wasm!
+    assert_equal File.join(monorepo, "build", "lilac-full.wasm"), r3.resolve_wasm!
   end
 
   def test_resolves_wasm_from_monorepo_build_dir
-    # `<monorepo_root>/build/lilac-compiled.wasm` is the freshly-built
-    # dev artefact, the canonical in-monorepo source after npm/lilac-
-    # compiled/ was retired in §25.
     monorepo = File.join(@tmp, "fake-monorepo")
     FileUtils.mkdir_p(File.join(monorepo, "build"))
-    File.binwrite(File.join(monorepo, "build", "lilac-compiled.wasm"), "DEV")
+    File.binwrite(File.join(monorepo, "build", "lilac-full.wasm"), "DEV")
 
     r = Resolver.new(monorepo_root: monorepo, disable_gem_discovery: true)
-    assert_equal File.join(monorepo, "build", "lilac-compiled.wasm"), r.resolve_wasm!
+    assert_equal File.join(monorepo, "build", "lilac-full.wasm"), r.resolve_wasm!
   end
 
   def test_unresolved_wasm_raises_with_actionable_message
     r = Resolver.new(monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
     err = assert_raises(Resolver::Error) { r.resolve_wasm! }
-    assert_match(/lilac-compiled\.wasm not found/, err.message)
-    assert_match(/lilac_compiled_path/, err.message)
-    assert_match(/LILAC_COMPILED_WASM/, err.message)
+    assert_match(/lilac-full\.wasm not found/, err.message)
+    assert_match(/lilac_full_path/, err.message)
+    assert_match(/LILAC_FULL_WASM/, err.message)
     assert_match(/lilac-wasm-bin/, err.message)
-    assert_match(/make lilac-compiled/, err.message)
+    assert_match(/make lilac-full/, err.message)
   end
 
-  # ---- bridge discovery ---------------------------------------------
+  def test_error_is_distinct_from_compiled_but_shares_ancestor
+    r = Resolver.new(monorepo_root: File.join(@tmp, "nonexistent-monorepo"), disable_gem_discovery: true)
+
+    err = assert_raises(Lilac::CLI::FullRuntimeResolver::Error) { r.resolve_wasm! }
+    # Common ancestor: rescuable as RuntimeResolver::Error.
+    assert_kind_of Lilac::CLI::RuntimeResolver::Error, err
+    # Distinct: a CompiledRuntimeResolver::Error rescue must NOT catch it.
+    refute_kind_of Lilac::CLI::CompiledRuntimeResolver::Error, err
+  end
+
+  # ---- bridge discovery (shared artifact; same logic as :compiled) ---
 
   def test_resolves_bridge_from_explicit_path
     bridge = File.join(@tmp, "explicit-bridge")

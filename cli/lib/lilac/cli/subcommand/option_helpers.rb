@@ -43,8 +43,12 @@ module Lilac
                "Path to lilac-compiled.wasm (default: auto-discover; --target compiled only)") do |v|
             opts[:lilac_compiled_path] = v
           end
+          o.on("--lilac-full-path PATH",
+               "Path to lilac-full.wasm (default: auto-discover; --target full only)") do |v|
+            opts[:lilac_full_path] = v
+          end
           o.on("--mruby-wasm-js-path PATH",
-               "Path to the mruby-wasm-js bridge directory (default: auto-discover; --target compiled only)") do |v|
+               "Path to the mruby-wasm-js bridge directory (default: auto-discover)") do |v|
             opts[:mruby_wasm_js_path] = v
           end
         end

@@ -52,7 +52,7 @@ module Lilac
       attr_reader :root, :components_dir, :pages_dir, :output_dir, :public_dir,
                   :dev_host, :dev_port,
                   :build_target, :dev_target, :mrbc_path,
-                  :lilac_compiled_path, :mruby_wasm_js_path,
+                  :lilac_compiled_path, :lilac_full_path, :mruby_wasm_js_path,
                   :packages, :delivery
 
       # Three-way merge: CLI opts > lilac.config.rb > built-in defaults.
@@ -61,7 +61,8 @@ module Lilac
       def self.load(root: nil, components_dir: nil, pages_dir: nil, output_dir: nil,
                     public_dir: nil, dev_host: nil, dev_port: nil,
                     build_target: nil, dev_target: nil, mrbc_path: nil,
-                    lilac_compiled_path: nil, mruby_wasm_js_path: nil,
+                    lilac_compiled_path: nil, lilac_full_path: nil,
+                    mruby_wasm_js_path: nil,
                     packages: nil, delivery: nil)
         resolved_root = File.expand_path(root || Dir.pwd)
         settings = ConfigLoader.load(resolved_root) || ConfigLoader::Settings.new
@@ -78,6 +79,7 @@ module Lilac
           dev_target:   dev_target   || settings.dev_target,
           mrbc_path:    mrbc_path    || settings.mrbc_path,
           lilac_compiled_path: lilac_compiled_path || settings.lilac_compiled_path,
+          lilac_full_path:     lilac_full_path     || settings.lilac_full_path,
           mruby_wasm_js_path:  mruby_wasm_js_path  || settings.mruby_wasm_js_path,
           packages:    packages    || settings.packages,
           delivery:    delivery    || settings.delivery,
@@ -87,7 +89,8 @@ module Lilac
       def initialize(root: nil, components_dir: nil, pages_dir: nil, output_dir: nil,
                      public_dir: nil, dev_host: nil, dev_port: nil,
                      build_target: nil, dev_target: nil, mrbc_path: nil,
-                     lilac_compiled_path: nil, mruby_wasm_js_path: nil,
+                     lilac_compiled_path: nil, lilac_full_path: nil,
+                     mruby_wasm_js_path: nil,
                      packages: nil, delivery: nil)
         # Use `|| Dir.pwd` rather than a default keyword so callers can
         # pass `root: opts[:root]` (often nil from un-set CLI flags)
@@ -106,6 +109,9 @@ module Lilac
         # nil = auto-discover via CompiledRuntimeResolver (env / monorepo
         # ancestor / node_modules).
         @lilac_compiled_path = lilac_compiled_path
+        # nil = auto-discover via FullRuntimeResolver (env / gem /
+        # monorepo). Parallel to @lilac_compiled_path.
+        @lilac_full_path     = lilac_full_path
         @mruby_wasm_js_path  = mruby_wasm_js_path
         # Pre-compiled Lilac package `.mrb` paths (advanced override
         # path — most users get packages via Bundler auto-discovery,

@@ -21,6 +21,7 @@ module Lilac
             build_target: opts[:target],
             mrbc_path: opts[:mrbc_path],
             lilac_compiled_path: opts[:lilac_compiled_path],
+            lilac_full_path: opts[:lilac_full_path],
             mruby_wasm_js_path: opts[:mruby_wasm_js_path],
           )
 

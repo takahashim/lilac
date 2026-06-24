@@ -3,8 +3,10 @@
 require_relative 'build/builder'
 require_relative 'build/bytecode_builder'
 require_relative 'build/compiled_runtime_resolver'
+require_relative 'build/full_runtime_resolver'
 require_relative 'build/page_compiler'
 require_relative 'build/sfc'
+require_relative 'offline_verifier'
 
 module Lilac
   module CLI
@@ -22,9 +24,10 @@ module Lilac
 
       # Where the wasm runtime is expected to live, relative to public_dir.
       # Both live under `vendor/lilac-full/` so the target-aware public
-      # mirror can prune them when building `--target compiled`.
-      RUNTIME_WASM = 'vendor/lilac-full/lilac-full.wasm'
-      RUNTIME_JS_ADAPTER = 'vendor/lilac-full/mruby-wasm-js/index.js'
+      # mirror can prune them when building `--target compiled`. Sourced
+      # from the single `VendorWriter::REQUIRED_ASSETS` definition.
+      RUNTIME_WASM       = VendorWriter::REQUIRED_ASSETS[:full][:wasm]
+      RUNTIME_JS_ADAPTER = VendorWriter::REQUIRED_ASSETS[:full][:bridge]
 
       def initialize(config, out: $stdout)
         @config = config
@@ -54,7 +57,9 @@ module Lilac
           check_runtime_wasm,
           check_js_adapter,
           check_compiled_runtime,
-          check_mrbc_backend
+          check_full_runtime,
+          check_mrbc_backend,
+          *check_offline_dist
         ]
       end
 
@@ -157,10 +162,9 @@ module Lilac
       def check_compiled_runtime
         resolver = CompiledRuntimeResolver.new(
           lilac_compiled_path: @config.lilac_compiled_path,
-          mruby_wasm_js_path: @config.mruby_wasm_js_path,
-          project_root: @config.root
+          mruby_wasm_js_path: @config.mruby_wasm_js_path
         )
-        path = resolver.send(:resolve_wasm)
+        path = resolver.wasm_path
         if path && File.file?(path)
           ok("compiled wasm discoverable: #{relative(path)} (#{format_size(File.size(path))})")
         else
@@ -170,6 +174,49 @@ module Lilac
             'in the lilac monorepo, add `gem "lilac-wasm-bin"` to your Gemfile ' \
             'and `bundle install`, or use `lilac build --target full` to skip it.'
           )
+        end
+      end
+
+      # `lilac build --target full` vendors `lilac-full.wasm` + bridge
+      # into the dist; this reports whether a runtime is discoverable so
+      # a `:full` build won't fail. Warn-only (a `:compiled`-only project
+      # needn't set up the full runtime), mirroring `check_compiled_runtime`.
+      def check_full_runtime
+        resolver = FullRuntimeResolver.new(
+          lilac_full_path: @config.lilac_full_path,
+          mruby_wasm_js_path: @config.mruby_wasm_js_path
+        )
+        path = resolver.wasm_path
+        if path && File.file?(path)
+          ok("full wasm discoverable: #{relative(path)} (#{format_size(File.size(path))})")
+        else
+          warn(
+            'lilac-full.wasm not discoverable — `lilac build --target full` ' \
+            'will fail. Either run `make lilac-full` in the lilac monorepo, ' \
+            'add `gem "lilac-wasm-bin"` to your Gemfile and `bundle install`, ' \
+            'or set `c.lilac_full_path`.'
+          )
+        end
+      end
+
+      # If a build output already exists, verify it can run offline: all
+      # of the target's runtime assets are vendored locally and no
+      # emitted HTML/JS pulls a runtime asset from a remote origin (CDN).
+      # Skipped (informational) when `dist/` is absent — `doctor` is
+      # usually run before the first build. Warn-only, like the other
+      # external-asset checks.
+      # Always returns Array<Result> (splatted into the check list) so a
+      # dist with several issues reports one line per issue.
+      def check_offline_dist
+        dist = @config.output_dir
+        return [ok("offline check skipped — no build output at #{relative(dist)} (run `lilac build` first)")] unless File.directory?(dist)
+
+        results = OfflineVerifier.new(dist).verify
+        problems = results.reject { |r| r.level == :ok }
+        if problems.empty?
+          [ok("dist is offline-runnable: #{relative(dist)} (runtime vendored locally, no remote asset URLs)")]
+        else
+          problems.map { |r| Result.new(level: r.level, message: "offline: #{r.message}") }
         end
       end
 
