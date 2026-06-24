@@ -310,9 +310,16 @@ bind refs.preview, html: @user_input       # ❌ 危険
 ### CSS class / style 操作
 
 ```ruby
-refs.field.toggle_class("is-invalid", true_or_false)
+refs.field.toggle_class("is-invalid", true_or_false)  # force: add/remove
+refs.field.toggle_class("is-invalid")                 # force 省略: flip
 refs.box.set_style("color", "red")
 refs.box.set_style("color", nil)   # property を削除
+```
+
+`toggle_class` は DOM `classList.toggle` に準拠。第2引数 `force` を渡すと truthy で追加 / falsy で削除、**省略するとフリップ**(現在の有無を反転)。`<html>` のような外部要素も `wrap` 経由で同じ:
+
+```ruby
+wrap(document[:documentElement]).toggle_class("show-notes")  # <html> のクラスをフリップ
 ```
 
 (通常は `bind class:` / `bind style:` で間接利用するため、直接呼ぶことは少ない)
@@ -1849,7 +1856,7 @@ end
 | `hidden` / `hidden=` | bool |
 | `disabled` / `disabled=` | bool |
 | `checked` / `checked=` | bool |
-| `toggle_class(name, force)` | classList.toggle |
+| `toggle_class(name, force = nil)` | classList.toggle (force 省略でフリップ) |
 | `set_style(prop, value)` | style.setProperty / removeProperty |
 | `attr(name)` / `attr(name, value)` / `attr(name, nil)` | getAttribute / setAttribute / removeAttribute (read は nil 可) |
 | `data(name)` / `data(name, value)` | `attr("data-#{name}", ...)` のショートカット |
