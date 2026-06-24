@@ -8,18 +8,29 @@ MONOREPO_ROOT = File.expand_path("..", GEM_ROOT)
 DATA_DIR = File.join(GEM_ROOT, "data")
 
 namespace :build do
-  desc "Copy lilac-full.wasm / lilac-compiled.wasm / bridge into data/ ready for `gem build`"
+  desc "Copy the RELEASE lilac-full / lilac-compiled / mrbc-host wasm + bridge into data/ ready for `gem build`"
   task :assets do
     FileUtils.mkdir_p(DATA_DIR)
 
-    %w[lilac-full.wasm lilac-compiled.wasm mrbc-host.wasm].each do |name|
-      src = File.join(MONOREPO_ROOT, "build", name)
+    # Ship the RELEASE wasms (`-Oz` + `--strip-debug`): ~80% smaller than
+    # the dev build with identical behavior. The distributed gem must not
+    # carry multi-MB debug-laden binaries (e.g. lilac-full dev 4.3MB vs
+    # release 832KB). Source basename has the `.release` infix; the
+    # vendored/data name stays plain so consumers (`Lilac::Wasm::Bin`)
+    # reference a stable `lilac-full.wasm` etc.
+    {
+      "lilac-full.release.wasm"     => "lilac-full.wasm",
+      "lilac-compiled.release.wasm" => "lilac-compiled.wasm",
+      "mrbc-host.release.wasm"      => "mrbc-host.wasm",
+    }.each do |src_name, data_name|
+      src = File.join(MONOREPO_ROOT, "build", src_name)
       unless File.file?(src)
-        abort "missing #{src} — run `make #{name.sub('.wasm', '')}` in the monorepo first"
+        target = data_name.sub(".wasm", "")
+        abort "missing #{src} — run `make #{target}-release` in the monorepo first"
       end
-      dst = File.join(DATA_DIR, name)
+      dst = File.join(DATA_DIR, data_name)
       FileUtils.cp(src, dst)
-      puts "Copied #{name} → data/"
+      puts "Copied #{src_name} → data/#{data_name}"
     end
 
     bridge_src = File.join(MONOREPO_ROOT, "mrbgem", "mruby-wasm-js", "js")

@@ -23,7 +23,10 @@ module Lilac
     # resolver walks up to the lilac monorepo root and reads from
     # `build/` (lilac-{full,compiled}.wasm) / `mrbgem/mruby-wasm-js/`
     # (bridge), so contributors don't have to `rake build:assets`
-    # before every tweak.
+    # before every tweak. The fallback prefers the RELEASE wasm
+    # (`build/<name>.release.wasm`, what the released gem ships) over the
+    # dev build, so a `path:` checkout vendors the same small artifact as
+    # production; the dev build is the last resort (debugging).
     module Bin
       # Absolute path to this gem's `data/` directory — the canonical
       # location for the bundled wasm + bridge in a released gem.
@@ -34,18 +37,12 @@ module Lilac
         # to `<monorepo>/build/lilac-full.wasm` for in-repo development.
         # Returns nil if neither exists.
         def lilac_full_wasm
-          first_existing(
-            File.join(DATA_DIR, "lilac-full.wasm"),
-            File.join(monorepo_root, "build", "lilac-full.wasm"),
-          )
+          first_existing(*monorepo_candidates("lilac-full"))
         end
 
         # Path to lilac-compiled.wasm. Same discovery pattern.
         def lilac_compiled_wasm
-          first_existing(
-            File.join(DATA_DIR, "lilac-compiled.wasm"),
-            File.join(monorepo_root, "build", "lilac-compiled.wasm"),
-          )
+          first_existing(*monorepo_candidates("lilac-compiled"))
         end
 
         # Path to mrbc-host.wasm — a compiler-only wasm reactor that
@@ -53,10 +50,7 @@ module Lilac
         # the external `mrbc` binary for `lilac build --target compiled`.
         # Same gem-vs-monorepo discovery as the other variants.
         def mrbc_host_wasm
-          first_existing(
-            File.join(DATA_DIR, "mrbc-host.wasm"),
-            File.join(monorepo_root, "build", "mrbc-host.wasm"),
-          )
+          first_existing(*monorepo_candidates("mrbc-host"))
         end
 
         # Path to the JS bridge directory (`@takahashim/mruby-wasm-js`
@@ -71,6 +65,18 @@ module Lilac
         end
 
         private
+
+        # Discovery candidates for a wasm `<base>` (`lilac-full` etc.),
+        # in priority order: the gem's `data/` (what a released gem ships,
+        # always the release build), then the monorepo RELEASE build,
+        # then the monorepo dev build (debugging last resort).
+        def monorepo_candidates(base)
+          [
+            File.join(DATA_DIR, "#{base}.wasm"),
+            File.join(monorepo_root, "build", "#{base}.release.wasm"),
+            File.join(monorepo_root, "build", "#{base}.wasm"),
+          ]
+        end
 
         # `lilac/` repo root one level above the wasm-bin gem. Only
         # meaningful in the monorepo dev layout (`gem ... path: ...`);
